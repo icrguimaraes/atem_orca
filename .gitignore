@@ -9,3 +9,4 @@ frontend/dist/
 # Planilhas reais (dados pessoais/financeiros) não devem ser versionadas
 *.xlsx
 *.xls
+*.tsbuildinfo
