@@ -9,7 +9,20 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from app.api.v1 import audit_logs, auth, capex, cycles, dashboard, datasets, imports, master, opex, rules, users
+from app.api.v1 import (
+    audit_logs,
+    auth,
+    capex,
+    cycles,
+    dashboard,
+    datasets,
+    imports,
+    master,
+    opex,
+    personnel,
+    rules,
+    users,
+)
 from app.config import get_settings
 from app.db import SessionLocal, engine
 from app.imports.pipeline import ImportWorker
@@ -49,7 +62,7 @@ app.add_middleware(
 )
 
 api = APIRouter(prefix="/api/v1")
-for module in (auth, users, master, cycles, imports, audit_logs, rules, dashboard, datasets, opex, capex):
+for module in (auth, users, master, cycles, imports, audit_logs, rules, dashboard, datasets, opex, capex, personnel):
     api.include_router(module.router)
 app.include_router(api)
 

@@ -13,7 +13,7 @@ const HELP: Record<string, string> = {
   MASTER_DATA: "Aba BD-Novo dos templates ou planilha com Filiais / Centro de Custo / Conta do Razão.",
   ACTUAL: "Layout da aba Realizado (Empresa, Filial, Centro de Custos, Conta Razão e uma coluna por mês) ou KSB1.",
   REFERENCE_BUDGET: "Mesmo layout do realizado, com os valores orçados (ex.: Orçamento 2026).",
-  EMPLOYEES: "Aba QUADRO FUNCIONARIOS (matrícula, nome, cargo, CC, salário, ação).",
+  EMPLOYEES: "Aba QUADRO FUNCIONARIOS (matrícula, nome, cargo, CC, salário, ação). As ações (PROMOVER, REMOVER, INCLUIR) e as vagas entram no orçamento de Pessoal do CC. Se o arquivo não tiver a coluna CENTRO DE CUSTO preenchida, informe o CC padrão.",
   MACRO_ASSUMPTIONS: "Aba PREMISSAS MACROECONOMICAS (indicador, fonte, anos).",
 };
 
@@ -22,6 +22,7 @@ function UploadForm({ onDone }: { onDone: (id: number) => void }) {
   const [type, setType] = useState("");
   const [year, setYear] = useState("");
   const [company, setCompany] = useState("1001");
+  const [defaultCc, setDefaultCc] = useState("");
   const [createMissing, setCreateMissing] = useState(false);
   const [mode, setMode] = useState<"MERGE" | "REPLACE">("MERGE");
   const [busy, setBusy] = useState(false);
@@ -38,6 +39,7 @@ function UploadForm({ onDone }: { onDone: (id: number) => void }) {
     if (type) form.append("dataset_type", type);
     if (year) form.append("reference_year", year);
     if (company) form.append("company_code", company);
+    if (defaultCc.trim()) form.append("cost_center_code", defaultCc.trim());
     form.append("create_missing_dimensions", String(createMissing));
     form.append("mode", mode);
     try {
@@ -69,7 +71,7 @@ function UploadForm({ onDone }: { onDone: (id: number) => void }) {
           Tipo de dado
           <select value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">Detectar automaticamente</option>
-            {["OPEX_TEMPLATE", "MASTER_DATA", "ACTUAL", "REFERENCE_BUDGET", "EMPLOYEES", "MACRO_ASSUMPTIONS"].map((t) => (
+            {["OPEX_TEMPLATE", "CAPEX_TEMPLATE", "MASTER_DATA", "ACTUAL", "REFERENCE_BUDGET", "EMPLOYEES", "MACRO_ASSUMPTIONS"].map((t) => (
               <option key={t} value={t}>
                 {DATASET_LABELS[t]}
               </option>
@@ -84,6 +86,12 @@ function UploadForm({ onDone }: { onDone: (id: number) => void }) {
           Ano de referência
           <input value={year} onChange={(e) => setYear(e.target.value)} placeholder="se não houver nos cabeçalhos" inputMode="numeric" />
         </label>
+        {(type === "" || type === "EMPLOYEES") && (
+          <label>
+            CC padrão do quadro de pessoal
+            <input value={defaultCc} onChange={(e) => setDefaultCc(e.target.value)} placeholder="ex.: 1050101011 (linhas sem CC)" inputMode="numeric" />
+          </label>
+        )}
       </div>
       <p className="muted small">{HELP[type] ?? ""}</p>
       {(financial || type === "") && (

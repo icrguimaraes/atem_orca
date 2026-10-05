@@ -219,6 +219,26 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
           <dt>Sem alteração</dt><dd>{fmtInt(comparison.unchanged ?? 0)}</dd>
         </dl>
       )}
+      {comparison.kind === "EMPLOYEES" && (comparison.movements?.length ?? 0) > 0 && (
+        <div className="table-wrap" style={{ marginTop: 16 }}>
+          <table className="table">
+            <thead>
+              <tr><th>Orçamento de pessoal do CC</th><th>Situação</th><th className="right">Ações do quadro</th><th className="right">Vagas</th></tr>
+            </thead>
+            <tbody>
+              {comparison.movements!.map((m) => (
+                <tr key={m.cost_center}>
+                  <td>{m.name}<div className="muted small mono">{m.cost_center}</div></td>
+                  <td>{m.editable ? <Badge tone="good">aceita carga</Badge> : <Badge tone="bad">bloqueado ({m.status})</Badge>}</td>
+                  <td className="right">{fmtInt(m.actions)}</td>
+                  <td className="right">{fmtInt(m.hires)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="muted small">Promoções, desligamentos e vagas substituem os que vieram de importação anterior; os lançados no sistema são mantidos.</p>
+        </div>
+      )}
     </Card>
   );
 }

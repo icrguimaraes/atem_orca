@@ -475,8 +475,88 @@ def load_employees(db: Session, batch: ImportBatch, user_id: int | None) -> dict
             .values(is_active=False)
         )
         stats["employees_deactivated"] = result.rowcount
-    stats["vacancies_pending"] = len(_rows(db, batch.id, "VACANCY"))
+    db.flush()
+    stats["movements"] = load_personnel_actions(db, batch, user_id)
     version.row_count = len(rows)
+    return dict(stats)
+
+
+def load_personnel_actions(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
+    """Ações do quadro (PROMOVER, REMOVER, INCLUIR) e vagas viram movimentações no orçamento de pessoal do CC.
+    Substituem as que vieram de importação anterior; as lançadas no sistema são preservadas."""
+    from app.domain.workflow import EDITABLE
+    from app.models import PersonnelMovement
+    from app.services import opex as opex_svc
+    from app.services import personnel as personnel_svc
+
+    rows = [r for r in _rows(db, batch.id, "EMPLOYEE") if r.data.get("action") not in (None, "KEEP")]
+    vacancies = _rows(db, batch.id, "VACANCY")
+    if not rows and not vacancies:
+        return {}
+    try:
+        ctx = opex_svc.context(db)
+    except opex_svc.OpexError:
+        return {"skipped": "sem ciclo orçamentário"}
+    stats: dict = defaultdict(int)
+    by_cc: dict[int, list[ImportRow]] = defaultdict(list)
+    for row in rows + vacancies:
+        if row.data.get("cost_center_id"):
+            by_cc[row.data["cost_center_id"]].append(row)
+        else:
+            stats["without_cost_center"] += 1
+    for cc_id, items in by_cc.items():
+        sub = opex_svc.get_submission(db, ctx, cc_id, module="PERSONNEL")
+        if sub.status not in EDITABLE:
+            stats["cost_centers_locked"] += 1
+            continue
+        for old in db.scalars(select(PersonnelMovement).where(PersonnelMovement.submission_id == sub.id)):
+            if (old.attributes or {}).get("source") == "TEMPLATE":
+                db.delete(old)
+                stats["replaced"] += 1
+        db.flush()
+        for row in items:
+            d = row.data
+            try:
+                if row.record_type == "VACANCY":
+                    personnel_svc.save_hire(
+                        db,
+                        sub,
+                        {
+                            "position_name": d.get("new_position") or d.get("position") or d.get("name") or "Vaga",
+                            "month": d.get("action_month") or 1,
+                            "new_salary": d.get("new_salary") or d.get("salary"),
+                            "contract_type_code": d.get("contract") or "CLT",
+                            "reason": d.get("name"),
+                            "source": "TEMPLATE",
+                        },
+                        user_id,
+                    )
+                    stats["hires"] += 1
+                else:
+                    emp = db.scalar(
+                        select(Employee).where(
+                            Employee.company_id == d["company_id"], Employee.registration == d["registration"]
+                        )
+                    )
+                    personnel_svc.set_employee_movement(
+                        db,
+                        sub,
+                        emp,
+                        {
+                            "type": d["action"],
+                            "month": d.get("action_month"),
+                            "new_salary": d.get("new_salary"),
+                            "new_position": d.get("new_position"),
+                            "source": "TEMPLATE",
+                        },
+                        user_id,
+                    )
+                    stats[d["action"].lower()] += 1
+            except personnel_svc.PersonnelError as exc:
+                stats["errors"] += 1
+                stats.setdefault("messages", []).append(f"linha {row.row_number}: {exc}")
+        opex_svc.mark_in_progress(db, sub, ctx, user_id)
+        stats["cost_centers"] += 1
     return dict(stats)
 
 

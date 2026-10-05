@@ -55,6 +55,9 @@ async def upload(
         ),
     ] = "MERGE",
     deactivate_missing: Annotated[bool, Form(description="Colaboradores ausentes ficam inativos")] = False,
+    cost_center_code: Annotated[
+        str | None, Form(description="Quadro de pessoal: CC aplicado às linhas sem centro de custo")
+    ] = None,
     db: Session = Depends(get_db),
     storage: LocalStorage = Depends(get_storage),
     actor: User = Depends(importer),
@@ -72,6 +75,7 @@ async def upload(
         "create_missing_dimensions": create_missing_dimensions,
         "mode": mode,
         "deactivate_missing": deactivate_missing,
+        "cost_center_code": (cost_center_code or "").strip() or None,
     }
     try:
         batch = pipeline.create_batch(

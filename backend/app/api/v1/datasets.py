@@ -108,10 +108,8 @@ def _delete_dataset(
     removed_employees = 0
     if dataset_type == "EMPLOYEES":
         emp_ids = select(Employee.id).where(Employee.dataset_version_id.in_(version_ids))
-        if db.scalar(
-            select(func.count()).select_from(PersonnelMovement).where(PersonnelMovement.employee_id.in_(emp_ids))
-        ):
-            raise HTTPException(409, "Há movimentações de pessoal usando estes colaboradores; exclua-as antes")
+        # ações do ano (promoção, desligamento...) desses colaboradores saem junto com o quadro
+        db.execute(delete(PersonnelMovement).where(PersonnelMovement.employee_id.in_(emp_ids)))
         removed_employees = db.execute(delete(Employee).where(Employee.dataset_version_id.in_(version_ids))).rowcount
 
     rows = sum(v.row_count for v in versions if v.is_current)
@@ -144,8 +142,8 @@ def _delete_dataset(
 
 # ------------------------------------------------------------------ orçamento lançado (OPEX/CAPEX)
 
-BUDGET_MODULES = ("OPEX", "CAPEX")
-TEMPLATE_TYPES = {"OPEX": "OPEX_TEMPLATE", "CAPEX": "CAPEX_TEMPLATE"}
+BUDGET_MODULES = ("OPEX", "CAPEX", "PERSONNEL")
+TEMPLATE_TYPES = {"OPEX": "OPEX_TEMPLATE", "CAPEX": "CAPEX_TEMPLATE", "PERSONNEL": None}
 
 
 def _working_version(db: Session):
@@ -181,6 +179,10 @@ def budget_inventory(db: Session = Depends(get_db), _: User = Depends(require_ro
                     BudgetLine.submission_id.in_(subs)
                 )
             ).one()
+        elif module == "PERSONNEL":
+            # movimentações (promoções, desligamentos, vagas...); o custo depende do cenário, não é somado aqui
+            rows = db.scalar(select(func.count(PersonnelMovement.id)).where(PersonnelMovement.submission_id.in_(subs)))
+            total = None
         else:
             rows, total = db.execute(
                 select(func.count(CapexItem.id), func.coalesce(func.sum(CapexItem.total_value), 0))
@@ -194,7 +196,7 @@ def budget_inventory(db: Session = Depends(get_db), _: User = Depends(require_ro
                 "version": version.label,
                 "cost_centers": started,
                 "rows": rows,
-                "total": str(total),
+                "total": None if total is None else str(total),
             }
         )
     return out
@@ -216,11 +218,13 @@ def _delete_budget(db: Session, module: str) -> dict:
     # linhas, itens, justificativas, validações GMD e histórico do fluxo saem em cascata
     if ids:
         db.execute(delete(BudgetSubmission).where(BudgetSubmission.id.in_(ids)))
-    reverted = db.execute(
-        update(ImportBatch)
-        .where(ImportBatch.dataset_type == TEMPLATE_TYPES[module], ImportBatch.status == "COMPLETED")
-        .values(status="REVERTED")
-    ).rowcount
+    reverted = 0
+    if TEMPLATE_TYPES[module]:
+        reverted = db.execute(
+            update(ImportBatch)
+            .where(ImportBatch.dataset_type == TEMPLATE_TYPES[module], ImportBatch.status == "COMPLETED")
+            .values(status="REVERTED")
+        ).rowcount
     return {"module": module, "cost_centers": len(ids), "imports_reverted": reverted}
 
 
@@ -236,7 +240,7 @@ def delete_budget(
     if confirm.strip().upper() != CONFIRM_WORD:
         raise HTTPException(422, f"Para excluir, digite {CONFIRM_WORD}")
     if module not in BUDGET_MODULES:
-        raise HTTPException(422, "Módulo inválido")
+        raise HTTPException(422, "Módulo inválido (OPEX, CAPEX ou PERSONNEL)")
     result = _delete_budget(db, module)
     audit.record(
         db,

@@ -13,7 +13,8 @@ function scopeLabel(d: DatasetInfo): string {
 }
 
 interface Target { kind?: "dataset" | "budget" | "all"; dataset_type: string; scope_key?: string; label: string; rows: number }
-interface BudgetInfo { module: string; fiscal_year: number; version: string; cost_centers: number; rows: number; total: string }
+interface BudgetInfo { module: string; fiscal_year: number; version: string; cost_centers: number; rows: number; total: string | null }
+const MODULE_LABEL: Record<string, string> = { OPEX: "OPEX", CAPEX: "CAPEX", PERSONNEL: "de Pessoal" };
 
 export function DatasetsCard({ refreshKey, onChanged }: { refreshKey: number; onChanged: () => void }) {
   const { can } = useAuth();
@@ -91,7 +92,7 @@ export function DatasetsCard({ refreshKey, onChanged }: { refreshKey: number; on
           </select>}
           <button
             className="btn btn-sm danger"
-            onClick={() => open({ kind: "all", dataset_type: "ALL", label: "TODAS as bases importadas e o orçamento lançado (OPEX e CAPEX)", rows: 0 })}
+            onClick={() => open({ kind: "all", dataset_type: "ALL", label: "TODAS as bases importadas e o orçamento lançado (OPEX, CAPEX e Pessoal)", rows: 0 })}
           >
             Excluir tudo…
           </button>
@@ -155,14 +156,14 @@ export function DatasetsCard({ refreshKey, onChanged }: { refreshKey: number; on
             <tbody>
               {budget.data!.map((b) => (
                 <tr key={b.module}>
-                  <td>Orçamento {b.module} {b.fiscal_year}<div className="muted small">lançado no sistema ou vindo dos templates</div></td>
+                  <td>Orçamento {MODULE_LABEL[b.module] ?? b.module} {b.fiscal_year}<div className="muted small">{b.module === "PERSONNEL" ? "promoções, desligamentos, transferências e vagas" : "lançado no sistema ou vindo dos templates"}</div></td>
                   <td>versão {b.version}</td>
                   <td className="right">{fmtInt(b.cost_centers)}</td>
                   <td className="right">{fmtInt(b.rows)}</td>
-                  <td className="right">{fmtMoney(b.total)}</td>
+                  <td className="right">{b.total === null ? <span className="muted small">conforme cenário</span> : fmtMoney(b.total)}</td>
                   <td className="row-actions">
                     {isAdmin && b.cost_centers > 0 && (
-                      <button className="btn btn-ghost btn-sm danger" onClick={() => open({ kind: "budget", dataset_type: b.module, label: `Orçamento ${b.module} ${b.fiscal_year}`, rows: b.rows })}>
+                      <button className="btn btn-ghost btn-sm danger" onClick={() => open({ kind: "budget", dataset_type: b.module, label: `Orçamento ${MODULE_LABEL[b.module] ?? b.module} ${b.fiscal_year}`, rows: b.rows })}>
                         Excluir
                       </button>
                     )}
@@ -190,7 +191,7 @@ export function DatasetsCard({ refreshKey, onChanged }: { refreshKey: number; on
             {target.kind === "all" ? (
               <p>
                 Você vai excluir <strong>{target.label}</strong>: realizado, orçamento de referência, premissas, quadro de
-                funcionários e todas as linhas/solicitações de OPEX e CAPEX, com justificativas e histórico do fluxo. Os
+                funcionários todas as linhas/solicitações de OPEX e CAPEX e as movimentações de Pessoal, com justificativas e histórico do fluxo. Os
                 centros de custo voltam para "Não iniciado". <strong>Cadastros e usuários são mantidos.</strong> Não pode
                 ser desfeito (fica registrado na auditoria).
               </p>

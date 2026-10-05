@@ -99,6 +99,7 @@ def test_delete_budget_and_everything(client, admin, run_worker):
     import_and_load(client, admin, run_worker, builders.capex_template_filled(), "capex.xlsx")
     inv = {b["module"]: b for b in client.get("/api/v1/datasets/budget", headers=admin).json()}
     assert inv["OPEX"]["rows"] == 4 and inv["CAPEX"]["rows"] == 3 and inv["CAPEX"]["total"] == "34000.00"
+    assert inv["PERSONNEL"]["rows"] == 0 and inv["PERSONNEL"]["total"] is None
 
     bad = client.delete("/api/v1/datasets/budget", headers=admin, params={"module": "OPEX", "confirm": "x"})
     assert bad.status_code == 422

@@ -225,3 +225,12 @@ export const FLAG_LABELS: Record<string, { label: string; tone: Tone; hint: stri
   NEW_ACCOUNT: { label: "Conta sem histórico", tone: "info", hint: "Sem realizado/orçado anterior para esta conta" },
   NO_BUDGET: { label: "Sem orçamento", tone: "warn", hint: "Houve gasto em 2026, mas nada foi orçado para 2027" },
 };
+
+export const MOVEMENT_LABELS: Record<string, { label: string; tone: Tone }> = {
+  KEEP: { label: "Manter", tone: "neutral" },
+  PROMOTION: { label: "Promoção", tone: "info" },
+  SALARY_ADJUSTMENT: { label: "Reajuste individual", tone: "info" },
+  TERMINATION: { label: "Desligamento", tone: "bad" },
+  TRANSFER: { label: "Transferência", tone: "warn" },
+  HIRE: { label: "Admissão", tone: "good" },
+};

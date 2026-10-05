@@ -291,7 +291,7 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 | 1 — Fundação | Arquitetura, banco completo (todas as entidades), auth/RBAC, cadastros, ciclos/parâmetros, importação (mestres, realizado template/KSB1, orçamento de referência, colaboradores, premissas) com validação/prévia/versão, auditoria, regras de cálculo puras + testes, deploy Railway | **entregue** |
 | 2 — OPEX | Histórico comparativo por conta; grade de preenchimento por pacote (colar do Excel, ÷12, média 2026); calculadoras de viagem e evento; justificativas obrigatórias; workflow + validação GMD Tipo 1; fila do gestor de pacote | **entregue** |
 | 3 — CAPEX | Projetos/itens/cronograma, catálogo de ativos, bloqueio por inconsistência | concluída |
-| 4 — Pessoal | Quadro, movimentos, what-if, admissões/desligamentos, headcount | |
+| 4 — Pessoal | Quadro, movimentos, what-if, admissões/desligamentos, headcount | concluída |
 | 5 — Consolidação | Dashboard executivo, variações, exportações xlsx, consolidação final e versões | |
 
 ## 11. Decisões e pontos em aberto
@@ -332,3 +332,16 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 - Todas as abas de pacote são lidas **linha a linha**. Identificação: CHAVE da linha → colunas DIVISÃO / CENTRO DE CUSTO / CONTA CONTÁBIL → nomes (denominação do CC, descrição da conta, filial). Linha com valor sem CC ou conta identificável vira erro `UNRESOLVED_LINE` (nunca é descartada em silêncio).
 - Aba I - Viagens: cada linha é uma viagem (objetivo, cargo, ida/volta, dias, origem/destino, tipo) e gera passagem, diária e hospedagem no mês de ida, aparecendo no painel de Viagens. Usa os valores calculados pela planilha; sem eles, recalcula pelas tarifas do ciclo (aviso `TRAVEL_RECALCULATED`).
 - O **Consolidador** da aba Viagens serve só de conferência: diferença entre a soma das linhas e o consolidador gera aviso `CONSOLIDATOR_MISMATCH`.
+
+## 14. Regras implementadas na Fase 4 (Pessoal)
+
+- **Orçamento de pessoal por CC**: `budget_submission` com `module = PERSONNEL`, mesmo workflow; ao enviar abre a validação GMD do pacote **Pessoas** (Tipo 1), obrigatória para aprovar.
+- **Quadro**: colaboradores ativos do CC (importação do quadro). Cada colaborador tem no máximo **uma ação no ano**, como no template: Manter (sem registro), Promover/Reajuste individual (novo salário a partir do mês; novo cargo opcional), Desligar (custo até o mês anterior; verba rescisória opcional no mês), Transferir (sai no mês e passa a contar no CC de destino, com o salário atual ou outro), Admissão no mês (colaborador já cadastrado).
+- **Vagas** (contratações): cargo, quantidade, mês de entrada, salário e contrato; sem colaborador vinculado.
+- **Custo mensal** = salário × (1 + reajuste do cenário a partir da data-base) × multiplicador do contrato (CLT 1,8; PJ sem multiplicador) + verba rescisória no mês do desligamento. Quebra exibida: salário, encargos e benefícios (parte do multiplicador) e rescisões.
+- **Envio** exige justificativa em contratações, desligamentos e transferências.
+- **Cenários**: o cenário **base** do ciclo (seed: reajuste 5% em JAN, CLT 1,8) calcula todos os orçamentos. A simulação (what-if) compara base × multiplicadores/reajuste/data-base alternativos, por CC e por contrato, sem gravar; cenários podem ser salvos e um deles definido como base (Controladoria/RH).
+- **Perfis**: RH e Controladoria veem todos os CCs; gestor vê os seus; gestor do pacote Pessoas valida.
+- **Importação do quadro**: AÇÃO (PROMOVER/REMOVER/INCLUIR) vira movimentação no orçamento do CC; linhas sem matrícula (vagas) viram contratações. Substitui só o que veio de importação anterior. Opção "CC padrão" para arquivos sem a coluna CENTRO DE CUSTO. CC enviado/aprovado não recebe as ações (aviso na prévia).
+- **Benefícios** do líder ficam informativos (já estão no multiplicador — decisão 11.1).
+- Migração `0003`: `personnel_movements.attributes`, `target_cost_center_id`, `created_by`, `updated_by`.

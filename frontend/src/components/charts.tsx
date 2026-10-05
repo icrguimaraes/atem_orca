@@ -137,11 +137,17 @@ export function MonthlyBars({
   series,
   line,
   height = 260,
+  format,
+  axisFormat,
 }: {
   series: { label: string; color: string; values: number[] }[];
   line?: { label: string; color: string; values: number[] };
   height?: number;
+  format?: (n: number) => string;
+  axisFormat?: (n: number) => string;
 }) {
+  const tip = format ?? fmtMoney;
+  const axis = axisFormat ?? format ?? fmtCompact;
   const [hover, setHover] = useState<number | null>(null);
   const W = 760, H = height, L = 84, R = 12, T = 12, B = 28;
   const plotW = W - L - R, plotH = H - T - B;
@@ -158,7 +164,7 @@ export function MonthlyBars({
         {ticks.map((t) => (
           <g key={t}>
             <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="grid" />
-            <text x={L - 8} y={y(t) + 4} className="axis" textAnchor="end">{fmtCompact(t)}</text>
+            <text x={L - 8} y={y(t) + 4} className="axis" textAnchor="end">{axis(t)}</text>
           </g>
         ))}
         {MONTHS.map((m, i) => {
@@ -193,9 +199,9 @@ export function MonthlyBars({
         <div className="tooltip" style={{ left: `${((L + slot * hover + slot / 2) / W) * 100}%` }}>
           <strong>{MONTHS[hover]}</strong>
           {series.map((s) => (
-            <span key={s.label}><i style={{ background: s.color }} />{s.label}: {fmtMoney(s.values[hover])}</span>
+            <span key={s.label}><i style={{ background: s.color }} />{s.label}: {tip(s.values[hover])}</span>
           ))}
-          {line && <span><i style={{ background: line.color }} />{line.label}: {fmtMoney(line.values[hover])}</span>}
+          {line && <span><i style={{ background: line.color }} />{line.label}: {tip(line.values[hover])}</span>}
         </div>
       )}
     </div>

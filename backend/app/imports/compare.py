@@ -176,8 +176,63 @@ def compare_employees(db: Session, result: ParseResult) -> dict:
         else:
             updated += 1
             d["_action"] = "UPDATE"
-    no_changes = (created + updated) == 0 and unchanged > 0
-    return {"kind": "EMPLOYEES", "new": created, "changed": updated, "unchanged": unchanged, "no_changes": no_changes}
+    movements = _personnel_movements(db, result)
+    no_changes = (created + updated) == 0 and unchanged > 0 and not any(m["actions"] + m["hires"] for m in movements)
+    return {
+        "kind": "EMPLOYEES",
+        "new": created,
+        "changed": updated,
+        "unchanged": unchanged,
+        "no_changes": no_changes,
+        "movements": movements,
+    }
+
+
+def _personnel_movements(db: Session, result: ParseResult) -> list[dict]:
+    """Ações e vagas do arquivo por CC e se o orçamento de pessoal do CC aceita a carga."""
+    from app.domain.workflow import EDITABLE, STATUS_LABELS
+    from app.services import opex as opex_svc
+
+    groups: dict[int, dict] = {}
+    for r in result.records:
+        if final_status(r) not in ("VALID", "WARNING"):
+            continue
+        d = r.data
+        is_action = r.record_type == "EMPLOYEE" and d.get("action") not in (None, "KEEP")
+        if not (is_action or r.record_type == "VACANCY") or not d.get("cost_center_id"):
+            continue
+        g = groups.setdefault(d["cost_center_id"], {"records": [], "actions": 0, "hires": 0})
+        g["records"].append(r)
+        g["hires" if r.record_type == "VACANCY" else "actions"] += 1
+    if not groups:
+        return []
+    try:
+        ctx = opex_svc.context(db)
+    except opex_svc.OpexError:
+        return []
+    out = []
+    for cc_id, g in groups.items():
+        cc = db.get(CostCenter, cc_id)
+        sub = opex_svc.get_submission(db, ctx, cc_id, create=False, module="PERSONNEL")
+        status = sub.status if sub else "DRAFT"
+        editable = status in EDITABLE
+        if not editable:
+            for r in g["records"]:
+                r.warn(
+                    "BUDGET_LOCKED",
+                    f"Pessoal do CC {cc.code} está '{STATUS_LABELS.get(status, status)}': a ação não será aplicada",
+                )
+        out.append(
+            {
+                "cost_center": cc.code,
+                "name": cc.name,
+                "status": status,
+                "editable": editable,
+                "actions": g["actions"],
+                "hires": g["hires"],
+            }
+        )
+    return sorted(out, key=lambda m: m["cost_center"])
 
 
 def compare_macro(db: Session, result: ParseResult) -> dict:

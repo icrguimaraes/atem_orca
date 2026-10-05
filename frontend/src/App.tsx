@@ -14,6 +14,9 @@ import Login from "./pages/Login";
 import MasterData from "./pages/MasterData";
 import OpexCostCenter from "./pages/OpexCostCenter";
 import OpexList from "./pages/OpexList";
+import PersonnelCostCenter from "./pages/PersonnelCostCenter";
+import PersonnelList from "./pages/PersonnelList";
+import PersonnelSimulation from "./pages/PersonnelSimulation";
 import Users from "./pages/Users";
 
 function Protected({ children, roles }: { children: ReactNode; roles?: string[] }) {
@@ -44,6 +47,9 @@ export default function App() {
             <Route path="orcamento/:ccId" element={<OpexCostCenter />} />
             <Route path="capex" element={<CapexList />} />
             <Route path="capex/:ccId" element={<CapexCostCenter />} />
+            <Route path="pessoal" element={<PersonnelList />} />
+            <Route path="pessoal/simulacao" element={<PersonnelSimulation />} />
+            <Route path="pessoal/:ccId" element={<PersonnelCostCenter />} />
             <Route path="cadastros" element={<MasterData />} />
             <Route path="ciclo" element={<CyclePage />} />
             <Route path="usuarios" element={<Protected roles={["CONTROLLER"]}><Users /></Protected>} />

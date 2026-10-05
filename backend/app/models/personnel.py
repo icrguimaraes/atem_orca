@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import Boolean, Date, ForeignKey, Integer, SmallInteger, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, Money, Rate, TimestampMixin
@@ -88,6 +89,11 @@ class PersonnelMovement(TimestampMixin, Base):
     multiplier_override: Mapped[Decimal | None] = mapped_column(Rate)
     severance_cost: Mapped[Decimal | None] = mapped_column(Money)
     reason: Mapped[str | None] = mapped_column(Text)
+    # vaga: cargo/descrição livre; origem (TEMPLATE/SYSTEM), linha do arquivo; CC de destino da transferência
+    attributes: Mapped[dict | None] = mapped_column(JSONB)
+    target_cost_center_id: Mapped[int | None] = mapped_column(ForeignKey("cost_centers.id"))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
 
 
 class PersonnelScenario(TimestampMixin, Base):

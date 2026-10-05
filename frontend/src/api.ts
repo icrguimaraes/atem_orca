@@ -140,6 +140,7 @@ export interface Comparison {
   budget?: BudgetImportScope[];
   module?: "CAPEX";
   catalog?: { new: number; existing: number };
+  movements?: { cost_center: string; name: string; status: string; editable: boolean; actions: number; hires: number }[];
   no_changes: boolean;
   mode?: "MERGE" | "REPLACE";
   scopes?: ScopeComparison[];
@@ -320,4 +321,66 @@ export interface CapexSummary {
   monthly: string[];
   by_account: { code: string; label: string; total: string }[];
   by_type: { label: string; total: string }[];
+}
+
+// ---------------------------------------------------------------- Pessoal
+
+export interface PersonnelScenario {
+  id: number | null; name: string; salary_adjustment_pct: string; adjustment_month: number;
+  multipliers: Record<string, string>; ignored_multiplier_for: string[]; is_baseline?: boolean;
+}
+export interface PersonnelTotals {
+  monthly: string[]; salary_monthly: string[]; charges_monthly: string[]; headcount: number[]; annual: string;
+  salary_total: string; charges_total: string; severance_total: string; headcount_start: number; headcount_end: number;
+  hires: number; terminations: number; transfers_out: number; transfers_in: number; promotions: number;
+}
+export interface PersonnelMovementInfo {
+  id: number; type: string; label: string; month: number; new_salary: string | null; new_position: string | null;
+  target_cost_center_id: number | null; target_cost_center: string | null; severance_cost: string | null;
+  contract_type_code: string | null; quantity: number; reason: string | null; source: "TEMPLATE" | "SYSTEM";
+}
+export interface PersonnelPosition {
+  kind: "EMPLOYEE" | "HIRE" | "TRANSFER_IN"; key: string; employee_id: number | null; registration: string | null;
+  name: string; position: string | null; contract_type_code: string; base_salary: string | null;
+  movement: PersonnelMovementInfo | null; from_cost_center: string | null; monthly: string[]; headcount: number[];
+  severance: string; annual: string;
+}
+export interface PersonnelView {
+  prev_year: number; ref_year: number; target_year: number; scenario: PersonnelScenario;
+  positions: PersonnelPosition[]; totals: PersonnelTotals; actual: { prev: string; ref_ytd: string; ref_annualized: string };
+  by_contract: { label: string; total: string }[]; benefits: { code: string; name: string; employees: number }[];
+}
+export interface PersonnelHeader {
+  submission_id: number; status: string; status_label: string;
+  cost_center: { id: number; code: string; name: string; company_id: number; company_code: string; manager_name: string | null };
+  cycle: { id: number; name: string; status: string; deadline: string | null };
+  version: string; years: { prev: number; ref: number; target: number };
+  permissions: { edit: boolean; owner: boolean; global: boolean; reviewer: boolean; cycle_blocked: boolean };
+  actions: OpexAction[];
+  package_review: { package: string; status: string; comment: string | null; reviewer: string | null; updated_at: string | null; can_review: boolean } | null;
+  submitted_at: string | null;
+}
+export interface PersonnelOptions {
+  contract_types: { code: string; name: string; apply_multiplier: boolean }[];
+  positions: string[];
+  cost_centers: { id: number; code: string; name: string; company_id: number }[];
+  scenario: PersonnelScenario;
+}
+export interface PersonnelSummaryRow {
+  cost_center_id: number; code: string; name: string; company_code: string; manager_name: string | null;
+  submission_id: number | null; status: string; status_label: string; headcount_start: number; headcount_end: number;
+  hires: number; terminations: number; annual: string; ref_annualized: string; variation_pct: string | null;
+}
+export interface PersonnelSummary {
+  cycle: { name: string; status: string; deadline: string | null };
+  years: { prev: number; ref: number; target: number };
+  scenario: PersonnelScenario; status_counts: Record<string, number>; rows: PersonnelSummaryRow[];
+  totals: PersonnelTotals; ref_annualized: string; terminations_by_month: number[]; hires_by_month: number[];
+  hires_by_position: { label: string; count: number }[];
+}
+export interface WhatIfResult {
+  baseline: PersonnelScenario; simulated: PersonnelScenario; base: PersonnelTotals; simulation: PersonnelTotals;
+  difference: string; difference_pct: string | null; monthly_impact: string[];
+  by_cost_center: { cost_center_id: number; code: string | null; name: string; base: string; simulated: string; difference: string }[];
+  by_contract: { contract: string; people: number; base: string; simulated: string; difference: string }[];
 }
