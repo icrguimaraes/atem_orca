@@ -211,6 +211,7 @@ def list_accounts(
     package_id: int | None = None,
     nature: str | None = None,
     active: bool | None = True,
+    include_inactive: bool = False,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
@@ -221,7 +222,7 @@ def list_accounts(
         stmt = stmt.where(Account.package_id == package_id)
     if nature:
         stmt = stmt.where(Account.nature == nature)
-    if active is not None:
+    if active is not None and not include_inactive:
         stmt = stmt.where(Account.is_active == active)
     return list(db.scalars(stmt))
 

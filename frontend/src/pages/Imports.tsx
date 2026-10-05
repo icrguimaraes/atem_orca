@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type ImportBatch, type Page } from "../api";
+import { DatasetsCard } from "../components/DatasetsCard";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, useLoad } from "../components/ui";
 import { DATASET_LABELS, IMPORT_STATUS, fmtDateTime, fmtInt, fmtSize } from "../labels";
 
@@ -139,6 +140,7 @@ export default function Imports() {
       <Card title="Novo arquivo">
         <UploadForm onDone={(id) => navigate(`/importacoes/${id}`)} />
       </Card>
+      <DatasetsCard refreshKey={data?.items.filter((b) => b.status === "COMPLETED").length ?? 0} onChanged={reload} />
       <Card title="Histórico de importações">
         {error && <Alert>{error}</Alert>}
         {!data ? (

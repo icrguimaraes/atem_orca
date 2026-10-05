@@ -19,10 +19,12 @@ from app.models import (
     ActualEntry,
     BudgetCycle,
     BudgetPackage,
+    ContractType,
     CostCenter,
     DatasetVersion,
     Employee,
     ImportBatch,
+    MacroAssumption,
     ReferenceBudgetEntry,
     User,
 )
@@ -74,6 +76,14 @@ class Facts:
         return (rows[0][0] if rows else None) or ZERO
 
 
+def _loaded_years(db: Session, dataset_type: str, position: int) -> list[int]:
+    """Anos com versão vigente, lidos do escopo (ACTUAL:2026:1001 / REFERENCE_BUDGET:ORC:2026:1001)."""
+    scopes = db.scalars(
+        select(DatasetVersion.scope_key).where(DatasetVersion.dataset_type == dataset_type, DatasetVersion.is_current)
+    )
+    return sorted({int(s.split(":")[position]) for s in scopes})
+
+
 def _last_closed(db: Session, year: int) -> int | None:
     return db.scalar(
         select(func.max(DatasetVersion.last_closed_period)).where(
@@ -89,11 +99,23 @@ def overview(
     company_id: int | None = None,
     cost_center_id: int | None = None,
     package_id: int | None = None,
+    year: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    actual_years = _loaded_years(db, "ACTUAL", 1)
+    budget_years = _loaded_years(db, "REFERENCE_BUDGET", 2)
     cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
-    ref = cycle.actual_reference_year if cycle else datetime.utcnow().year
+    # ano exibido: o pedido, senão o mais recente com realizado, senão com orçamento, senão o do ciclo
+    ref = year or (
+        max(actual_years)
+        if actual_years
+        else max(budget_years)
+        if budget_years
+        else cycle.actual_reference_year
+        if cycle
+        else datetime.utcnow().year
+    )
     prev = ref - 1
     f = Facts(db, user, company_id, cost_center_id, package_id)
     closed = _last_closed(db, ref)  # último mês com realizado no ano de referência
@@ -176,22 +198,15 @@ def overview(
             )
         return rows
 
-    years_loaded = sorted(
-        {
-            int(s.split(":")[1])
-            for s in db.scalars(
-                select(DatasetVersion.scope_key).where(
-                    DatasetVersion.dataset_type == "ACTUAL", DatasetVersion.is_current
-                )
-            )
-        }
-    )
-
     return {
         "reference_year": ref,
         "previous_year": prev,
         "last_closed_period": closed,
-        "years_loaded": years_loaded,
+        "years_loaded": actual_years,
+        "budget_years": budget_years,
+        "available_years": sorted(set(actual_years) | set(budget_years), reverse=True),
+        "has_actual": ref in actual_years,
+        "has_prev": prev in actual_years,
         "has_budget": budget_total != ZERO,
         "kpis": {
             "prev_total": _money(prev_total),
@@ -239,7 +254,7 @@ def data_quality(db: Session = Depends(get_db), _: User = Depends(require_roles(
         has = any(s.startswith(f"ACTUAL:{year}:") for s in loaded)
         add(
             f"NO_ACTUAL_{year}",
-            f"Realizado {year} carregado",
+            f"Realizado {year} carregado" if has else f"Realizado {year} ainda não carregado",
             "WARNING",
             0 if has else 1,
             None if has else f"Importe o realizado {year} para habilitar a comparação histórica.",
@@ -329,3 +344,109 @@ def data_quality(db: Session = Depends(get_db), _: User = Depends(require_roles(
     order = {"ERROR": 0, "WARNING": 1, "INFO": 2, "OK": 3}
     checks.sort(key=lambda c: order[c["severity"]])
     return {"checks": checks, "issues": sum(1 for c in checks if c["severity"] in ("ERROR", "WARNING"))}
+
+
+@router.get("/inventory", summary="O que existe na base: cadastros, quadro de pessoal e premissas")
+def inventory(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    visible = visible_cost_center_ids(db, user)
+
+    # ---- cadastros
+    cc_stmt = select(CostCenter).where(CostCenter.is_active)
+    if visible is not None:
+        cc_stmt = cc_stmt.where(CostCenter.id.in_(visible or {-1}))
+    ccs = db.scalars(cc_stmt).all()
+    accounts_by_nature = dict(
+        db.execute(select(Account.nature, func.count()).where(Account.is_active).group_by(Account.nature)).all()
+    )
+    package_counts = [
+        {"package": name, "package_type": ptype, "accounts": n}
+        for name, ptype, n in db.execute(
+            select(BudgetPackage.name, BudgetPackage.package_type, func.count(Account.id))
+            .join(Account, Account.package_id == BudgetPackage.id, isouter=True)
+            .group_by(BudgetPackage.id)
+            .order_by(BudgetPackage.sort_order)
+        )
+    ]
+
+    # ---- pessoal (quadro vigente; custo estimado = salário × multiplicador do tipo de contrato)
+    emp_stmt = select(Employee).where(Employee.is_active)
+    if visible is not None:
+        emp_stmt = emp_stmt.where(Employee.cost_center_id.in_(visible or {-1}))
+    employees = db.scalars(emp_stmt).all()
+    contracts = {c.code: c for c in db.scalars(select(ContractType))}
+    by_contract: dict[str, dict] = {}
+    by_cc: dict[int | None, dict] = {}
+    payroll = cost = ZERO
+    for e in employees:
+        ct = contracts.get(e.contract_type_code)
+        mult = Decimal(ct.default_multiplier) if ct and ct.apply_multiplier else Decimal(1)
+        salary = Decimal(e.base_salary or 0)
+        payroll += salary
+        cost += salary * mult
+        c = by_contract.setdefault(
+            e.contract_type_code,
+            {"contract": e.contract_type_code, "headcount": 0, "payroll": ZERO, "multiplier": str(mult)},
+        )
+        c["headcount"] += 1
+        c["payroll"] += salary
+        k = by_cc.setdefault(e.cost_center_id, {"cost_center_id": e.cost_center_id, "headcount": 0, "payroll": ZERO})
+        k["headcount"] += 1
+        k["payroll"] += salary
+    cc_names = {c.id: c for c in db.scalars(select(CostCenter).where(CostCenter.id.in_([k for k in by_cc if k])))}
+    personnel = {
+        "headcount": len(employees),
+        "monthly_payroll": _money(payroll),
+        "monthly_estimated_cost": _money(cost),
+        "annual_estimated_cost": _money(cost * 12),
+        "by_contract": [c | {"payroll": _money(c["payroll"])} for c in by_contract.values()],
+        "by_cost_center": sorted(
+            (
+                {
+                    "code": cc_names[k["cost_center_id"]].code if k["cost_center_id"] in cc_names else None,
+                    "name": cc_names[k["cost_center_id"]].name if k["cost_center_id"] in cc_names else "Sem CC",
+                    "headcount": k["headcount"],
+                    "payroll": _money(k["payroll"]),
+                }
+                for k in by_cc.values()
+            ),
+            key=lambda r: -r["headcount"],
+        )[:10],
+    }
+
+    # ---- premissas macroeconômicas (versão vigente), uma linha por indicador × fonte
+    macro_version = db.scalar(
+        select(DatasetVersion.id).where(DatasetVersion.dataset_type == "MACRO_ASSUMPTIONS", DatasetVersion.is_current)
+    )
+    macro_rows: dict[tuple, dict] = {}
+    years: set[int] = set()
+    if macro_version:
+        for m in db.scalars(
+            select(MacroAssumption)
+            .where(MacroAssumption.dataset_version_id == macro_version)
+            .order_by(MacroAssumption.id)
+        ):
+            key = (m.category, m.indicator, m.segment, m.source)
+            row = macro_rows.setdefault(
+                key,
+                {
+                    "category": m.category,
+                    "indicator": m.indicator,
+                    "segment": m.segment,
+                    "source": m.source,
+                    "reference_date": m.reference_date.isoformat() if m.reference_date else None,
+                    "values": {},
+                },
+            )
+            row["values"][m.year] = str(m.value)
+            years.add(m.year)
+
+    return {
+        "master": {
+            "cost_centers": len(ccs),
+            "cost_centers_without_user": sum(1 for c in ccs if c.manager_user_id is None),
+            "accounts_by_nature": accounts_by_nature,
+            "packages": package_counts,
+        },
+        "personnel": personnel,
+        "macro": {"years": sorted(years), "rows": list(macro_rows.values())},
+    }

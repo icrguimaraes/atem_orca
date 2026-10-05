@@ -144,7 +144,7 @@ export interface PackageRow {
 }
 export interface Overview {
   reference_year: number; previous_year: number; last_closed_period: number | null; years_loaded: number[];
-  has_budget: boolean;
+  budget_years: number[]; available_years: number[]; has_actual: boolean; has_prev: boolean; has_budget: boolean;
   kpis: {
     prev_total: string; prev_ytd: string; ref_ytd: string; ytd_var_pct: string | null; ref_annualized: string;
     annualized_vs_prev_pct: string | null; budget_total: string; budget_ytd: string; budget_consumption_pct: string | null;
@@ -157,4 +157,25 @@ export interface Overview {
 export interface QualityCheck {
   code: string; title: string; severity: "ERROR" | "WARNING" | "INFO" | "OK"; count: number; detail: string | null;
   samples: string[];
+}
+
+export interface DatasetInfo {
+  dataset_type: string; scope_key: string; current_version: number | null; versions: number; rows: number;
+  last_loaded_at: string | null; last_file_name: string | null; deletable: boolean;
+}
+
+export interface Inventory {
+  master: {
+    cost_centers: number; cost_centers_without_user: number; accounts_by_nature: Record<string, number>;
+    packages: { package: string; package_type: number; accounts: number }[];
+  };
+  personnel: {
+    headcount: number; monthly_payroll: string; monthly_estimated_cost: string; annual_estimated_cost: string;
+    by_contract: { contract: string; headcount: number; payroll: string; multiplier: string }[];
+    by_cost_center: { code: string | null; name: string; headcount: number; payroll: string }[];
+  };
+  macro: {
+    years: number[];
+    rows: { category: string; indicator: string; segment: string | null; source: string | null; reference_date: string | null; values: Record<string, string> }[];
+  };
 }

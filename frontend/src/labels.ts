@@ -25,6 +25,7 @@ export const IMPORT_STATUS: Record<string, { label: string; tone: Tone }> = {
   PROCESSING: { label: "Carregando", tone: "info" },
   COMPLETED: { label: "Concluída", tone: "good" },
   REJECTED: { label: "Descartada", tone: "neutral" },
+  REVERTED: { label: "Base excluída", tone: "neutral" },
 };
 
 export const ROW_STATUS: Record<string, { label: string; tone: Tone }> = {

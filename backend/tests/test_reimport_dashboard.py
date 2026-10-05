@@ -141,5 +141,6 @@ def test_data_quality(client, admin, run_worker):
     checks = {c["code"]: c for c in client.get("/api/v1/dashboard/data-quality", headers=admin).json()["checks"]}
     assert checks["NO_ACTUAL_2026"]["severity"] == "OK"
     assert checks["NO_ACTUAL_2025"]["severity"] == "WARNING"
+    assert checks["NO_ACTUAL_2025"]["title"] == "Realizado 2025 ainda não carregado"
     assert checks["MULTIPLE_CURRENT"]["severity"] == "OK"
     assert checks["CC_NO_USER"]["count"] == 2

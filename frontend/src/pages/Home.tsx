@@ -7,6 +7,7 @@ import {
   type Cycle,
   type DatasetVersion,
   type ImportBatch,
+  type Inventory,
   type Overview,
   type Package,
   type Page,
@@ -49,7 +50,7 @@ function Delta({ pct, invert = false }: { pct: string | null; invert?: boolean }
   return <span className={`delta ${cls}`}>{n > 0 ? "▲" : n < 0 ? "▼" : "•"} {fmtPct(pct)}</span>;
 }
 
-function RankTable({ rows, refLabel, prevLabel, empty }: { rows: Overview["top_accounts"]; refLabel: string; prevLabel: string; empty: string }) {
+function RankTable({ rows, refLabel, prevLabel, empty, showPrev }: { rows: Overview["top_accounts"]; refLabel: string; prevLabel: string; empty: string; showPrev: boolean }) {
   if (!rows.length) return <Empty>{empty}</Empty>;
   return (
     <div className="table-wrap">
@@ -57,9 +58,9 @@ function RankTable({ rows, refLabel, prevLabel, empty }: { rows: Overview["top_a
         <thead>
           <tr>
             <th>Código · descrição</th>
-            <th className="right">{prevLabel}</th>
+            {showPrev && <th className="right">{prevLabel}</th>}
             <th className="right">{refLabel}</th>
-            <th className="right">Var.</th>
+            {showPrev && <th className="right">Var.</th>}
           </tr>
         </thead>
         <tbody>
@@ -69,9 +70,9 @@ function RankTable({ rows, refLabel, prevLabel, empty }: { rows: Overview["top_a
                 <div>{r.name}</div>
                 <div className="muted small mono">{r.code}</div>
               </td>
-              <td className="right nowrap" title={fmtMoney(r.prev_ytd)}>{fmtCompact(r.prev_ytd)}</td>
+              {showPrev && <td className="right nowrap" title={fmtMoney(r.prev_ytd)}>{fmtCompact(r.prev_ytd)}</td>}
               <td className="right nowrap" title={fmtMoney(r.ref_ytd)}><strong>{fmtCompact(r.ref_ytd)}</strong></td>
-              <td className="right nowrap"><Delta pct={r.ytd_var_pct} /></td>
+              {showPrev && <td className="right nowrap"><Delta pct={r.ytd_var_pct} /></td>}
             </tr>
           ))}
         </tbody>
@@ -85,6 +86,7 @@ export default function Home() {
   const isController = can("CONTROLLER");
   const [filters, setFilters] = useState({ company_id: "", cost_center_id: "", package_id: "" });
   const [showTable, setShowTable] = useState(false);
+  const [year, setYear] = useState<number | null>(null);
 
   const base = useLoad(async () => {
     const [cycles, companies, ccs, packages] = await Promise.all([
@@ -96,7 +98,10 @@ export default function Home() {
     return { cycle: cycles[0] ?? null, companies, ccs, packages };
   });
 
-  const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
+  const query = new URLSearchParams(
+    Object.entries({ ...filters, year: year ? String(year) : "" }).filter(([, v]) => v),
+  ).toString();
+  const inventory = useLoad(() => api<Inventory>("/dashboard/inventory"));
   const overview = useLoad(() => api<Overview>(`/dashboard/overview${query ? `?${query}` : ""}`), [query]);
 
   const admin = useLoad(async () => {
@@ -116,7 +121,8 @@ export default function Home() {
   const monthName = o?.last_closed_period ? MONTHS[o.last_closed_period - 1] : null;
   const prevLabel = o ? `${o.previous_year} até ${monthName ?? "—"}` : "";
   const refLabel = o ? `${o.reference_year} até ${monthName ?? "—"}` : "";
-  const hasData = Boolean(o && (o.years_loaded.length || Number(o.kpis.budget_total)));
+  const hasData = Boolean(o && (o.has_actual || o.has_budget));
+  const inv = inventory.data;
 
   return (
     <>
@@ -148,6 +154,13 @@ export default function Home() {
             <option key={p.id} value={p.id}>{p.roman ? `${p.roman} · ` : ""}{p.name}</option>
           ))}
         </select>
+        {o && o.available_years.length > 1 && (
+          <div className="year-tabs" role="tablist" aria-label="Ano">
+            {o.available_years.map((y) => (
+              <button key={y} className={y === o.reference_year ? "active" : ""} onClick={() => setYear(y)}>{y}</button>
+            ))}
+          </div>
+        )}
         {(filters.company_id || filters.cost_center_id || filters.package_id) && (
           <button className="btn btn-ghost btn-sm" onClick={() => setFilters({ company_id: "", cost_center_id: "", package_id: "" })}>
             Limpar filtros
@@ -159,37 +172,43 @@ export default function Home() {
       {!o ? (
         <Loading />
       ) : !hasData ? (
-        <Card>
-          <Empty>
-            Ainda não há realizado carregado para montar o painel.
-            {isController && (
-              <>
-                {" "}<Link className="link" to="/importacoes">Importe o realizado {o.previous_year} e {o.reference_year}</Link> no layout da aba “Realizado”.
-              </>
-            )}
-          </Empty>
-        </Card>
+        <Alert tone="warn">
+          Sem realizado ou orçamento de referência carregado{filters.company_id || filters.cost_center_id || filters.package_id ? " para estes filtros" : ""}.
+          {isController && <> <Link className="link" to="/importacoes">Importar</Link> no layout da aba “Realizado”.</>} Abaixo, o que já existe na base.
+        </Alert>
       ) : (
         <>
           <div className="stats">
-            <Stat label={`Realizado ${o.previous_year} (ano)`} value={fmtCompact(o.kpis.prev_total)} hint={fmtMoney(o.kpis.prev_total)} />
-            <Stat label={`Realizado ${prevLabel}`} value={fmtCompact(o.kpis.prev_ytd)} hint="base de comparação" />
-            <Stat
-              label={`Realizado ${refLabel}`}
-              value={fmtCompact(o.kpis.ref_ytd)}
-              tone="warn"
-              hint={fmtMoney(o.kpis.ref_ytd)}
-            />
-            <div className="stat stat-inline-delta">
-              <span className="stat-label">Variação no período</span>
-              <span className="stat-value"><Delta pct={o.kpis.ytd_var_pct} /></span>
-              <span className="stat-hint">{o.reference_year} vs {o.previous_year}, mesmos meses</span>
-            </div>
-            <Stat
-              label={`${o.reference_year} anualizado`}
-              value={fmtCompact(o.kpis.ref_annualized)}
-              hint={o.kpis.annualized_vs_prev_pct !== null ? `${fmtPct(o.kpis.annualized_vs_prev_pct)} vs ${o.previous_year} cheio` : "projeção linear"}
-            />
+            {o.has_prev && (
+              <>
+                <Stat label={`Realizado ${o.previous_year} (ano)`} value={fmtCompact(o.kpis.prev_total)} hint={fmtMoney(o.kpis.prev_total)} />
+                <Stat label={`Realizado ${prevLabel}`} value={fmtCompact(o.kpis.prev_ytd)} hint="base de comparação" />
+              </>
+            )}
+            {o.has_actual && (
+              <Stat label={`Realizado ${refLabel}`} value={fmtCompact(o.kpis.ref_ytd)} tone="warn" hint={fmtMoney(o.kpis.ref_ytd)} />
+            )}
+            {o.has_prev && o.has_actual && (
+              <div className="stat stat-inline-delta">
+                <span className="stat-label">Variação no período</span>
+                <span className="stat-value"><Delta pct={o.kpis.ytd_var_pct} /></span>
+                <span className="stat-hint">{o.reference_year} vs {o.previous_year}, mesmos meses</span>
+              </div>
+            )}
+            {o.has_actual && o.last_closed_period && (
+              <Stat
+                label="Média mensal"
+                value={fmtCompact(Number(o.kpis.ref_ytd) / o.last_closed_period)}
+                hint={`${o.last_closed_period} mês(es) com realizado`}
+              />
+            )}
+            {o.has_actual && o.last_closed_period !== 12 && (
+              <Stat
+                label={`${o.reference_year} anualizado`}
+                value={fmtCompact(o.kpis.ref_annualized)}
+                hint={o.has_prev && o.kpis.annualized_vs_prev_pct !== null ? `${fmtPct(o.kpis.annualized_vs_prev_pct)} vs ${o.previous_year} cheio` : "projeção linear"}
+              />
+            )}
             {o.has_budget && (
               <Stat
                 label={`Orçado ${o.reference_year}`}
@@ -209,8 +228,8 @@ export default function Home() {
           >
             <Legend
               items={[
-                { label: String(o.previous_year), color: SERIES.prev },
-                { label: String(o.reference_year), color: SERIES.ref },
+                ...(o.has_prev ? [{ label: String(o.previous_year), color: SERIES.prev }] : []),
+                ...(o.has_actual ? [{ label: String(o.reference_year), color: SERIES.ref }] : []),
                 ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget, line: true }] : []),
               ]}
             />
@@ -248,7 +267,12 @@ export default function Home() {
 
           <div className="grid-2">
             <Card title={`Por pacote GMD · acumulado até ${monthName ?? "—"}`}>
-              <Legend items={[{ label: String(o.previous_year), color: SERIES.prev }, { label: String(o.reference_year), color: SERIES.ref }]} />
+              <Legend
+                items={[
+                  ...(o.has_prev ? [{ label: String(o.previous_year), color: SERIES.prev }] : []),
+                  { label: String(o.reference_year), color: SERIES.ref },
+                ]}
+              />
               {o.by_package.length ? (
                 <PairedBars
                   prevLabel={prevLabel}
@@ -276,7 +300,7 @@ export default function Home() {
                       <div>
                         <div>
                           {c.title}
-                          {c.count > 0 && c.severity !== "OK" && <strong> · {fmtInt(c.count)}</strong>}
+                          {c.count > 1 && c.severity !== "OK" && <strong> · {fmtInt(c.count)}</strong>}
                         </div>
                         {c.severity !== "OK" && c.detail && <div className="muted small">{c.detail}</div>}
                         {c.severity !== "OK" && c.samples.length > 0 && (
@@ -303,13 +327,122 @@ export default function Home() {
 
           <div className="stack-lg">
             <Card title={`Maiores centros de custo · ${refLabel}`}>
-              <RankTable rows={o.top_cost_centers} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." />
+              <RankTable rows={o.top_cost_centers} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
             </Card>
             <Card title={`Maiores contas · ${refLabel}`}>
-              <RankTable rows={o.top_accounts} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." />
+              <RankTable rows={o.top_accounts} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
             </Card>
           </div>
         </>
+      )}
+
+      {inv && inv.personnel.headcount > 0 && (
+        <>
+          <h2 className="section-title">Quadro de pessoal (base importada)</h2>
+          <div className="stats">
+            <Stat label="Colaboradores ativos" value={fmtInt(inv.personnel.headcount)} />
+            <Stat label="Folha mensal (salário base)" value={fmtCompact(inv.personnel.monthly_payroll)} hint={fmtMoney(inv.personnel.monthly_payroll)} />
+            <Stat label="Custo mensal estimado" value={fmtCompact(inv.personnel.monthly_estimated_cost)} hint="salário × multiplicador do contrato" />
+            <Stat label="Custo anual estimado" value={fmtCompact(inv.personnel.annual_estimated_cost)} hint="12 × custo mensal, sem reajuste" />
+          </div>
+          <div className="grid-2">
+            <Card title="Por tipo de contrato">
+              <table className="table">
+                <thead>
+                  <tr><th>Contrato</th><th className="right">Pessoas</th><th className="right">Folha mensal</th><th className="right">Multiplicador</th></tr>
+                </thead>
+                <tbody>
+                  {inv.personnel.by_contract.map((c) => (
+                    <tr key={c.contract}>
+                      <td>{c.contract}</td>
+                      <td className="right">{fmtInt(c.headcount)}</td>
+                      <td className="right">{fmtMoney(c.payroll)}</td>
+                      <td className="right">{Number(c.multiplier).toLocaleString("pt-BR")}×</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+            <Card title="Maiores centros de custo em pessoas">
+              <table className="table">
+                <thead>
+                  <tr><th>Centro de custo</th><th className="right">Pessoas</th><th className="right">Folha mensal</th></tr>
+                </thead>
+                <tbody>
+                  {inv.personnel.by_cost_center.map((c) => (
+                    <tr key={`${c.code}-${c.name}`}>
+                      <td>{c.name}<div className="muted small mono">{c.code ?? "—"}</div></td>
+                      <td className="right">{fmtInt(c.headcount)}</td>
+                      <td className="right">{fmtMoney(c.payroll)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          </div>
+        </>
+      )}
+
+      {inv && inv.macro.rows.length > 0 && (
+        <Card title="Premissas macroeconômicas e de negócio (versão vigente)">
+          <div className="table-wrap scroll-y">
+            <table className="table table-compact">
+              <thead>
+                <tr>
+                  <th>Indicador</th>
+                  <th>Fonte</th>
+                  {inv.macro.years.map((y) => <th key={y} className="right">{y}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {inv.macro.rows.map((r, i) => (
+                  <tr key={i}>
+                    <td className={r.segment ? "indent" : undefined}>{r.segment ?? r.indicator}</td>
+                    <td className="muted small wrap">{r.source ?? ""}</td>
+                    {inv.macro.years.map((y) => {
+                      const v = r.values[String(y)];
+                      const n = Number(v);
+                      const pct = r.indicator.includes("%") || (!r.segment && ["IPCA", "PIB Brasil", "PIB Norte", "CDI"].includes(r.indicator));
+                      return (
+                        <td key={y} className="right">
+                          {v === undefined ? "—" : pct ? `${(n * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%` : n.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {inv && (
+        <Card title="Cadastros">
+          <div className="stats">
+            <Stat label="Centros de custo ativos" value={fmtInt(inv.master.cost_centers)} hint={inv.master.cost_centers_without_user ? `${fmtInt(inv.master.cost_centers_without_user)} sem usuário gestor` : "todos com gestor"} />
+            {Object.entries(inv.master.accounts_by_nature).map(([n, c]) => (
+              <Stat key={n} label={`Contas ${n}`} value={fmtInt(c)} />
+            ))}
+            <Stat label="Pacotes GMD" value={fmtInt(inv.master.packages.length)} hint={`${inv.master.packages.filter((p) => p.package_type === 1).length} com validação obrigatória`} />
+          </div>
+        </Card>
+      )}
+
+      {!hasData && isController && admin.data && admin.data.quality.issues > 0 && (
+        <Card title="Qualidade da base">
+          <ul className="checks-list">
+            {admin.data.quality.checks.filter((c) => c.severity !== "OK").map((c) => (
+              <li key={c.code}>
+                <Badge tone={SEVERITY[c.severity].tone}>{SEVERITY[c.severity].label}</Badge>
+                <div>
+                  <div>{c.title}{c.count > 0 && <strong> · {fmtInt(c.count)}</strong>}</div>
+                  {c.detail && <div className="muted small">{c.detail}</div>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Card>
       )}
 
       {isController && admin.data && (
