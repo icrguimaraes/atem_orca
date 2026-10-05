@@ -232,8 +232,8 @@ Edição só em DRAFT/IN_PROGRESS/ADJUSTMENT_REQUESTED. **Congelamento:** ao con
 | Importação | `POST /imports` (upload), `GET /imports/{id}` (status + resumo), `GET /imports/{id}/preview`, `GET /imports/{id}/errors.xlsx`, `POST /imports/{id}/confirm`, `POST /imports/{id}/reject`, `GET /dataset-versions` | 1 |
 | Auditoria | `GET /audit-logs` (filtros entidade/usuário/período) | 1 |
 | Regras (simulação) | `POST /rules/travel`, `/rules/event`, `/rules/capex-item`, `/rules/personnel-projection` | 1 |
-| OPEX | `GET /opex/{cc}/history` (2025/2026R/2026O/2027), `GET/POST/PATCH/DELETE /submissions/{id}/lines`, justificativas | 2 |
-| Workflow | `POST /submissions/{id}/actions/{action}`, `GET /submissions/{id}/events`, `package-reviews` | 2 |
+| OPEX | `/opex/summary`, `/opex/cost-centers/{cc}` (abre/cria), `/opex/submissions/{id}/accounts` (2025R → 2026R/anualizado → 2026O → 2027P com alertas), `.../lines` (GENERIC/TRAVEL/EVENT), `/opex/lines/{id}`, `.../justifications/{conta}`, `/opex/options` | 2 ✅ |
+| Workflow | `POST /opex/submissions/{id}/actions/{submit\|recall\|start_review\|request_adjustment\|approve\|reopen\|consolidate}`, `.../events`, `.../package-reviews/{pacote}`, `/opex/review-queue` | 2 ✅ |
 | CAPEX | `/submissions/{id}/capex-projects`, itens, cronograma | 3 |
 | Pessoal | `/employees`, `/submissions/{id}/movements`, `/personnel/scenarios`, `/personnel/what-if`, `/personnel/headcount`, `/personnel/terminations` | 4 |
 | Painel | `/dashboard/overview` (KPIs, mensal, pacotes, rankings, com filtros e escopo do usuário), `/dashboard/data-quality` | 1 ✅ |
@@ -288,9 +288,9 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 
 | Fase | Entregas | Status |
 |---|---|---|
-| 1 — Fundação | Arquitetura, banco completo (todas as entidades), auth/RBAC, cadastros, ciclos/parâmetros, importação (mestres, realizado template/KSB1, orçamento de referência, colaboradores, premissas) com validação/prévia/versão, auditoria, regras de cálculo puras + testes, deploy Railway | **nesta entrega** |
-| 2 — OPEX | Frontend React; histórico comparativo; grade de preenchimento por pacote; calculadoras; justificativas; workflow + validação GMD; dashboard inicial | próxima |
-| 3 — CAPEX | Projetos/itens/cronograma, catálogo de ativos, bloqueio por inconsistência | |
+| 1 — Fundação | Arquitetura, banco completo (todas as entidades), auth/RBAC, cadastros, ciclos/parâmetros, importação (mestres, realizado template/KSB1, orçamento de referência, colaboradores, premissas) com validação/prévia/versão, auditoria, regras de cálculo puras + testes, deploy Railway | **entregue** |
+| 2 — OPEX | Histórico comparativo por conta; grade de preenchimento por pacote (colar do Excel, ÷12, média 2026); calculadoras de viagem e evento; justificativas obrigatórias; workflow + validação GMD Tipo 1; fila do gestor de pacote | **entregue** |
+| 3 — CAPEX | Projetos/itens/cronograma, catálogo de ativos, bloqueio por inconsistência | próxima |
 | 4 — Pessoal | Quadro, movimentos, what-if, admissões/desligamentos, headcount | |
 | 5 — Consolidação | Dashboard executivo, variações, exportações xlsx, consolidação final e versões | |
 
@@ -304,3 +304,14 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 | 4 | Filial vinculada à empresa (local de negócios SAP) | Confirmar se os códigos de filial se repetem entre empresas |
 | 5 | Pacote "Pessoas" (Tipo 1, gestora Claudia Chunia) valida o módulo Pessoal | Confirmar fluxo RH × gestor de CC |
 | 6 | CSC: orçado na ATEM no CC da área; rateio fica fora do MVP (tabela de rateio na Fase 5) | Matriz de rateio será fornecida pela contabilidade? |
+
+## 12. Regras implementadas na Fase 2 (OPEX)
+
+- **Unidade de trabalho:** versão vigente × centro de custo × módulo OPEX (`budget_submissions`), criada ao abrir o CC.
+- **Quem edita:** gestor vinculado ao CC (ou escopo) e Controladoria, com status Rascunho, Em preenchimento ou Ajuste solicitado. Gestor só edita com ciclo **Aberto**; Controladoria pode preparar com o ciclo em preparação.
+- **Referência da variação:** 2026 anualizado (realizado até o último mês × 12 / meses); na falta, orçado 2026; na falta, realizado 2025.
+- **Alertas por conta** (limites em Parâmetros): `GROWTH_ABOVE`, `REDUCTION_ABOVE`, `NEW_ACCOUNT`, `NO_BUDGET`; ignorados quando referência e proposta ficam abaixo de `alert.min_relevant_amount`. Conta com alerta exige justificativa para enviar.
+- **Viagem:** gera passagem/diária/hospedagem no mês de ida (mesmo `group_ref`); passagem pela matriz do ciclo ou informada pelo gestor; só ida = fator do ciclo.
+- **Evento:** alimentação por pessoa (Interno/Externo, lista parametrizável) + materiais, no mês do evento.
+- **GMD:** ao enviar, cada pacote **Tipo 1** presente recebe validação pendente; gestor do pacote valida ou pede ajuste (volta para o gestor); a aprovação exige todos os Tipo 1 validados. Tipo 2 é consultivo.
+- **Auditoria:** cada linha criada/alterada/excluída, justificativa e transição de workflow.

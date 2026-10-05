@@ -284,3 +284,45 @@ input:disabled, select:disabled { opacity: 0.6; }
 .year-tabs button.active { background: var(--brand); color: var(--brand-ink); }
 .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 6px 0 -6px; }
 .indent { padding-left: 26px !important; color: var(--muted); }
+
+/* ---------- OPEX */
+textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; width: 100%; resize: vertical; }
+textarea:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+textarea.justification { min-width: 220px; font-size: 13px; }
+textarea.required { border-color: var(--bad); }
+.just-cell { min-width: 240px; }
+.row-alert { background: color-mix(in srgb, var(--bad-bg) 45%, transparent); }
+.row-tools { display: flex; flex-wrap: wrap; gap: 2px; margin: 4px 0; }
+.accounts-table td .badge { margin: 2px 4px 0 0; }
+.sub-row td { background: var(--surface-2); }
+.monthly td, .monthly th { font-size: 12px; padding: 4px 6px; }
+.count-bad { background: var(--bad-bg) !important; color: var(--bad) !important; }
+.btn-link { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+
+.fill-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; align-items: start; }
+.package-nav { display: grid; gap: 4px; position: sticky; top: 12px; }
+.package-nav button { display: grid; text-align: left; gap: 2px; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.package-nav button.active { border-color: var(--brand); box-shadow: inset 3px 0 0 var(--brand); font-weight: 600; }
+.calc-form { display: grid; gap: 12px; padding: 14px; border: 1px dashed var(--border); border-radius: 10px; background: var(--surface-2); }
+
+.grid-wrap { max-height: 70vh; }
+.grid-table th { position: sticky; top: 0; background: var(--surface); z-index: 2; }
+.grid-table td { padding: 4px 4px; vertical-align: middle; }
+.grid-table select, .grid-table .text-cell { width: 100%; padding: 5px 6px; font-size: 12.5px; margin-bottom: 3px; }
+.grid-table .sticky-col { position: sticky; left: 0; background: var(--surface); z-index: 1; min-width: 260px; max-width: 300px; }
+.grid-table th.sticky-col { z-index: 3; }
+.month-cell { min-width: 92px; }
+input.money { width: 92px; text-align: right; padding: 5px 6px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+input.money.invalid { border-color: var(--bad); }
+tr.saving { opacity: 0.6; }
+
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.timeline li { display: grid; grid-template-columns: 180px 1fr; gap: 12px; align-items: start; }
+
+@media (max-width: 860px) {
+  .fill-layout { grid-template-columns: 1fr; }
+  .package-nav { position: static; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .timeline li { grid-template-columns: 1fr; }
+}
+.accounts-table td:first-child { min-width: 300px; }
+.row-tools .btn-sm { padding: 3px 8px; }

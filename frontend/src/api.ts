@@ -179,3 +179,64 @@ export interface Inventory {
     rows: { category: string; indicator: string; segment: string | null; source: string | null; reference_date: string | null; values: Record<string, string> }[];
   };
 }
+
+// ---------------------------------------------------------------- OPEX
+
+export interface OpexAction { action: string; label: string; requires_comment: boolean }
+export interface PackageReviewInfo {
+  package_id: number; package: string; status: string; comment: string | null; reviewer: string | null;
+  updated_at: string | null; can_review: boolean;
+}
+export interface OpexHeader {
+  submission_id: number; status: string; status_label: string;
+  cost_center: { id: number; code: string; name: string; company_id: number; company_code: string; manager_name: string | null };
+  cycle: { id: number; name: string; status: string; deadline: string | null };
+  version: string;
+  years: { prev: number; ref: number; target: number };
+  permissions: { edit: boolean; owner: boolean; global: boolean; review_packages: number[]; cycle_blocked: boolean };
+  actions: OpexAction[];
+  package_reviews: PackageReviewInfo[];
+  submitted_at: string | null;
+}
+export interface OpexAccountRow {
+  account_id: number; code: string; name: string; package_id: number | null; package: string | null;
+  package_type: number | null; prev_actual: string; ref_actual_ytd: string; ref_annualized: string; ref_budget: string;
+  proposed: string; variation_base: string; variation_pct: string | null; flags: string[];
+  needs_justification: boolean; justification: string | null;
+}
+export interface OpexAccounts {
+  prev_year: number; ref_year: number; target_year: number; closed_period: number | null;
+  accounts: OpexAccountRow[]; totals: Record<string, string>; pending_justifications: number;
+}
+export interface OpexLine {
+  id: number; account_id: number; package_id: number | null; branch_id: number | null; account_detail_id: number | null;
+  line_type: "GENERIC" | "TRAVEL" | "EVENT"; group_ref: string | null; description: string | null;
+  justification: string | null; supplier: string | null; contract_manager: string | null;
+  attributes: Record<string, any> | null; values: Record<string, string>; total: string; updated_at: string | null;
+}
+export interface OpexOptions {
+  packages: { id: number; name: string; roman: string | null; package_type: number; form_type: string }[];
+  accounts: { id: number; code: string; name: string; package_id: number | null; details: { id: number; name: string }[] }[];
+  branches: { id: number; code: string; name: string; company_id: number }[];
+  lookups: Record<string, { code: string; label: string; extra: Record<string, any> | null }[]>;
+  params: { one_way_factor: string };
+}
+export interface OpexSummaryRow {
+  cost_center_id: number; code: string; name: string; company_code: string; manager_name: string | null;
+  has_manager_user: boolean; submission_id: number | null; status: string; status_label: string;
+  submitted_at: string | null; prev_actual: string; ref_annualized: string; proposed: string; variation_pct: string | null;
+}
+export interface OpexSummary {
+  cycle: { name: string; status: string; deadline: string | null };
+  years: { prev: number; ref: number; target: number };
+  status_counts: Record<string, number>;
+  rows: OpexSummaryRow[];
+}
+export interface ReviewQueueItem {
+  submission_id: number; cost_center_id: number; cost_center: string; package_id: number; package: string;
+  review_status: string; submitted_at: string | null; package_total: string;
+}
+export interface WorkflowEventItem {
+  action: string; from_status: string | null; to_status: string; to_label: string; comment: string | null;
+  user: string | null; version: string | null; created_at: string;
+}

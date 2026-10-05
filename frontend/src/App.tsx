@@ -10,6 +10,8 @@ import ImportDetail from "./pages/ImportDetail";
 import Imports from "./pages/Imports";
 import Login from "./pages/Login";
 import MasterData from "./pages/MasterData";
+import OpexCostCenter from "./pages/OpexCostCenter";
+import OpexList from "./pages/OpexList";
 import Users from "./pages/Users";
 
 function Protected({ children, roles }: { children: ReactNode; roles?: string[] }) {
@@ -36,6 +38,8 @@ export default function App() {
             <Route index element={<Home />} />
             <Route path="importacoes" element={<Protected roles={["CONTROLLER"]}><Imports /></Protected>} />
             <Route path="importacoes/:id" element={<Protected roles={["CONTROLLER"]}><ImportDetail /></Protected>} />
+            <Route path="orcamento" element={<OpexList />} />
+            <Route path="orcamento/:ccId" element={<OpexCostCenter />} />
             <Route path="cadastros" element={<MasterData />} />
             <Route path="ciclo" element={<CyclePage />} />
             <Route path="usuarios" element={<Protected roles={["CONTROLLER"]}><Users /></Protected>} />

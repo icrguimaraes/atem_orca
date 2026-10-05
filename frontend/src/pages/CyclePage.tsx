@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type Cycle, type Parameter, type Version } from "../api";
 import { useAuth } from "../auth";
+import { PackageManagersCard } from "../components/PackageManagersCard";
 import { Alert, Badge, Card, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import { CYCLE_STATUS, PARAM_LABELS, fmtDate, fmtDateTime } from "../labels";
 
@@ -133,6 +134,7 @@ export default function CyclePage() {
           </table>
         </div>
       </Card>
+      <PackageManagersCard cycleId={cycle.id} editable={can()} />
       <Card title="Versões do orçamento">
         <table className="table">
           <thead>

@@ -173,3 +173,27 @@ export const ERROR_LABELS: Record<string, string> = {
   NO_COST_CENTER: "Sem centro de custo",
   YEAR_REQUIRED: "Ano não identificado",
 };
+
+export const SUBMISSION_STATUS: Record<string, { label: string; tone: Tone }> = {
+  DRAFT: { label: "Não iniciado", tone: "neutral" },
+  IN_PROGRESS: { label: "Em preenchimento", tone: "info" },
+  SUBMITTED: { label: "Enviado para validação", tone: "warn" },
+  UNDER_REVIEW: { label: "Em análise", tone: "warn" },
+  ADJUSTMENT_REQUESTED: { label: "Ajuste solicitado", tone: "bad" },
+  APPROVED: { label: "Aprovado", tone: "good" },
+  CONSOLIDATED: { label: "Consolidado", tone: "good" },
+};
+
+export const REVIEW_STATUS: Record<string, { label: string; tone: Tone }> = {
+  PENDING: { label: "Aguardando", tone: "warn" },
+  APPROVED: { label: "Validado", tone: "good" },
+  ADJUST_REQUESTED: { label: "Ajuste pedido", tone: "bad" },
+  COMMENTED: { label: "Comentado", tone: "info" },
+};
+
+export const FLAG_LABELS: Record<string, { label: string; tone: Tone; hint: string }> = {
+  GROWTH_ABOVE: { label: "Crescimento acima do limite", tone: "bad", hint: "Proposta maior que a referência + limite de crescimento" },
+  REDUCTION_ABOVE: { label: "Redução acima do limite", tone: "warn", hint: "Proposta menor que a referência − limite de redução" },
+  NEW_ACCOUNT: { label: "Conta sem histórico", tone: "info", hint: "Sem realizado/orçado anterior para esta conta" },
+  NO_BUDGET: { label: "Sem orçamento", tone: "warn", hint: "Houve gasto em 2026, mas nada foi orçado para 2027" },
+};
