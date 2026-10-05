@@ -6,7 +6,8 @@ com importação versionada, workflow de aprovação, auditoria e comparação 2
 | Documento | Conteúdo |
 |---|---|
 | [`docs/01-analise-templates.md`](docs/01-analise-templates.md) | Análise aba a aba dos 3 templates + cartilha: colunas, fórmulas, listas, regras, problemas encontrados |
-| [`docs/02-especificacao-tecnica.md`](docs/02-especificacao-tecnica.md) | Arquitetura, modelo de dados, regras (fórmula → backend), workflow, importação, UX, roadmap |
+| [`docs/02-especificacao-tecnica.md
+- `docs/design-system.md` — design system Coral Stay (cores, tipografia, componentes) e como foi aplicado`](docs/02-especificacao-tecnica.md) | Arquitetura, modelo de dados, regras (fórmula → backend), workflow, importação, UX, roadmap |
 
 ## Estado atual — Fase 1 (Fundação) ✅
 
