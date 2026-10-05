@@ -1,4 +1,5 @@
 export const DATASET_LABELS: Record<string, string> = {
+  OPEX_TEMPLATE: "Template OPEX preenchido (cadastros + realizado + orçamento 2027)",
   MASTER_DATA: "Cadastros (filiais, CCs, contas)",
   COST_CENTERS: "Centros de custo",
   ACCOUNTS: "Contas contábeis",
@@ -10,6 +11,7 @@ export const DATASET_LABELS: Record<string, string> = {
 
 export const LAYOUT_LABELS: Record<string, string> = {
   TEMPLATE_BD: "Aba BD-Novo do template",
+  TEMPLATE_OPEX: "Template OPEX 2027 (todas as abas)",
   WIDE_MONTHLY: "Planilha mensal (colunas por mês)",
   SAP_KSB1: "Exportação SAP KSB1",
   TEMPLATE_QUADRO: "Quadro de funcionários",
@@ -124,6 +126,7 @@ export const FIELD_LABELS: Record<string, string> = {
 
 export const RECORD_TYPES: Record<string, string> = {
   FACT: "Lançamentos",
+  BUDGET_LINE: "Linhas de orçamento 2027",
   BRANCH: "Filiais",
   COST_CENTER: "Centros de custo",
   ACCOUNT: "Contas",
@@ -172,6 +175,10 @@ export const ERROR_LABELS: Record<string, string> = {
   VACANCY: "Vaga sem matrícula",
   NO_COST_CENTER: "Sem centro de custo",
   YEAR_REQUIRED: "Ano não identificado",
+  BUDGET_LOCKED: "Orçamento do CC já enviado/aprovado",
+  WRONG_NATURE: "Conta não é de OPEX",
+  NO_BUDGET_VALUES: "Template sem valores de orçamento",
+  NO_CYCLE: "Sem ciclo orçamentário",
 };
 
 export const SUBMISSION_STATUS: Record<string, { label: string; tone: Tone }> = {

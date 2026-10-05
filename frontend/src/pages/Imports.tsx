@@ -8,7 +8,8 @@ import { DATASET_LABELS, IMPORT_STATUS, fmtDateTime, fmtInt, fmtSize } from "../
 const ACTIVE = new Set(["UPLOADED", "VALIDATING", "CONFIRMED", "PROCESSING"]);
 
 const HELP: Record<string, string> = {
-  "": "O sistema identifica o tipo pelo conteúdo (abas e cabeçalhos).",
+  "": "O sistema identifica o tipo pelo conteúdo (abas e cabeçalhos). O template OPEX preenchido é reconhecido automaticamente.",
+  OPEX_TEMPLATE: "Template OPEX 2027 como volta do gestor: carrega cadastros (BD-Novo), o realizado da aba Realizado e os valores das abas I a XII como orçamento 2027 do centro de custo. Reimportar substitui só as linhas que vieram do template.",
   MASTER_DATA: "Aba BD-Novo dos templates ou planilha com Filiais / Centro de Custo / Conta do Razão.",
   ACTUAL: "Layout da aba Realizado (Empresa, Filial, Centro de Custos, Conta Razão e uma coluna por mês) ou KSB1.",
   REFERENCE_BUDGET: "Mesmo layout do realizado, com os valores orçados (ex.: Orçamento 2026).",
@@ -68,7 +69,7 @@ function UploadForm({ onDone }: { onDone: (id: number) => void }) {
           Tipo de dado
           <select value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">Detectar automaticamente</option>
-            {["MASTER_DATA", "ACTUAL", "REFERENCE_BUDGET", "EMPLOYEES", "MACRO_ASSUMPTIONS"].map((t) => (
+            {["OPEX_TEMPLATE", "MASTER_DATA", "ACTUAL", "REFERENCE_BUDGET", "EMPLOYEES", "MACRO_ASSUMPTIONS"].map((t) => (
               <option key={t} value={t}>
                 {DATASET_LABELS[t]}
               </option>

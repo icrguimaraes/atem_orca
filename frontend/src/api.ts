@@ -128,8 +128,16 @@ export interface ScopeComparison {
   after_total: string; difference: string; absent_samples: string[];
 }
 
+export interface BudgetImportScope {
+  cost_center: string; company: string; status: string; editable: boolean; lines: number; total: string;
+  replaces_lines: number; replaces_total: string;
+}
+
 export interface Comparison {
-  kind: "FINANCIAL" | "MASTER" | "EMPLOYEES" | "MACRO" | "NONE";
+  kind: "FINANCIAL" | "MASTER" | "EMPLOYEES" | "MACRO" | "NONE" | "TEMPLATE";
+  master?: Comparison;
+  actual?: Comparison | null;
+  budget?: BudgetImportScope[];
   no_changes: boolean;
   mode?: "MERGE" | "REPLACE";
   scopes?: ScopeComparison[];

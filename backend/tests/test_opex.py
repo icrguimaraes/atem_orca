@@ -183,3 +183,31 @@ def test_package_adjustment_and_access(client, admin, run_worker):
     _, other = _user(client, admin, "outro@t.com", ["MANAGER"])
     assert client.get(f"/api/v1/opex/submissions/{sub}", headers=other).status_code == 403
     assert client.get("/api/v1/opex/summary", headers=other).json()["rows"] == []
+
+
+def test_chart_data(client, admin, run_worker):
+    cc, mgr, acc, pkg = _setup(client, admin, run_worker)
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+    client.post(f"/api/v1/cycles/{cycle_id}/open", headers=admin)
+    sub = client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=mgr).json()["submission_id"]
+    client.post(
+        f"/api/v1/opex/submissions/{sub}/lines",
+        headers=mgr,
+        json={"account_id": acc["6010301002"]["id"], "values": {m: 600 for m in range(1, 13)}},
+    )
+
+    view = client.get(f"/api/v1/opex/submissions/{sub}/accounts", headers=mgr).json()
+    assert view["monthly"]["ref"][:8] == ["1500.00"] * 8 and view["monthly"]["ref"][8] == "0.00"
+    assert view["monthly"]["proposed"] == ["600.00"] * 12
+    tel = next(r for r in view["accounts"] if r["code"] == "6010301002")
+    assert tel["ref_monthly"][0] == "500.00"
+
+    data = client.get("/api/v1/dashboard/overview", headers=admin).json()
+    assert data["heatmap"]["year"] == 2026 and data["heatmap"]["rows"][0]["values"][0] == "1500.00"
+    deltas = {d["code"]: d["delta"] for d in data["account_deltas"]}
+    assert deltas["6010301001"] == "800.00"  # 8×1000 (2026) − 8×900 (2025 até ago)
+    progress = data["budget_progress"]
+    assert progress["started_cost_centers"] == 1 and progress["status_counts"]["IN_PROGRESS"] == 1
+    dti = next(p for p in progress["by_package"] if p["package"] == "DTI")
+    assert dti == {"package_id": pkg["DTI"]["id"], "package": "DTI", "proposed": "7200.00", "ref_annualized": "6000.00"}
+    assert client.get("/api/v1/opex/summary", headers=mgr).json()["progress"]["proposed_total"] == "7200.00"

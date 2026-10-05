@@ -189,7 +189,71 @@ def validate_employees(result: ParseResult, dims: Dimensions, options: dict) -> 
     _mark_duplicates(result.records)
 
 
+def _subset(result: ParseResult, *types: str) -> ParseResult:
+    """Visão de parte dos registros (mesmos objetos: validações se refletem no resultado original)."""
+    return ParseResult(result.dataset_type, result.layout, [r for r in result.records if r.record_type in types])
+
+
+def validate_opex_template(result: ParseResult, dims: Dimensions, options: dict) -> None:
+    validate_master(_subset(result, "BRANCH", "COST_CENTER", "ACCOUNT"), dims, options)
+    # o próprio arquivo traz nomes de CC e conta: o que faltar no cadastro é criado
+    facts = _subset(result, "FACT")
+    facts.dataset_type = "ACTUAL"
+    validate_financial(facts, dims, options | {"create_missing_dimensions": True})
+    file_ccs = {r.data["code"] for r in result.records if r.record_type == "COST_CENTER" and r.status != "ERROR"}
+    file_accounts = {
+        r.data["code"]: r.data for r in result.records if r.record_type == "ACCOUNT" and r.status != "ERROR"
+    }
+    from app.imports.loaders import infer_nature
+
+    for rec in result.records:
+        if rec.record_type != "BUDGET_LINE":
+            continue
+        d = rec.data
+        company_id = _company(rec, dims, None)
+        d["company_id"] = company_id
+        if company_id is None:
+            continue
+        cc = dims.cost_centers.get((company_id, d["cost_center"]))
+        if cc is None and d["cost_center"] not in file_ccs:
+            rec.error(
+                "UNKNOWN_COST_CENTER",
+                f"Centro de custo {d['cost_center']} não cadastrado",
+                "Centro de Custo",
+                d["cost_center"],
+            )
+        acc = dims.accounts.get(d["account"])
+        if acc is None and d["account"] not in file_accounts:
+            rec.error("UNKNOWN_ACCOUNT", f"Conta {d['account']} não cadastrada", "Conta", d["account"])
+        nature = (
+            acc.nature
+            if acc
+            else (
+                infer_nature(
+                    d["account"],
+                    file_accounts[d["account"]].get("dre_group"),
+                    file_accounts[d["account"]].get("package"),
+                )
+                if d["account"] in file_accounts
+                else None
+            )
+        )
+        if nature and nature not in ("OPEX", "FINANCEIRO"):
+            rec.error(
+                "WRONG_NATURE",
+                f"Conta {d['account']} é de {nature}; não entra no orçamento OPEX",
+                "Conta",
+                d["account"],
+            )
+        if d.get("branch") and dims.branch_id(company_id, d["branch"]) is None:
+            rec.warn(
+                "UNKNOWN_BRANCH", f"Filial {d['branch']} não cadastrada (linha fica sem filial)", "Filial", d["branch"]
+            )
+
+
 def validate(result: ParseResult, dims: Dimensions, options: dict) -> None:
+    if result.dataset_type == "OPEX_TEMPLATE":
+        return validate_opex_template(result, dims, options)
     if result.dataset_type in ("MASTER_DATA", "COST_CENTERS", "ACCOUNTS"):
         validate_master(result, dims, options)
     elif result.dataset_type in ("ACTUAL", "REFERENCE_BUDGET"):

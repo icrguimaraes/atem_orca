@@ -305,10 +305,10 @@ def _ensure_dimensions(db: Session, d: dict, stats: dict) -> None:
 # ------------------------------------------------------------------ fatos financeiros
 
 
-def load_financial(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
-    rows = _rows(db, batch.id)
+def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset: str | None = None) -> dict:
+    rows = _rows(db, batch.id, "FACT")
     stats: dict = defaultdict(int)
-    dataset = batch.dataset_type
+    dataset = dataset or batch.dataset_type
     scenario = (batch.options or {}).get("scenario", "ORC")
     source = "SAP_KSB1" if batch.layout == "SAP_KSB1" else "EXCEL"
     mode = (batch.options or {}).get("mode", "MERGE")
@@ -503,7 +503,87 @@ def load_macro(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
     return {"assumptions": len(payload)}
 
 
+def load_opex_template(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
+    """Cadastros → realizado → orçamento 2027, na mesma transação."""
+    stats = {"master": load_master(db, batch, user_id)}
+    if _rows(db, batch.id, "FACT"):
+        stats["actual"] = load_financial(db, batch, user_id, dataset="ACTUAL")
+    stats["budget"] = load_budget_lines(db, batch, user_id)
+    return stats
+
+
+def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
+    """Linhas do orçamento vindas do template: substituem as que vieram de template antes (no mesmo CC);
+    linhas digitadas no sistema são preservadas."""
+    from app.domain.rules.common import normalize_months
+    from app.domain.workflow import EDITABLE
+    from app.models import BudgetLine, Company
+    from app.services import opex as opex_svc
+
+    rows = _rows(db, batch.id, "BUDGET_LINE")
+    if not rows:
+        return {}
+    ctx = opex_svc.context(db)
+    companies = {c.code: c.id for c in db.scalars(select(Company))}
+    groups: dict[tuple, list[ImportRow]] = defaultdict(list)
+    for row in rows:
+        groups[(row.data["company"], row.data["cost_center"])].append(row)
+    stats: dict = defaultdict(int)
+    for (company, cc_code), items in groups.items():
+        company_id = companies[company]
+        cc = db.scalar(select(CostCenter).where(CostCenter.company_id == company_id, CostCenter.code == cc_code))
+        sub = opex_svc.get_submission(db, ctx, cc.id)
+        if sub.status not in EDITABLE:
+            stats["cost_centers_locked"] += 1
+            continue
+        for old in db.scalars(select(BudgetLine).where(BudgetLine.submission_id == sub.id)):
+            if (old.attributes or {}).get("source") == "TEMPLATE":
+                db.delete(old)
+                stats["lines_replaced"] += 1
+        total = Decimal("0")
+        for row in items:
+            d = row.data
+            acc = db.scalar(select(Account).where(Account.code == d["account"]))
+            branch_id = None
+            if d.get("branch"):
+                branch_id = db.scalar(
+                    select(Branch.id).where(Branch.company_id == company_id, Branch.code == d["branch"])
+                )
+            line = BudgetLine(
+                submission_id=sub.id,
+                company_id=company_id,
+                branch_id=branch_id,
+                cost_center_id=cc.id,
+                account_id=acc.id,
+                package_id=acc.package_id,
+                line_type="GENERIC",
+                description=d.get("description"),
+                supplier=d.get("supplier"),
+                justification=d.get("justification"),
+                attributes={"source": "TEMPLATE", "sheet": row.sheet, "row": row.row_number, "import_batch": batch.id},
+                created_by=user_id,
+                updated_by=user_id,
+            )
+            opex_svc._set_values(line, normalize_months({int(m): v for m, v in d["values"].items()}))
+            db.add(line)
+            total += line.total_amount
+            stats["lines_created"] += 1
+        opex_svc.mark_in_progress(db, sub, ctx, user_id)
+        audit.record(
+            db,
+            user_id=user_id,
+            action="IMPORT_BUDGET",
+            entity_type="budget_submission",
+            entity_id=sub.id,
+            after={"lines": len(items), "total": str(total), "import_batch": batch.id},
+        )
+        stats["cost_centers"] += 1
+    db.flush()
+    return dict(stats)
+
+
 LOADERS = {
+    "OPEX_TEMPLATE": load_opex_template,
     "MASTER_DATA": load_master,
     "COST_CENTERS": load_master,
     "ACCOUNTS": load_master,

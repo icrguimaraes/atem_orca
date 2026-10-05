@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.api.v1.dashboard import budget_progress
 from app.core.deps import client_ip, get_current_user, is_global, visible_cost_center_ids
 from app.db import get_db
 from app.domain.workflow import EDITABLE, STATUS_LABELS, WorkflowError, available_actions, check_transition
@@ -228,6 +229,7 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
             "deadline": ctx.cycle.opex_deadline.isoformat() if ctx.cycle.opex_deadline else None,
         },
         "years": {"prev": ctx.prev_year, "ref": ctx.ref_year, "target": ctx.target_year},
+        "progress": budget_progress(db, user),
         "status_counts": dict(counts),
         "rows": rows,
     }

@@ -3,6 +3,7 @@ from collections.abc import Callable
 from app.imports.base import ParseResult, Sheet, StructureError, norm
 from app.imports.parsers.financial import parse_ksb1, parse_wide
 from app.imports.parsers.master import parse_master
+from app.imports.parsers.opex_template import is_opex_template, parse_opex_template
 from app.imports.parsers.people import parse_employees, parse_macro
 
 Parser = Callable[[list[Sheet], dict], ParseResult]
@@ -12,16 +13,19 @@ PARSERS: dict[str, list[Parser]] = {
     "MACRO_ASSUMPTIONS": [parse_macro],
     "ACTUAL": [parse_ksb1, lambda s, o: parse_wide(s, o, "ACTUAL")],
     "REFERENCE_BUDGET": [lambda s, o: parse_wide(s, o, "REFERENCE_BUDGET")],
+    "OPEX_TEMPLATE": [parse_opex_template],
     "MASTER_DATA": [parse_master],
     "COST_CENTERS": [parse_master],
     "ACCOUNTS": [parse_master],
 }
 
 # Ordem de tentativa quando o usuário não informa o tipo (mais específico primeiro)
-AUTO_ORDER = ("EMPLOYEES", "MACRO_ASSUMPTIONS", "ACTUAL", "MASTER_DATA")
+AUTO_ORDER = ("EMPLOYEES", "MACRO_ASSUMPTIONS", "OPEX_TEMPLATE", "ACTUAL", "MASTER_DATA")
 
 
 def _sheet_hint(sheets: list[Sheet]) -> str | None:
+    if is_opex_template(sheets):
+        return "OPEX_TEMPLATE"  # template OPEX: cadastros + realizado + orçamento num só arquivo
     names = {norm(s.name) for s in sheets}
     if "quadro funcionarios" in names:
         return "EMPLOYEES"

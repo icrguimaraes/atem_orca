@@ -90,6 +90,36 @@ const ACTION_LABELS = { CREATE: "Novos", UPDATE: "Alterados", UNCHANGED: "Sem al
 /** O que a carga vai mudar em relação à base vigente. */
 export function ComparisonCard({ comparison }: { comparison: Comparison }) {
   if (comparison.kind === "NONE") return null;
+  if (comparison.kind === "TEMPLATE")
+    return (
+      <>
+        {comparison.budget && comparison.budget.length > 0 && (
+          <Card title="Orçamento 2027 que será carregado">
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr><th>Centro de custo</th><th>Situação</th><th className="right">Linhas</th><th className="right">Total 2027</th><th className="right">Substitui (de template anterior)</th></tr>
+                </thead>
+                <tbody>
+                  {comparison.budget.map((b) => (
+                    <tr key={`${b.company}-${b.cost_center}`}>
+                      <td className="mono">{b.company} · {b.cost_center}</td>
+                      <td>{b.editable ? <Badge tone="good">aceita carga</Badge> : <Badge tone="bad">bloqueado ({b.status})</Badge>}</td>
+                      <td className="right">{fmtInt(b.lines)}</td>
+                      <td className="right"><strong>{fmtMoney(b.total)}</strong></td>
+                      <td className="right">{b.replaces_lines ? `${fmtInt(b.replaces_lines)} linhas · ${fmtMoney(b.replaces_total)}` : "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="muted small">Linhas lançadas diretamente no sistema não são afetadas.</p>
+          </Card>
+        )}
+        {comparison.actual && <ComparisonCard comparison={comparison.actual} />}
+        {comparison.master && <ComparisonCard comparison={comparison.master} />}
+      </>
+    );
   return (
     <Card title="Comparação com a base vigente">
       {comparison.no_changes && (

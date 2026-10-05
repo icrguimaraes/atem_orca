@@ -144,3 +144,148 @@ def premissas() -> bytes:
     ws["B17"], ws["E17"], ws["F17"] = "Diesel", 2000, 2100
     ws["B18"], ws["C18"], ws["E18"] = "ATEM", "Crescimento da rede", 88
     return _bytes(wb)
+
+
+def opex_template_filled(budget_cc: str = "1050101011") -> bytes:
+    """Template OPEX como volta do gestor: BD-Novo + Realizado 2026 + abas de pacote preenchidas
+    (valores como o Excel grava em cache: CHAVE e códigos já calculados)."""
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(opex_template_bd()))
+    del wb["Realizado 2026"]
+    real = wb.create_sheet("Realizado 2026")
+    real.append([])
+    real.append([None, "ATEM - REALIZADO 2026"])
+    real.append(
+        [
+            None,
+            "Empresa",
+            "Filial",
+            "Nome Filial",
+            "Centro de Custos",
+            "Denominação do Centro de Custos",
+            "Gestor do CC",
+            "Conta Razão",
+            "Denominação da Conta do Razão",
+            "Pacotes Orçamento",
+            *[datetime(2026, m, 1) for m in range(1, 9)],
+            "TOTAL REALIZADO 2026",
+        ]
+    )
+    real.append(
+        [
+            None,
+            "1001",
+            "0001",
+            "MANAUS",
+            budget_cc,
+            "DADOS E PROJ.",
+            "Gestor",
+            "6010301002",
+            "Telefonia",
+            "DTI",
+            *[300] * 8,
+            2400,
+        ]
+    )
+    months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"]
+
+    viagens = wb.create_sheet("I - Viagens")
+    for col, text in (
+        (2, "CHAVE"),
+        (3, "CHAVE"),
+        (4, "CHAVE"),
+        (5, "FILIAL"),
+        (9, "OBJETIVO DA VIAGEM"),
+        (28, "CHAVE"),
+    ):
+        viagens.cell(61, col, text)
+    for i, m in enumerate(months):
+        viagens.cell(61, 29 + i, m)
+    viagens.cell(61, 41, 2027)
+    viagens.cell(62, 2, f"1001-0001-{budget_cc}-6010301011")  # coluna de linha de viagem (ignorada)
+    viagens.cell(62, 28, f"1001-0001-{budget_cc}-6010301011")  # consolidador
+    viagens.cell(62, 31, 1800)  # MAR
+    viagens.cell(63, 28, f"1001-0001-{budget_cc}-6010301001")
+    viagens.cell(63, 31, 2400)
+    viagens.cell(64, 28, "1001-0-0-6010301036")  # linha vazia do template
+
+    st = wb.create_sheet("II - Serviços de Terceiros")
+    for col, text in enumerate(
+        [
+            "CHAVE",
+            "DETALHAMENTO DO CONTRATO",
+            "GESTOR DO CONTRATO",
+            "FORNECEDOR",
+            "OBSERVAÇÕES",
+            "FILIAL",
+            "DIVISÃO",
+            "DENOMINAÇÃO DO CENTRO DE CUSTOS",
+            "CENTRO DE CUSTO",
+            "DESCRIÇÃO DA CONTA CONTÁBIL",
+            "CONTA CONTÁBIL",
+            *months,
+            2027,
+        ],
+        start=2,
+    ):
+        st.cell(14, col, text)
+    st.append(
+        [
+            None,
+            f"1001-0001-{budget_cc}-6010201003",
+            "Consultoria tributária",
+            "Ana",
+            "KPMG",
+            "Reajuste IPCA",
+            "MANAUS",
+            "0001",
+            "DADOS",
+            budget_cc,
+            "Serviços de Consultoria e Assessoria",
+            "6010201003",
+            *[1000] * 12,
+            12000,
+        ]
+    )
+    st.append([None, "1001---", None, None, None, None, None, None, None, None, None, None, *[None] * 12])
+
+    dti = wb.create_sheet("VI - DTI")
+    for col, text in enumerate(
+        [
+            "CHAVE",
+            "DETALHAMENTO DA DESPESA",
+            "VIGÊNCIA",
+            "TIPO DE CONTRATO",
+            "FILIAL",
+            "DIVISÃO",
+            "DENOMINAÇÃO DO CENTRO DE CUSTOS",
+            "CENTRO DE CUSTO",
+            "PRODUTO/SERVIÇO",
+            "DESCRIÇÃO DA CONTA CONTÁBIL",
+            "CONTA CONTÁBIL",
+            *months,
+            2027,
+        ],
+        start=2,
+    ):
+        dti.cell(13, col, text)
+    dti.append(
+        [
+            None,
+            f"1001-0001-{budget_cc}-6010301002",
+            "Links",
+            "12m",
+            "Manutenção",
+            "MANAUS",
+            "0001",
+            "DADOS",
+            budget_cc,
+            "Links de Internet",
+            "Telefonia",
+            "6010301002",
+            *[350] * 12,
+            4200,
+        ]
+    )
+    return _bytes(wb)

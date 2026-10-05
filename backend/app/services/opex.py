@@ -167,9 +167,27 @@ def account_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
     """Uma linha por conta: 2025 R → 2026 R (até o mês fechado) / anualizado → 2026 O → 2027 P, com alertas."""
     cc = db.get(CostCenter, sub.cost_center_id)
     closed = closed_period(db, ctx.ref_year, cc.company.code)
-    prev = dict(_current_sum(db, ActualEntry, cc.id, ctx.prev_year, False))
-    ref = dict(_current_sum(db, ActualEntry, cc.id, ctx.ref_year, False))
-    ref_budget = dict(_current_sum(db, ReferenceBudgetEntry, cc.id, ctx.ref_year, False))
+
+    def by_month(model, year):
+        out: dict[int, list[Decimal]] = defaultdict(lambda: [ZERO] * 12)
+        for acc_id, period, amount in _current_sum(db, model, cc.id, year, True):
+            out[acc_id][int(period) - 1] += amount
+        return out
+
+    prev_m = by_month(ActualEntry, ctx.prev_year)
+    ref_m = by_month(ActualEntry, ctx.ref_year)
+    budget_m = by_month(ReferenceBudgetEntry, ctx.ref_year)
+    prop_m: dict[int, list[Decimal]] = defaultdict(lambda: [ZERO] * 12)
+    for acc_id, month, amount in db.execute(
+        select(BudgetLine.account_id, BudgetLineValue.month, func.sum(BudgetLineValue.amount))
+        .join(BudgetLine, BudgetLine.id == BudgetLineValue.line_id)
+        .where(BudgetLine.submission_id == sub.id)
+        .group_by(BudgetLine.account_id, BudgetLineValue.month)
+    ):
+        prop_m[acc_id][int(month) - 1] += amount
+    prev = {k: sum(v, ZERO) for k, v in prev_m.items()}
+    ref = {k: sum(v, ZERO) for k, v in ref_m.items()}
+    ref_budget = {k: sum(v, ZERO) for k, v in budget_m.items()}
     proposed = proposed_by_account(db, sub.id)
     justifications = {
         j.account_id: j
@@ -224,11 +242,17 @@ def account_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
             "flags": flags,
             "needs_justification": bool(flags),
             "justification": just.text if just else None,
+            "ref_monthly": [str(money(v)) for v in ref_m[acc_id]] if acc_id in ref_m else None,
         }
         rows.append(row)
         for k in ("prev_actual", "ref_actual_ytd", "ref_annualized", "ref_budget", "proposed"):
             totals[k] += Decimal(row[k])
     rows.sort(key=lambda r: (r["package"] or "zz", r["code"]))
+    included = {r["account_id"] for r in rows}
+
+    def monthly_total(series: dict[int, list[Decimal]]) -> list[str]:
+        return [str(money(sum((series[a][i] for a in included if a in series), ZERO))) for i in range(12)]
+
     return {
         "prev_year": ctx.prev_year,
         "ref_year": ctx.ref_year,
@@ -236,6 +260,12 @@ def account_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
         "closed_period": closed,
         "accounts": rows,
         "totals": {k: str(money(v)) for k, v in totals.items()},
+        "monthly": {
+            "prev": monthly_total(prev_m),
+            "ref": monthly_total(ref_m),
+            "budget": monthly_total(budget_m),
+            "proposed": monthly_total(prop_m),
+        },
         "pending_justifications": sum(
             1 for r in rows if r["needs_justification"] and not (r["justification"] or "").strip()
         ),

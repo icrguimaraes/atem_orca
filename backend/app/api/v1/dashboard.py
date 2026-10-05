@@ -19,6 +19,7 @@ from app.models import (
     ActualEntry,
     BudgetCycle,
     BudgetPackage,
+    Company,
     ContractType,
     CostCenter,
     DatasetVersion,
@@ -223,6 +224,9 @@ def overview(
         "by_package": package_rows,
         "top_cost_centers": ranking(ActualEntry.cost_center_id, CostCenter, ("code", "name")),
         "top_accounts": ranking(ActualEntry.account_id, Account, ("code", "name")),
+        "heatmap": _heatmap(db, f, ref if ref in actual_years else prev),
+        "account_deltas": _account_deltas(db, f, ref, prev, closed) if (closed and prev in actual_years) else [],
+        "budget_progress": budget_progress(db, user, company_id, cost_center_id, package_id),
     }
 
 
@@ -450,3 +454,173 @@ def inventory(db: Session = Depends(get_db), user: User = Depends(get_current_us
         "personnel": personnel,
         "macro": {"years": sorted(years), "rows": list(macro_rows.values())},
     }
+
+
+def _heatmap(db: Session, f: Facts, year: int, limit: int = 12) -> dict:
+    """Centro de custo × mês (maiores CCs do ano), para o mapa de calor."""
+    rows: dict[int, dict[int, Decimal]] = defaultdict(lambda: defaultdict(lambda: ZERO))
+    for cc_id, period, amount in f.sums(ActualEntry, year, ActualEntry.cost_center_id, ActualEntry.period):
+        rows[cc_id][int(period)] += amount
+    top = sorted(rows, key=lambda k: sum(rows[k].values()), reverse=True)[:limit]
+    ccs = {c.id: c for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(top)))} if top else {}
+    return {
+        "year": year,
+        "rows": [
+            {
+                "id": cc_id,
+                "code": ccs[cc_id].code if cc_id in ccs else None,
+                "name": ccs[cc_id].name if cc_id in ccs else "—",
+                "values": [_money(rows[cc_id].get(m)) for m in range(1, 13)],
+                "total": _money(sum(rows[cc_id].values(), ZERO)),
+            }
+            for cc_id in top
+        ],
+    }
+
+
+def _account_deltas(db: Session, f: Facts, ref: int, prev: int, closed: int, limit: int = 8) -> list[dict]:
+    """Maiores aumentos e reduções por conta no acumulado do ano (mesmo período nos dois anos)."""
+    cur = dict(f.sums(ActualEntry, ref, ActualEntry.account_id))
+    base = dict(f.sums(ActualEntry, prev, ActualEntry.account_id, max_period=closed))
+    deltas = {k: cur.get(k, ZERO) - base.get(k, ZERO) for k in set(cur) | set(base)}
+    ups = sorted((k for k in deltas if deltas[k] > 0), key=lambda k: deltas[k], reverse=True)[:limit]
+    downs = sorted((k for k in deltas if deltas[k] < 0), key=lambda k: deltas[k])[:limit]
+    ids = ups + downs
+    accounts = {a.id: a for a in db.scalars(select(Account).where(Account.id.in_(ids)))} if ids else {}
+    return [
+        {
+            "id": k,
+            "code": accounts[k].code if k in accounts else None,
+            "name": accounts[k].name if k in accounts else "—",
+            "prev_ytd": _money(base.get(k)),
+            "ref_ytd": _money(cur.get(k)),
+            "delta": _money(deltas[k]),
+        }
+        for k in ids
+    ]
+
+
+def budget_progress(
+    db: Session,
+    user: User,
+    company_id: int | None = None,
+    cost_center_id: int | None = None,
+    package_id: int | None = None,
+) -> dict | None:
+    """Andamento do orçamento OPEX do ciclo: CCs por status e proposto × anualizado por pacote."""
+    from app.models import BudgetLine, BudgetSubmission, BudgetVersion
+
+    cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
+    if cycle is None:
+        return None
+    version = db.scalar(
+        select(BudgetVersion)
+        .where(BudgetVersion.cycle_id == cycle.id, BudgetVersion.status == "WORKING")
+        .order_by(BudgetVersion.major.desc(), BudgetVersion.minor.desc())
+    )
+    if version is None:
+        return None
+    visible = visible_cost_center_ids(db, user)
+    cc_stmt = select(CostCenter.id).where(CostCenter.is_active)
+    if visible is not None:
+        cc_stmt = cc_stmt.where(CostCenter.id.in_(visible or {-1}))
+    if company_id:
+        cc_stmt = cc_stmt.where(CostCenter.company_id == company_id)
+    if cost_center_id:
+        cc_stmt = cc_stmt.where(CostCenter.id == cost_center_id)
+    cc_ids = set(db.scalars(cc_stmt))
+    statuses = dict(
+        db.execute(
+            select(BudgetSubmission.cost_center_id, BudgetSubmission.status).where(
+                BudgetSubmission.version_id == version.id,
+                BudgetSubmission.module == "OPEX",
+                BudgetSubmission.cost_center_id.in_(cc_ids or {-1}),
+            )
+        ).all()
+    )
+    counts: dict[str, int] = defaultdict(int)
+    for cc in cc_ids:
+        counts[statuses.get(cc, "DRAFT")] += 1
+
+    line_stmt = (
+        select(BudgetLine.package_id, BudgetLine.cost_center_id, func.sum(BudgetLine.total_amount))
+        .join(BudgetSubmission, BudgetSubmission.id == BudgetLine.submission_id)
+        .where(
+            BudgetSubmission.version_id == version.id,
+            BudgetSubmission.module == "OPEX",
+            BudgetLine.cost_center_id.in_(cc_ids or {-1}),
+        )
+        .group_by(BudgetLine.package_id, BudgetLine.cost_center_id)
+    )
+    if package_id:
+        line_stmt = line_stmt.where(BudgetLine.package_id == package_id)
+    proposed: dict[int | None, Decimal] = defaultdict(lambda: ZERO)
+    started: set[int] = set()
+    for pkg_id, cc_id, amount in db.execute(line_stmt):
+        proposed[pkg_id] += amount or ZERO
+        if amount:
+            started.add(cc_id)
+
+    # 2026 anualizado só dos CCs que já lançaram 2027 (comparação justa durante o preenchimento)
+    ref = cycle.actual_reference_year
+    annualized: dict[int | None, Decimal] = defaultdict(lambda: ZERO)
+    if started:
+        closed_by_company = {}
+        stmt = (
+            select(Account.package_id, CostCenter.company_id, func.sum(ActualEntry.amount))
+            .join(DatasetVersion, DatasetVersion.id == ActualEntry.dataset_version_id)
+            .join(Account, Account.id == ActualEntry.account_id)
+            .join(CostCenter, CostCenter.id == ActualEntry.cost_center_id)
+            .where(
+                DatasetVersion.is_current,
+                ActualEntry.fiscal_year == ref,
+                ActualEntry.cost_center_id.in_(started),
+                Account.nature.in_(("OPEX", "FINANCEIRO")),
+            )
+            .group_by(Account.package_id, CostCenter.company_id)
+        )
+        if package_id:
+            stmt = stmt.where(Account.package_id == package_id)
+        companies = {c.id: c.code for c in db.scalars(select(Company))}
+        for pkg_id, comp_id, amount in db.execute(stmt):
+            code = companies.get(comp_id)
+            if code not in closed_by_company:
+                closed_by_company[code] = _last_closed_company(db, ref, code)
+            closed = closed_by_company[code]
+            if closed:
+                annualized[pkg_id] += amount * 12 / closed
+    packages = {p.id: p for p in db.scalars(select(BudgetPackage))}
+    by_package = sorted(
+        (
+            {
+                "package_id": pid,
+                "package": packages[pid].name if pid in packages else "Sem pacote",
+                "proposed": _money(proposed.get(pid)),
+                "ref_annualized": _money(annualized.get(pid)),
+            }
+            for pid in set(proposed) | set(annualized)
+        ),
+        key=lambda r: -max(Decimal(r["proposed"]), Decimal(r["ref_annualized"])),
+    )
+    return {
+        "target_year": cycle.fiscal_year,
+        "ref_year": ref,
+        "cycle_status": cycle.status,
+        "deadline": cycle.opex_deadline.isoformat() if cycle.opex_deadline else None,
+        "total_cost_centers": len(cc_ids),
+        "started_cost_centers": len(started),
+        "status_counts": dict(counts),
+        "proposed_total": _money(sum(proposed.values(), ZERO)),
+        "annualized_started_total": _money(sum(annualized.values(), ZERO)),
+        "by_package": by_package,
+    }
+
+
+def _last_closed_company(db: Session, year: int, company_code: str | None) -> int | None:
+    return db.scalar(
+        select(DatasetVersion.last_closed_period).where(
+            DatasetVersion.dataset_type == "ACTUAL",
+            DatasetVersion.is_current,
+            DatasetVersion.scope_key == f"ACTUAL:{year}:{company_code}",
+        )
+    )
