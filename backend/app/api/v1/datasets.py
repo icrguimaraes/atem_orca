@@ -81,6 +81,14 @@ def delete_dataset(
 ):
     if confirm.strip().upper() != CONFIRM_WORD:
         raise HTTPException(422, f"Para excluir, digite {CONFIRM_WORD}")
+    result = _delete_dataset(db, dataset_type, scope_key, actor, reason, client_ip(request))
+    db.commit()
+    return result
+
+
+def _delete_dataset(
+    db: Session, dataset_type: str, scope_key: str | None, actor: User, reason: str | None, ip: str | None
+) -> dict:
     if dataset_type not in DELETABLE:
         raise HTTPException(
             409,
@@ -127,6 +135,153 @@ def delete_dataset(
         action="DELETE_DATASET",
         entity_type="dataset",
         entity_id=scope_key or dataset_type,
+        before=result,
+        reason=reason,
+        ip=ip,
+    )
+    return result
+
+
+# ------------------------------------------------------------------ orçamento lançado (OPEX/CAPEX)
+
+BUDGET_MODULES = ("OPEX", "CAPEX")
+TEMPLATE_TYPES = {"OPEX": "OPEX_TEMPLATE", "CAPEX": "CAPEX_TEMPLATE"}
+
+
+def _working_version(db: Session):
+    from app.models import BudgetCycle, BudgetVersion
+
+    cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
+    if cycle is None:
+        return None, None
+    version = db.scalar(
+        select(BudgetVersion)
+        .where(BudgetVersion.cycle_id == cycle.id, BudgetVersion.status == "WORKING")
+        .order_by(BudgetVersion.major.desc(), BudgetVersion.minor.desc())
+    )
+    return cycle, version
+
+
+@router.get("/budget", summary="Orçamento lançado no ciclo, por módulo (OPEX/CAPEX)")
+def budget_inventory(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.CONTROLLER))):
+    from app.models import BudgetLine, BudgetSubmission, CapexItem, CapexProject
+
+    cycle, version = _working_version(db)
+    if version is None:
+        return []
+    out = []
+    for module in BUDGET_MODULES:
+        subs = select(BudgetSubmission.id).where(
+            BudgetSubmission.version_id == version.id, BudgetSubmission.module == module
+        )
+        started = db.scalar(select(func.count()).select_from(subs.subquery()))
+        if module == "OPEX":
+            rows, total = db.execute(
+                select(func.count(BudgetLine.id), func.coalesce(func.sum(BudgetLine.total_amount), 0)).where(
+                    BudgetLine.submission_id.in_(subs)
+                )
+            ).one()
+        else:
+            rows, total = db.execute(
+                select(func.count(CapexItem.id), func.coalesce(func.sum(CapexItem.total_value), 0))
+                .join(CapexProject, CapexProject.id == CapexItem.project_id)
+                .where(CapexProject.submission_id.in_(subs))
+            ).one()
+        out.append(
+            {
+                "module": module,
+                "fiscal_year": cycle.fiscal_year,
+                "version": version.label,
+                "cost_centers": started,
+                "rows": rows,
+                "total": str(total),
+            }
+        )
+    return out
+
+
+def _delete_budget(db: Session, module: str) -> dict:
+    from app.models import BudgetSubmission
+
+    _, version = _working_version(db)
+    if version is None:
+        return {"module": module, "cost_centers": 0}
+    ids = list(
+        db.scalars(
+            select(BudgetSubmission.id).where(
+                BudgetSubmission.version_id == version.id, BudgetSubmission.module == module
+            )
+        )
+    )
+    # linhas, itens, justificativas, validações GMD e histórico do fluxo saem em cascata
+    if ids:
+        db.execute(delete(BudgetSubmission).where(BudgetSubmission.id.in_(ids)))
+    reverted = db.execute(
+        update(ImportBatch)
+        .where(ImportBatch.dataset_type == TEMPLATE_TYPES[module], ImportBatch.status == "COMPLETED")
+        .values(status="REVERTED")
+    ).rowcount
+    return {"module": module, "cost_centers": len(ids), "imports_reverted": reverted}
+
+
+@router.delete("/budget", summary="Excluir o orçamento lançado de um módulo (volta todos os CCs para 'Não iniciado')")
+def delete_budget(
+    request: Request,
+    module: str = Query(..., description="OPEX ou CAPEX"),
+    confirm: str = Query(..., description=f"Digite {CONFIRM_WORD} para confirmar"),
+    reason: str | None = None,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(Role.ADMIN)),
+):
+    if confirm.strip().upper() != CONFIRM_WORD:
+        raise HTTPException(422, f"Para excluir, digite {CONFIRM_WORD}")
+    if module not in BUDGET_MODULES:
+        raise HTTPException(422, "Módulo inválido")
+    result = _delete_budget(db, module)
+    audit.record(
+        db,
+        user_id=actor.id,
+        action="DELETE_BUDGET",
+        entity_type="budget",
+        entity_id=module,
+        before=result,
+        reason=reason,
+        ip=client_ip(request),
+    )
+    db.commit()
+    return result
+
+
+@router.delete("/all", summary="Excluir todas as bases importadas e o orçamento lançado (cadastros são mantidos)")
+def delete_all(
+    request: Request,
+    confirm: str = Query(..., description=f"Digite {CONFIRM_WORD} para confirmar"),
+    reason: str | None = None,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(Role.ADMIN)),
+):
+    if confirm.strip().upper() != CONFIRM_WORD:
+        raise HTTPException(422, f"Para excluir, digite {CONFIRM_WORD}")
+    budgets = [_delete_budget(db, m) for m in BUDGET_MODULES]
+    types = sorted(
+        set(db.scalars(select(DatasetVersion.dataset_type).where(DatasetVersion.dataset_type.in_(DELETABLE))))
+    )
+    datasets = []
+    for dtype in types:
+        if dtype == "EMPLOYEES":
+            # movimentações dependem dos colaboradores
+            emp_ids = select(Employee.id).join(DatasetVersion, DatasetVersion.id == Employee.dataset_version_id)
+            db.execute(delete(PersonnelMovement).where(PersonnelMovement.employee_id.in_(emp_ids)))
+        datasets.append(_delete_dataset(db, dtype, None, actor, reason, client_ip(request)))
+    # demais lotes concluídos (cadastros e templates) deixam de bloquear o reenvio do mesmo arquivo
+    db.execute(update(ImportBatch).where(ImportBatch.status == "COMPLETED").values(status="REVERTED"))
+    result = {"budgets": budgets, "datasets": datasets}
+    audit.record(
+        db,
+        user_id=actor.id,
+        action="DELETE_ALL_DATA",
+        entity_type="dataset",
+        entity_id="ALL",
         before=result,
         reason=reason,
         ip=client_ip(request),

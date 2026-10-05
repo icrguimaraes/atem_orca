@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, type DatasetInfo } from "../api";
 import { useAuth } from "../auth";
-import { DATASET_LABELS, fmtDateTime, fmtInt } from "../labels";
+import { DATASET_LABELS, fmtDateTime, fmtInt, fmtMoney } from "../labels";
 import { Alert, Card, Empty, Loading, Modal, useLoad } from "./ui";
 
 function scopeLabel(d: DatasetInfo): string {
@@ -12,12 +12,14 @@ function scopeLabel(d: DatasetInfo): string {
   return "Geral";
 }
 
-interface Target { dataset_type: string; scope_key?: string; label: string; rows: number }
+interface Target { kind?: "dataset" | "budget" | "all"; dataset_type: string; scope_key?: string; label: string; rows: number }
+interface BudgetInfo { module: string; fiscal_year: number; version: string; cost_centers: number; rows: number; total: string }
 
 export function DatasetsCard({ refreshKey, onChanged }: { refreshKey: number; onChanged: () => void }) {
   const { can } = useAuth();
   const isAdmin = can();
   const { data, error, reload } = useLoad(() => api<DatasetInfo[]>("/datasets"), [refreshKey]);
+  const budget = useLoad(() => api<BudgetInfo[]>("/datasets/budget"), [refreshKey]);
   const [target, setTarget] = useState<Target | null>(null);
   const [word, setWord] = useState("");
   const [reason, setReason] = useState("");
@@ -27,20 +29,31 @@ export function DatasetsCard({ refreshKey, onChanged }: { refreshKey: number; on
   async function remove() {
     if (!target) return;
     setBusy(true);
-    const params = new URLSearchParams({ dataset_type: target.dataset_type, confirm: word });
-    if (target.scope_key) params.set("scope_key", target.scope_key);
+    const params = new URLSearchParams({ confirm: word });
     if (reason) params.set("reason", reason);
     try {
-      const r = await api<{ versions_deleted: number; current_rows_deleted: number; employees_deleted: number }>(
-        `/datasets?${params}`,
-        { method: "DELETE" },
-      );
-      setMsg({
-        tone: "good",
-        text: `${target.label}: base excluída (${fmtInt(r.versions_deleted)} versão(ões), ${fmtInt(r.current_rows_deleted)} registro(s) vigentes${r.employees_deleted ? `, ${fmtInt(r.employees_deleted)} colaborador(es)` : ""}). Já pode reimportar.`,
-      });
+      if (target.kind === "all") {
+        await api(`/datasets/all?${params}`, { method: "DELETE" });
+        setMsg({ tone: "good", text: "Bases importadas e orçamentos lançados excluídos. Cadastros mantidos. Já pode reimportar." });
+      } else if (target.kind === "budget") {
+        params.set("module", target.dataset_type);
+        const r = await api<{ cost_centers: number }>(`/datasets/budget?${params}`, { method: "DELETE" });
+        setMsg({ tone: "good", text: `${target.label}: excluído (${fmtInt(r.cost_centers)} CC(s) voltaram para "Não iniciado"). Já pode reimportar.` });
+      } else {
+        params.set("dataset_type", target.dataset_type);
+        if (target.scope_key) params.set("scope_key", target.scope_key);
+        const r = await api<{ versions_deleted: number; current_rows_deleted: number; employees_deleted: number }>(
+          `/datasets?${params}`,
+          { method: "DELETE" },
+        );
+        setMsg({
+          tone: "good",
+          text: `${target.label}: base excluída (${fmtInt(r.versions_deleted)} versão(ões), ${fmtInt(r.current_rows_deleted)} registro(s) vigentes${r.employees_deleted ? `, ${fmtInt(r.employees_deleted)} colaborador(es)` : ""}). Já pode reimportar.`,
+        });
+      }
       setTarget(null);
       reload();
+      budget.reload();
       onChanged();
     } catch (err) {
       setMsg({ tone: "bad", text: (err as Error).message });
@@ -61,9 +74,9 @@ export function DatasetsCard({ refreshKey, onChanged }: { refreshKey: number; on
     <Card
       title="Bases carregadas"
       actions={
-        isAdmin &&
-        types.length > 0 && (
-          <select
+        isAdmin && (
+          <div className="inline-controls">
+          {types.length > 0 && <select
             value=""
             onChange={(e) => {
               const t = e.target.value;
@@ -75,7 +88,14 @@ export function DatasetsCard({ refreshKey, onChanged }: { refreshKey: number; on
             {types.map((t) => (
               <option key={t} value={t}>{DATASET_LABELS[t] ?? t}</option>
             ))}
-          </select>
+          </select>}
+          <button
+            className="btn btn-sm danger"
+            onClick={() => open({ kind: "all", dataset_type: "ALL", label: "TODAS as bases importadas e o orçamento lançado (OPEX e CAPEX)", rows: 0 })}
+          >
+            Excluir tudo…
+          </button>
+          </div>
         )
       }
     >
@@ -126,9 +146,36 @@ export function DatasetsCard({ refreshKey, onChanged }: { refreshKey: number; on
           </table>
         </div>
       )}
+      {(budget.data ?? []).length > 0 && (
+        <div className="table-wrap" style={{ marginTop: 16 }}>
+          <table className="table">
+            <thead>
+              <tr><th>Orçamento lançado</th><th>Ciclo</th><th className="right">CCs iniciados</th><th className="right">Linhas / itens</th><th className="right">Total</th><th /></tr>
+            </thead>
+            <tbody>
+              {budget.data!.map((b) => (
+                <tr key={b.module}>
+                  <td>Orçamento {b.module} {b.fiscal_year}<div className="muted small">lançado no sistema ou vindo dos templates</div></td>
+                  <td>versão {b.version}</td>
+                  <td className="right">{fmtInt(b.cost_centers)}</td>
+                  <td className="right">{fmtInt(b.rows)}</td>
+                  <td className="right">{fmtMoney(b.total)}</td>
+                  <td className="row-actions">
+                    {isAdmin && b.cost_centers > 0 && (
+                      <button className="btn btn-ghost btn-sm danger" onClick={() => open({ kind: "budget", dataset_type: b.module, label: `Orçamento ${b.module} ${b.fiscal_year}`, rows: b.rows })}>
+                        Excluir
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {target && (
         <Modal
-          title="Excluir base"
+          title={target.kind === "all" ? "Excluir tudo" : target.kind === "budget" ? "Excluir orçamento lançado" : "Excluir base"}
           onClose={() => setTarget(null)}
           footer={
             <>
@@ -140,11 +187,26 @@ export function DatasetsCard({ refreshKey, onChanged }: { refreshKey: number; on
           }
         >
           <div className="stack">
-            <p>
-              Você vai excluir <strong>{target.label}</strong> — todas as versões
-              {target.rows ? <> ({fmtInt(target.rows)} registros na versão vigente)</> : null}. Os arquivos poderão ser
-              importados de novo em seguida. A exclusão fica registrada na auditoria e não pode ser desfeita.
-            </p>
+            {target.kind === "all" ? (
+              <p>
+                Você vai excluir <strong>{target.label}</strong>: realizado, orçamento de referência, premissas, quadro de
+                funcionários e todas as linhas/solicitações de OPEX e CAPEX, com justificativas e histórico do fluxo. Os
+                centros de custo voltam para "Não iniciado". <strong>Cadastros e usuários são mantidos.</strong> Não pode
+                ser desfeito (fica registrado na auditoria).
+              </p>
+            ) : target.kind === "budget" ? (
+              <p>
+                Você vai excluir <strong>{target.label}</strong>: {fmtInt(target.rows)} linha(s)/item(ns), justificativas,
+                validações e histórico do fluxo de todos os centros de custo, que voltam para "Não iniciado". Não pode ser
+                desfeito (fica registrado na auditoria).
+              </p>
+            ) : (
+              <p>
+                Você vai excluir <strong>{target.label}</strong> — todas as versões
+                {target.rows ? <> ({fmtInt(target.rows)} registros na versão vigente)</> : null}. Os arquivos poderão ser
+                importados de novo em seguida. A exclusão fica registrada na auditoria e não pode ser desfeita.
+              </p>
+            )}
             <label>
               Motivo (opcional)
               <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: recarga para teste" />

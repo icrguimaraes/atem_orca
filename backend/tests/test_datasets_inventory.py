@@ -90,3 +90,32 @@ def test_overview_uses_loaded_years_and_inventory(client, admin, run_worker):
     assert inv["master"]["cost_centers"] == 2
     ipca = next(r for r in inv["macro"]["rows"] if r["indicator"] == "IPCA")
     assert ipca["values"]["2027"] == "0.0350000000"
+
+
+def test_delete_budget_and_everything(client, admin, run_worker):
+    from tests.test_imports import import_and_load, status, upload
+
+    import_and_load(client, admin, run_worker, builders.opex_template_filled(), "opex.xlsx")
+    import_and_load(client, admin, run_worker, builders.capex_template_filled(), "capex.xlsx")
+    inv = {b["module"]: b for b in client.get("/api/v1/datasets/budget", headers=admin).json()}
+    assert inv["OPEX"]["rows"] == 4 and inv["CAPEX"]["rows"] == 3 and inv["CAPEX"]["total"] == "34000.00"
+
+    bad = client.delete("/api/v1/datasets/budget", headers=admin, params={"module": "OPEX", "confirm": "x"})
+    assert bad.status_code == 422
+    r = client.delete("/api/v1/datasets/budget", headers=admin, params={"module": "CAPEX", "confirm": "EXCLUIR"})
+    assert r.json()["cost_centers"] == 1
+    inv = {b["module"]: b for b in client.get("/api/v1/datasets/budget", headers=admin).json()}
+    assert inv["CAPEX"]["rows"] == 0 and inv["OPEX"]["rows"] == 4
+
+    r = client.delete("/api/v1/datasets/all", headers=admin, params={"confirm": "EXCLUIR"})
+    assert r.status_code == 200, r.text
+    assert {d["dataset_type"] for d in client.get("/api/v1/datasets", headers=admin).json()} == {"MASTER_DATA"}
+    inv = {b["module"]: b for b in client.get("/api/v1/datasets/budget", headers=admin).json()}
+    assert inv["OPEX"]["rows"] == 0 and inv["OPEX"]["cost_centers"] == 0
+    cc = next(c for c in client.get("/api/v1/cost-centers", headers=admin).json() if c["code"] == "1050101011")
+    assert client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=admin).json()["status"] == "DRAFT"
+
+    # o mesmo arquivo volta a ser aceito sem aviso de duplicidade
+    batch_id = upload(client, admin, builders.opex_template_filled(), "opex.xlsx")
+    run_worker()
+    assert not status(client, admin, batch_id)["summary"].get("same_file_imported_in")
