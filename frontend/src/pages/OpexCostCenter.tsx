@@ -5,6 +5,7 @@ import { AccountsTab } from "../components/opex/AccountsTab";
 import { EventPanel } from "../components/opex/EventPanel";
 import { LinesGrid } from "../components/opex/LinesGrid";
 import { TravelPanel } from "../components/opex/TravelPanel";
+import { Legend, MonthlyBars, PairedBars, SERIES } from "../components/charts";
 import { Alert, Badge, Card, Loading, Modal, PageHeader, Stat } from "../components/ui";
 import { REVIEW_STATUS, SUBMISSION_STATUS, fmtCompact, fmtDate, fmtDateTime, fmtMoney, fmtPct } from "../labels";
 
@@ -190,6 +191,48 @@ export default function OpexCostCenter() {
         <button className={tab === "fill" ? "active" : ""} onClick={() => setTab("fill")}>Preencher por pacote</button>
         <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>Histórico do fluxo</button>
       </div>
+
+      {tab === "accounts" && (accounts.accounts.length > 0) && (
+        <div className="grid-2">
+          <Card title={`Evolução mensal · ${y.prev}, ${y.ref} e ${y.target} proposto`}>
+            <Legend
+              items={[
+                { label: `${y.prev} realizado`, color: SERIES.prev },
+                { label: `${y.ref} realizado`, color: SERIES.ref },
+                { label: `${y.target} proposto`, color: SERIES.budget },
+                ...(Number(accounts.totals.ref_budget) ? [{ label: `${y.ref} orçado`, color: "var(--muted)", line: true }] : []),
+              ]}
+            />
+            <MonthlyBars
+              height={240}
+              series={[
+                { label: `${y.prev} realizado`, color: SERIES.prev, values: accounts.monthly.prev.map(Number) },
+                { label: `${y.ref} realizado`, color: SERIES.ref, values: accounts.monthly.ref.map(Number) },
+                { label: `${y.target} proposto`, color: SERIES.budget, values: accounts.monthly.proposed.map(Number) },
+              ]}
+              line={Number(accounts.totals.ref_budget) ? { label: `${y.ref} orçado`, color: "var(--muted)", values: accounts.monthly.budget.map(Number) } : undefined}
+            />
+          </Card>
+          <Card title={`Por pacote · ${y.ref} anualizado × ${y.target} proposto`}>
+            <Legend items={[{ label: `${y.ref} anualizado`, color: SERIES.prev }, { label: `${y.target} proposto`, color: SERIES.ref }]} />
+            <PairedBars
+              prevLabel={`${y.ref} anualizado`}
+              refLabel={`${y.target} proposto`}
+              rows={Object.values(
+                accounts.accounts.reduce<Record<string, { label: string; prev: number; ref: number }>>((acc, r) => {
+                  const k = r.package ?? "Sem pacote";
+                  acc[k] ??= { label: k, prev: 0, ref: 0 };
+                  acc[k].prev += Number(r.ref_annualized);
+                  acc[k].ref += Number(r.proposed);
+                  return acc;
+                }, {}),
+              )
+                .sort((a, b) => Math.max(b.prev, b.ref) - Math.max(a.prev, a.ref))
+                .map((r) => ({ ...r, note: r.prev && r.ref ? fmtPct(String(r.ref / r.prev - 1)) : undefined }))}
+            />
+          </Card>
+        </div>
+      )}
 
       {tab === "accounts" && (
         <Card>

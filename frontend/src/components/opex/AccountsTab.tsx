@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { api, type OpexAccountRow, type OpexAccounts } from "../../api";
 import { FLAG_LABELS, MONTHS, fmtMoney, fmtPct } from "../../labels";
+import { Sparkline } from "../charts";
 import { Alert, Badge, Empty } from "../ui";
 
 function Monthly({ submissionId, accountId, years }: { submissionId: number; accountId: number; years: { prev: number; ref: number; target: number } }) {
@@ -117,6 +118,7 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
               <tr>
                 <th>Conta</th>
                 <th className="right">{years.prev} R</th>
+                <th>{years.ref} mês a mês</th>
                 <th className="right">{years.ref} R{closed ? ` (até ${closed})` : ""}</th>
                 <th className="right">{years.ref} anualizado</th>
                 <th className="right">{years.ref} orçado</th>
@@ -150,6 +152,7 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
                       ))}
                     </td>
                     <td className="right">{fmtMoney(r.prev_actual)}</td>
+                    <td>{r.ref_monthly ? <Sparkline values={r.ref_monthly.map(Number).slice(0, data.closed_period ?? 12)} /> : <span className="muted small">—</span>}</td>
                     <td className="right">{fmtMoney(r.ref_actual_ytd)}</td>
                     <td className="right">{fmtMoney(r.ref_annualized)}</td>
                     <td className="right">{fmtMoney(r.ref_budget)}</td>
@@ -161,7 +164,7 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
                   </tr>
                   {open === r.account_id && (
                     <tr className="sub-row">
-                      <td colSpan={8}><Monthly submissionId={submissionId} accountId={r.account_id} years={years} /></td>
+                      <td colSpan={9}><Monthly submissionId={submissionId} accountId={r.account_id} years={years} /></td>
                     </tr>
                   )}
                 </Fragment>
@@ -170,7 +173,11 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
             <tfoot>
               <tr>
                 <td><strong>Total</strong></td>
-                {(["prev_actual", "ref_actual_ytd", "ref_annualized", "ref_budget", "proposed"] as const).map((k) => (
+                {(["prev_actual"] as const).map((k) => (
+                  <td key={k} className="right"><strong>{fmtMoney(data.totals[k] ?? 0)}</strong></td>
+                ))}
+                <td />
+                {(["ref_actual_ytd", "ref_annualized", "ref_budget", "proposed"] as const).map((k) => (
                   <td key={k} className="right"><strong>{fmtMoney(data.totals[k] ?? 0)}</strong></td>
                 ))}
                 <td className="right">

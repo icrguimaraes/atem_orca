@@ -14,7 +14,8 @@ import {
   type QualityCheck,
 } from "../api";
 import { useAuth } from "../auth";
-import { Legend, MonthlyChart, PairedBars, SERIES } from "../components/charts";
+import { BudgetProgressCard } from "../components/BudgetProgressCard";
+import { DivergingBars, Heatmap, Legend, MonthlyChart, PairedBars, SERIES, Waterfall } from "../components/charts";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import {
   CYCLE_STATUS,
@@ -265,6 +266,37 @@ export default function Home() {
             )}
           </Card>
 
+          {o.has_prev && o.has_actual && o.by_package.length > 0 && (
+            <div className="grid-2">
+              <Card title={`Ponte ${o.previous_year} → ${o.reference_year} por pacote · até ${monthName ?? "—"}`}>
+                <p className="muted small">De onde vem a variação: cada barra é o aumento (▲) ou redução (▼) do pacote no mesmo período.</p>
+                <Waterfall
+                  start={{ label: prevLabel, value: Number(o.kpis.prev_ytd) }}
+                  end={{ label: refLabel, value: Number(o.kpis.ref_ytd) }}
+                  steps={o.by_package
+                    .map((p) => ({ label: p.package, delta: Number(p.ref_ytd) - Number(p.prev_ytd) }))
+                    .filter((p) => Math.abs(p.delta) > 0.5)
+                    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))}
+                />
+              </Card>
+              <Card title={`Maiores aumentos e reduções por conta · até ${monthName ?? "—"}`}>
+                {o.account_deltas.length ? (
+                  <DivergingBars
+                    rows={o.account_deltas.map((d) => ({ label: d.name, sub: d.code, delta: Number(d.delta), from: Number(d.prev_ytd), to: Number(d.ref_ytd) }))}
+                  />
+                ) : (
+                  <Empty>Sem variações.</Empty>
+                )}
+              </Card>
+            </div>
+          )}
+
+          {o.heatmap.rows.length > 0 && (
+            <Card title={`Mapa de calor · maiores centros de custo × mês (${o.heatmap.year})`}>
+              <Heatmap rows={o.heatmap.rows.map((r) => ({ label: r.name, sub: r.code, values: r.values.map(Number), total: Number(r.total) }))} />
+            </Card>
+          )}
+
           <div className="grid-2">
             <Card title={`Por pacote GMD · acumulado até ${monthName ?? "—"}`}>
               <Legend
@@ -335,6 +367,8 @@ export default function Home() {
           </div>
         </>
       )}
+
+      {o?.budget_progress && o.budget_progress.total_cost_centers > 0 && <BudgetProgressCard progress={o.budget_progress} />}
 
       {inv && inv.personnel.headcount > 0 && (
         <>

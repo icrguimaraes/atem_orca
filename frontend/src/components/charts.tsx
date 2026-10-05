@@ -129,3 +129,241 @@ export function PairedBars({ rows, prevLabel, refLabel }: { rows: CompareRow[]; 
     </div>
   );
 }
+
+// ============================================================ gráficos adicionais
+
+/** Barras mensais com N séries (máx. 3 categóricas) + linha opcional. Um eixo só, em R$. */
+export function MonthlyBars({
+  series,
+  line,
+  height = 260,
+}: {
+  series: { label: string; color: string; values: number[] }[];
+  line?: { label: string; color: string; values: number[] };
+  height?: number;
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+  const W = 760, H = height, L = 84, R = 12, T = 12, B = 28;
+  const plotW = W - L - R, plotH = H - T - B;
+  const max = niceMax(Math.max(0, ...series.flatMap((s) => s.values), ...(line?.values ?? [])));
+  const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
+  const slot = plotW / 12;
+  const gap = 2;
+  const barW = Math.min(14, (slot - 10 - gap * (series.length - 1)) / series.length);
+  const groupW = barW * series.length + gap * (series.length - 1);
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * max);
+  return (
+    <div className="chart">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={series.map((s) => s.label).join(", ")} onMouseLeave={() => setHover(null)}>
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="grid" />
+            <text x={L - 8} y={y(t) + 4} className="axis" textAnchor="end">{fmtCompact(t)}</text>
+          </g>
+        ))}
+        {MONTHS.map((m, i) => {
+          const x0 = L + slot * i + (slot - groupW) / 2;
+          return (
+            <g key={m}>
+              {hover === i && <rect x={L + slot * i} y={T} width={slot} height={plotH} className="hover-band" />}
+              {series.map((s, j) =>
+                s.values[i] > 0 ? (
+                  <path key={j} d={roundedTop(x0 + j * (barW + gap), y(s.values[i]), barW, T + plotH - y(s.values[i]))} fill={s.color} />
+                ) : null,
+              )}
+              <text x={L + slot * i + slot / 2} y={H - 8} className="axis" textAnchor="middle">{m}</text>
+              <rect x={L + slot * i} y={T} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHover(i)} />
+            </g>
+          );
+        })}
+        {line && line.values.some((v) => v > 0) && (
+          <>
+            <polyline
+              points={line.values.map((v, i) => `${L + slot * i + slot / 2},${y(v)}`).join(" ")}
+              fill="none" stroke={line.color} strokeWidth={2} pointerEvents="none"
+            />
+            {line.values.map((v, i) => (
+              <circle key={i} cx={L + slot * i + slot / 2} cy={y(v)} r={4} fill={line.color} className="ring" pointerEvents="none" />
+            ))}
+          </>
+        )}
+        <line x1={L} x2={W - R} y1={T + plotH} y2={T + plotH} className="baseline" />
+      </svg>
+      {hover !== null && (
+        <div className="tooltip" style={{ left: `${((L + slot * hover + slot / 2) / W) * 100}%` }}>
+          <strong>{MONTHS[hover]}</strong>
+          {series.map((s) => (
+            <span key={s.label}><i style={{ background: s.color }} />{s.label}: {fmtMoney(s.values[hover])}</span>
+          ))}
+          {line && <span><i style={{ background: line.color }} />{line.label}: {fmtMoney(line.values[hover])}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Ponte (cascata horizontal): total inicial → variação por categoria → total final. */
+export function Waterfall({
+  start,
+  end,
+  steps,
+}: {
+  start: { label: string; value: number };
+  end: { label: string; value: number };
+  steps: { label: string; delta: number }[];
+}) {
+  const [hover, setHover] = useState<number | null>(null);
+  let acc = start.value;
+  const rows = [
+    { label: start.label, from: 0, to: start.value, kind: "total-prev" as const, delta: start.value },
+    ...steps.map((s) => {
+      const from = acc;
+      acc += s.delta;
+      return { label: s.label, from, to: acc, kind: s.delta >= 0 ? ("up" as const) : ("down" as const), delta: s.delta };
+    }),
+    { label: end.label, from: 0, to: end.value, kind: "total-ref" as const, delta: end.value },
+  ];
+  const max = niceMax(Math.max(...rows.map((r) => Math.max(r.from, r.to))));
+  const pct = (v: number) => `${(Math.max(v, 0) / max) * 100}%`;
+  const color = { "total-prev": SERIES.prev, "total-ref": SERIES.ref, up: "var(--div-up)", down: "var(--div-down)" };
+  return (
+    <div className="waterfall">
+      {rows.map((r, i) => (
+        <div key={r.label + i} className={`wf-row ${hover === i ? "hover" : ""} ${r.kind.startsWith("total") ? "wf-total" : ""}`}
+             onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+          <div className="paired-label" title={r.label}>{r.label}</div>
+          <div className="wf-track">
+            <div className="wf-bar" style={{ left: pct(Math.min(r.from, r.to)), width: `calc(${pct(Math.abs(r.to - r.from))} + 1px)`, background: color[r.kind] }} />
+          </div>
+          <div className="paired-value">
+            {r.kind.startsWith("total") ? fmtCompact(r.to) : (
+              <span className={`delta ${r.kind === "up" ? "up" : "down"}`}>{r.delta >= 0 ? "▲ +" : "▼ "}{fmtCompact(r.delta).replace("R$ -", "R$ ")}</span>
+            )}
+          </div>
+          {hover === i && (
+            <div className="tooltip tooltip-inline">
+              <strong>{r.label}</strong>
+              {r.kind.startsWith("total") ? <span>{fmtMoney(r.to)}</span> : (
+                <>
+                  <span>Variação: {fmtMoney(r.delta)}</span>
+                  <span className="muted">Acumulado: {fmtMoney(r.to)}</span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Mapa de calor (linhas × 12 meses), escala sequencial de um só tom. */
+export function Heatmap({ rows }: { rows: { label: string; sub?: string | null; values: number[]; total: number }[] }) {
+  const max = Math.max(1, ...rows.flatMap((r) => r.values));
+  const shade = (v: number) =>
+    v <= 0 ? "var(--surface-2)" : `color-mix(in oklab, var(--seq-hi) ${Math.round(12 + (v / max) * 88)}%, var(--seq-lo))`;
+  return (
+    <div className="table-wrap">
+      <table className="heatmap">
+        <thead>
+          <tr>
+            <th />
+            {MONTHS.map((m) => <th key={m}>{m}</th>)}
+            <th className="right">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.label + (r.sub ?? "")}>
+              <th className="hm-label" title={r.label}>
+                <span>{r.label}</span>
+                {r.sub && <span className="muted small mono">{r.sub}</span>}
+              </th>
+              {r.values.map((v, i) => (
+                <td key={i} style={{ background: shade(v), color: v / max > 0.55 ? "var(--seq-ink-strong)" : "var(--text)" }}
+                    title={`${r.label} · ${MONTHS[i]}: ${fmtMoney(v)}`}>
+                  {v > 0 ? fmtCompact(v).replace("R$ ", "") : ""}
+                </td>
+              ))}
+              <td className="right nowrap"><strong>{fmtCompact(r.total)}</strong></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="hm-legend">
+        <span className="muted small">menor</span>
+        <span className="hm-ramp" />
+        <span className="muted small">maior gasto no mês</span>
+      </div>
+    </div>
+  );
+}
+
+/** Barras divergentes a partir de zero: aumentos à direita, reduções à esquerda. */
+export function DivergingBars({ rows }: { rows: { label: string; sub?: string | null; delta: number; from: number; to: number }[] }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const max = Math.max(1, ...rows.map((r) => Math.abs(r.delta)));
+  return (
+    <div className="diverging">
+      {rows.map((r, i) => (
+        <div key={r.label + i} className={`dv-row ${hover === i ? "hover" : ""}`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+          <div className="paired-label" title={r.label}>{r.label}{r.sub && <span className="muted small mono"> · {r.sub}</span>}</div>
+          <div className="dv-track">
+            <div className="dv-axis" />
+            <div className="dv-bar" style={{
+              width: `${(Math.abs(r.delta) / max) * 50}%`,
+              [r.delta >= 0 ? "left" : "right"]: "50%",
+              background: r.delta >= 0 ? "var(--div-up)" : "var(--div-down)",
+              borderRadius: r.delta >= 0 ? "0 4px 4px 0" : "4px 0 0 4px",
+            }} />
+          </div>
+          <div className="paired-value"><span className={`delta ${r.delta >= 0 ? "up" : "down"}`}>{r.delta >= 0 ? "+" : ""}{fmtCompact(r.delta).replace("R$ -", "−R$ ")}</span></div>
+          {hover === i && (
+            <div className="tooltip tooltip-inline">
+              <strong>{r.label}</strong>
+              <span>Antes: {fmtMoney(r.from)}</span>
+              <span>Agora: {fmtMoney(r.to)}</span>
+              <span>Variação: {fmtMoney(r.delta)}{r.from ? ` (${fmtPct(String(r.delta / r.from))})` : ""}</span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Minigráfico de linha (12 meses). */
+export function Sparkline({ values, width = 96, height = 26 }: { values: number[]; width?: number; height?: number }) {
+  const last = values.reduce((acc, v, i) => (v ? i : acc), -1);
+  if (last < 0) return <span className="muted small">—</span>;
+  const max = Math.max(...values, 1);
+  const pts = values.slice(0, last + 1).map((v, i) => [2 + (i / 11) * (width - 4), height - 3 - (v / max) * (height - 6)]);
+  return (
+    <svg width={width} height={height} className="sparkline" role="img" aria-label={`Mensal: ${values.map((v) => Math.round(v)).join(", ")}`}>
+      <title>{values.map((v, i) => `${MONTHS[i]}: ${fmtMoney(v)}`).slice(0, last + 1).join("\n")}</title>
+      <polyline points={pts.map((p) => p.join(",")).join(" ")} fill="none" stroke={SERIES.ref} strokeWidth={1.75} />
+      <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r={2.5} fill={SERIES.ref} />
+    </svg>
+  );
+}
+
+/** Barra empilhada de status (contagem), com legenda e rótulos. */
+export function StatusBar({ items }: { items: { key: string; label: string; count: number; tone: string }[] }) {
+  const total = items.reduce((s, i) => s + i.count, 0) || 1;
+  return (
+    <div className="statusbar-wrap">
+      <div className="statusbar" role="img" aria-label={items.map((i) => `${i.label}: ${i.count}`).join(", ")}>
+        {items.filter((i) => i.count > 0).map((i) => (
+          <div key={i.key} className={`sb-seg sb-${i.tone}`} style={{ width: `${(i.count / total) * 100}%` }} title={`${i.label}: ${i.count}`}>
+            {i.count / total > 0.08 ? i.count : ""}
+          </div>
+        ))}
+      </div>
+      <div className="legend">
+        {items.map((i) => (
+          <span key={i.key}><i className={`legend-swatch sb-${i.tone}`} />{i.label} · <strong>{i.count}</strong></span>
+        ))}
+      </div>
+    </div>
+  );
+}

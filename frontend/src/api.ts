@@ -161,6 +161,16 @@ export interface Overview {
   by_package: PackageRow[];
   top_cost_centers: Ranked[];
   top_accounts: Ranked[];
+  heatmap: { year: number; rows: { id: number; code: string | null; name: string; values: string[]; total: string }[] };
+  account_deltas: { id: number; code: string | null; name: string; prev_ytd: string; ref_ytd: string; delta: string }[];
+  budget_progress: BudgetProgress | null;
+}
+
+export interface BudgetProgress {
+  target_year: number; ref_year: number; cycle_status: string; deadline: string | null; total_cost_centers: number;
+  started_cost_centers: number; status_counts: Record<string, number>; proposed_total: string;
+  annualized_started_total: string;
+  by_package: { package_id: number | null; package: string; proposed: string; ref_annualized: string }[];
 }
 export interface QualityCheck {
   code: string; title: string; severity: "ERROR" | "WARNING" | "INFO" | "OK"; count: number; detail: string | null;
@@ -210,11 +220,12 @@ export interface OpexAccountRow {
   account_id: number; code: string; name: string; package_id: number | null; package: string | null;
   package_type: number | null; prev_actual: string; ref_actual_ytd: string; ref_annualized: string; ref_budget: string;
   proposed: string; variation_base: string; variation_pct: string | null; flags: string[];
-  needs_justification: boolean; justification: string | null;
+  needs_justification: boolean; justification: string | null; ref_monthly: string[] | null;
 }
 export interface OpexAccounts {
   prev_year: number; ref_year: number; target_year: number; closed_period: number | null;
   accounts: OpexAccountRow[]; totals: Record<string, string>; pending_justifications: number;
+  monthly: { prev: string[]; ref: string[]; budget: string[]; proposed: string[] };
 }
 export interface OpexLine {
   id: number; account_id: number; package_id: number | null; branch_id: number | null; account_detail_id: number | null;
@@ -239,6 +250,7 @@ export interface OpexSummary {
   years: { prev: number; ref: number; target: number };
   status_counts: Record<string, number>;
   rows: OpexSummaryRow[];
+  progress: BudgetProgress | null;
 }
 export interface ReviewQueueItem {
   submission_id: number; cost_center_id: number; cost_center: string; package_id: number; package: string;

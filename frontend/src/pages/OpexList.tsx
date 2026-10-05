@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type OpexSummary, type ReviewQueueItem } from "../api";
 import { useAuth } from "../auth";
+import { BudgetProgressCard } from "../components/BudgetProgressCard";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, SearchBox, Stat, useLoad } from "../components/ui";
 import { CYCLE_STATUS, REVIEW_STATUS, SUBMISSION_STATUS, fmtCompact, fmtDate, fmtDateTime, fmtInt, fmtMoney, fmtPct } from "../labels";
 
@@ -55,6 +56,8 @@ export default function OpexList() {
         <Stat label={`Proposto ${y.target}`} value={fmtCompact(total("proposed"))} tone="warn"
               hint={startedBase ? `${fmtPct(String(total("proposed") / startedBase - 1))} vs ${y.ref} anualizado dos CCs já preenchidos` : undefined} />
       </div>
+
+      {data.progress && data.rows.length > 0 && <BudgetProgressCard progress={data.progress} />}
 
       {(queue.data?.length ?? 0) > 0 && (
         <div className="tabs">

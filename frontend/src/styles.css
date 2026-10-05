@@ -326,3 +326,30 @@ tr.saving { opacity: 0.6; }
 }
 .accounts-table td:first-child { min-width: 300px; }
 .row-tools .btn-sm { padding: 3px 8px; }
+
+/* ---------- gráficos adicionais (divergente azul↔vermelho e sequencial azul validados) */
+:root { --div-up: #e34948; --div-down: #2a78d6; --seq-lo: #cde2fb; --seq-hi: #0d366b; --seq-ink-strong: #ffffff; }
+@media (prefers-color-scheme: dark) {
+  :root { --div-up: #e66767; --div-down: #3987e5; --seq-lo: #17263a; --seq-hi: #86b6ef; --seq-ink-strong: #0b1220; }
+}
+.waterfall, .diverging { display: grid; gap: 4px; }
+.wf-row, .dv-row { position: relative; display: grid; grid-template-columns: minmax(110px, 30%) 1fr 92px; gap: 10px; align-items: center; padding: 4px 6px; border-radius: 6px; }
+.wf-row.hover, .dv-row.hover { background: var(--surface-2); }
+.wf-total .paired-label { font-weight: 650; }
+.wf-track, .dv-track { position: relative; height: 16px; }
+.wf-bar { position: absolute; top: 2px; height: 12px; border-radius: 3px; }
+.dv-bar { position: absolute; top: 3px; height: 10px; }
+.dv-axis { position: absolute; left: 50%; top: -4px; bottom: -4px; width: 1px; background: var(--border); }
+.heatmap { border-collapse: separate; border-spacing: 2px; width: 100%; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.heatmap th { font-weight: 600; color: var(--muted); font-size: 11px; padding: 2px 4px; }
+.heatmap td { text-align: center; padding: 6px 2px; border-radius: 4px; min-width: 44px; }
+.heatmap .hm-label { text-align: left; display: grid; max-width: 220px; min-width: 150px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hm-legend { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.hm-ramp { width: 140px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--seq-lo), var(--seq-hi)); }
+.sparkline { display: block; }
+.statusbar-wrap { display: grid; gap: 8px; }
+.statusbar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; gap: 2px; background: var(--surface-2); }
+.sb-seg { display: grid; place-items: center; font-size: 11.5px; font-weight: 700; color: #fff; min-width: 4px; }
+.sb-neutral { background: #9aa1ad; } .sb-info { background: #2a78d6; } .sb-warn { background: #eda100; color: #1a1a1a; }
+.sb-bad { background: #e34948; } .sb-good { background: #1d7f4e; }
+@media (max-width: 860px) { .wf-row, .dv-row { grid-template-columns: minmax(90px, 36%) 1fr 76px; } }
