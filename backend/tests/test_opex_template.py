@@ -35,7 +35,13 @@ def test_filled_opex_template_loads_everything(client, admin, run_worker):
     rows = {r["code"]: r for r in view["accounts"]}
     assert rows["6010301002"]["proposed"] == "4200.00" and rows["6010301002"]["ref_actual_ytd"] == "2400.00"
     assert rows["6010301011"]["proposed"] == "1800.00"
+    assert meta["consolidator_check"]["I - Viagens"]["ok"] is True
     lines = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()
+    trips = [line for line in lines if line["line_type"] == "TRAVEL"]
+    assert {t["description"] for t in trips} == {"Auditoria SP", "Visita base Belém"}
+    belem = next(t for t in trips if t["description"] == "Visita base Belém")
+    assert belem["attributes"]["destination"] == "PA" and belem["attributes"]["return_month"] is None
+    assert belem["values"]["3"] == "2400.00"
     consult = next(line for line in lines if line["supplier"] == "KPMG")
     assert consult["description"] == "Consultoria tributária" and consult["justification"] == "Reajuste IPCA"
 
@@ -49,7 +55,12 @@ def test_filled_opex_template_loads_everything(client, admin, run_worker):
         json={"account_id": acc["id"], "values": {"1": 100}},
     )
     final = import_and_load(client, admin, run_worker, builders.opex_template_filled(), "v2.xlsx", force=True)
-    assert final["summary"]["load"]["budget"] == {"lines_replaced": 4, "lines_created": 4, "cost_centers": 1}
+    assert final["summary"]["load"]["budget"] == {
+        "lines_replaced": 4,
+        "lines_created": 4,
+        "cost_centers": 1,
+        "trips": 2,
+    }
     lines = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()
     assert len(lines) == 5
 
@@ -70,3 +81,49 @@ def test_template_blocked_after_submission(client, admin, run_worker):
     run_worker()
     errors = client.get(f"/api/v1/imports/{batch_id}/errors", headers=admin, params={"code": "BUDGET_LOCKED"}).json()
     assert len(errors) == 4
+
+
+def test_broken_key_resolved_by_name_and_unresolved_is_reported(client, admin, run_worker):
+    """CHAVE com CC = 0 (XLOOKUP não achou): identifica pelo nome; sem nome válido, erro visível."""
+    import io
+
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(builders.opex_template_filled()))
+    ws = wb["II - Serviços de Terceiros"]
+    row = next(r for r in range(15, ws.max_row + 1) if ws.cell(r, 5).value == "KPMG")
+    ws.cell(row, 2, "1001-0001-0-6010201003")
+    ws.cell(row, 10, 0)
+    ws.cell(row, 9, "DADOS E PROJ. APLICADOS A CONTROLADORIA")
+    ws.append(
+        [
+            None,
+            "1001-0001-0-6010201003",
+            "Linha órfã",
+            None,
+            None,
+            None,
+            "MANAUS",
+            "0001",
+            "CC INEXISTENTE",
+            0,
+            "Serviços de Consultoria e Assessoria",
+            "6010201003",
+            *[500] * 12,
+            6000,
+        ]
+    )
+    via = wb["I - Viagens"]
+    via.cell(63, 19, 2000)  # hospedagem alterada sem atualizar o consolidador
+    buf = io.BytesIO()
+    wb.save(buf)
+
+    batch_id = upload(client, admin, buf.getvalue(), "t.xlsx")
+    run_worker()
+    b = status(client, admin, batch_id)
+    assert b["summary"]["comparison"]["budget"][0]["lines"] == 4
+    errors = client.get(f"/api/v1/imports/{batch_id}/errors", headers=admin).json()
+    items = errors["items"] if isinstance(errors, dict) else errors
+    codes = {e["code"] for e in items}
+    assert {"UNRESOLVED_LINE", "CONSOLIDATOR_MISMATCH"} <= codes
+    assert b["summary"]["meta"]["consolidator_check"]["I - Viagens"]["ok"] is False

@@ -326,3 +326,9 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 - **Catálogo de ativos**: `asset_items` → `asset_classes` → conta. Ao escolher o item, a conta é sugerida. Editável em Cadastros › Catálogo de ativos.
 - **Importação do template CAPEX** (detectada automaticamente, `CAPEX_TEMPLATE`): BD-Novo → cadastros; LISTA ATIVOS → catálogo (ignora `#REF!`, cria classes ausentes); Template_Orç → itens. Os meses são lidos por posição (o arquivo traz cabeçalhos datados de 2026) e valem para o ano do ciclo. Linhas de projeto com mesmo tipo, filial e justificativa viram uma solicitação com vários itens; aquisições avulsas, uma por linha. Reimportar substitui só as solicitações vindas de template; as digitadas no sistema ficam. CC enviado/aprovado bloqueia a carga (`BUDGET_LOCKED`). Divergências de cronograma e valor baixo entram como aviso na importação e viram pendência no sistema.
 - Migração `0002`: `capex_projects.attributes`, `created_by`, `updated_by`.
+
+### Template OPEX — leitura por aba (revisão)
+
+- Todas as abas de pacote são lidas **linha a linha**. Identificação: CHAVE da linha → colunas DIVISÃO / CENTRO DE CUSTO / CONTA CONTÁBIL → nomes (denominação do CC, descrição da conta, filial). Linha com valor sem CC ou conta identificável vira erro `UNRESOLVED_LINE` (nunca é descartada em silêncio).
+- Aba I - Viagens: cada linha é uma viagem (objetivo, cargo, ida/volta, dias, origem/destino, tipo) e gera passagem, diária e hospedagem no mês de ida, aparecendo no painel de Viagens. Usa os valores calculados pela planilha; sem eles, recalcula pelas tarifas do ciclo (aviso `TRAVEL_RECALCULATED`).
+- O **Consolidador** da aba Viagens serve só de conferência: diferença entre a soma das linhas e o consolidador gera aviso `CONSOLIDATOR_MISMATCH`.

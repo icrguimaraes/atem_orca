@@ -520,7 +520,7 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
     from app.models import BudgetLine, Company
     from app.services import opex as opex_svc
 
-    rows = _rows(db, batch.id, "BUDGET_LINE")
+    rows = _rows(db, batch.id, "BUDGET_LINE") + _rows(db, batch.id, "TRAVEL")
     if not rows:
         return {}
     ctx = opex_svc.context(db)
@@ -543,6 +543,13 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
         total = Decimal("0")
         for row in items:
             d = row.data
+            if row.record_type == "TRAVEL":
+                for line in _travel_from_template(db, ctx, batch, row, sub, cc, company_id, user_id):
+                    db.add(line)
+                    total += line.total_amount
+                    stats["lines_created"] += 1
+                stats["trips"] += 1
+                continue
             acc = db.scalar(select(Account).where(Account.code == d["account"]))
             branch_id = None
             if d.get("branch"):
@@ -721,6 +728,61 @@ def load_capex_items(db: Session, batch: ImportBatch, user_id: int | None) -> di
         stats["cost_centers"] += 1
     db.flush()
     return dict(stats)
+
+
+def _travel_from_template(db, ctx, batch, row, sub, cc, company_id, user_id) -> list:
+    """Uma viagem da planilha → até 3 linhas TRAVEL (passagem, diária, hospedagem) no mês de ida,
+    com os valores calculados pela planilha; sem eles, recalcula pelas tarifas do ciclo."""
+    import uuid
+
+    from app.models import BudgetLine
+    from app.services import opex as opex_svc
+
+    d = row.data
+    t = d["travel"]
+    branch_id = None
+    if d.get("branch"):
+        branch_id = db.scalar(select(Branch.id).where(Branch.company_id == company_id, Branch.code == d["branch"]))
+    attributes = {
+        k: t.get(k)
+        for k in ("trip_type", "job_level", "origin", "destination", "departure_month", "return_month", "days")
+    } | {
+        "purpose": t.get("purpose"),
+        "warnings": [],
+        "source": "TEMPLATE",
+        "sheet": row.sheet,
+        "row": row.row_number,
+        "import_batch": batch.id,
+    }
+    common = {
+        "submission_id": sub.id,
+        "company_id": company_id,
+        "branch_id": branch_id,
+        "cost_center_id": cc.id,
+        "description": t.get("purpose"),
+        "created_by": user_id,
+        "updated_by": user_id,
+    }
+    if d.get("amounts") is None:
+        lines = opex_svc._travel_lines(db, ctx, {"travel": t}, common)
+        for line in lines:
+            line.attributes = (line.attributes or {}) | attributes
+        return lines
+    group = uuid.uuid4().hex[:12]
+    lines = []
+    for code, amount in d["amounts"].items():
+        acc = db.scalar(select(Account).where(Account.code == code))
+        line = BudgetLine(
+            **common,
+            account_id=acc.id,
+            package_id=acc.package_id,
+            line_type="TRAVEL",
+            group_ref=group,
+            attributes=attributes,
+        )
+        opex_svc._set_values(line, {t["departure_month"]: Decimal(amount)})
+        lines.append(line)
+    return lines
 
 
 LOADERS = {

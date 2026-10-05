@@ -215,7 +215,7 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
     actual = compare_financial(db, facts, options) if facts.records else None
 
     budget = []
-    lines = [r for r in result.records if r.record_type == "BUDGET_LINE"]
+    lines = [r for r in result.records if r.record_type in ("BUDGET_LINE", "TRAVEL") and r.data.get("cost_center")]
     if lines:
         try:
             ctx = opex_svc.context(db)
@@ -223,6 +223,14 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
             for r in lines:
                 r.error("NO_CYCLE", str(exc))
             ctx = None
+        if ctx is not None:
+            for r in lines:  # viagem sem valores no arquivo: estima pelas tarifas do ciclo para a prévia
+                if r.record_type == "TRAVEL" and r.data.get("amounts") is None and final_status(r) != "ERROR":
+                    try:
+                        est = opex_svc._travel_lines(db, ctx, {"travel": r.data["travel"]}, {})
+                        r.data["values"] = {r.data["travel"]["departure_month"]: str(sum(x.total_amount for x in est))}
+                    except opex_svc.OpexError as exc:
+                        r.error("TRAVEL_NOT_CALCULATED", str(exc))
         groups = defaultdict(list)
         for r in lines:
             groups[(r.data["company"], r.data["cost_center"])].append(r)

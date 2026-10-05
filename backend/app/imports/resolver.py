@@ -211,13 +211,38 @@ def validate_opex_template(result: ParseResult, dims: Dimensions, options: dict)
     }
     from app.imports.loaders import infer_nature
 
+    file_cc_names = {
+        " ".join((r.data.get("name") or "").upper().split()): r.data["code"]
+        for r in result.records
+        if r.record_type == "COST_CENTER" and r.status != "ERROR"
+    }
     for rec in result.records:
+        if rec.record_type == "TRAVEL":
+            _validate_travel(rec, dims, file_ccs, file_cc_names)
+            continue
         if rec.record_type != "BUDGET_LINE":
             continue
         d = rec.data
         company_id = _company(rec, dims, None)
         d["company_id"] = company_id
         if company_id is None:
+            continue
+        # a CHAVE/fórmula pode não ter resolvido: identifica CC e conta pelos nomes da linha
+        if not d.get("cost_center") and d.get("cost_center_name"):
+            d["cost_center"] = _cc_by_name(dims, company_id, d["cost_center_name"], file_cc_names)
+        if not d.get("account") and d.get("account_name"):
+            d["account"] = _account_by_name(dims, d["account_name"], file_accounts)
+        if not d.get("branch") and d.get("branch_name"):
+            d["branch"] = _branch_by_name(dims, company_id, d["branch_name"])
+        if not d.get("cost_center") or not d.get("account"):
+            missing = " e ".join(
+                x for x, ok in (("centro de custo", d.get("cost_center")), ("conta", d.get("account"))) if not ok
+            )
+            rec.error(
+                "UNRESOLVED_LINE",
+                f"Linha com valor sem {missing} identificável: confira o nome do CC/conta "
+                f"('{d.get('cost_center_name') or '—'}' / '{d.get('account_name') or '—'}') no BD-Novo",
+            )
             continue
         cc = dims.cost_centers.get((company_id, d["cost_center"]))
         if cc is None and d["cost_center"] not in file_ccs:
@@ -327,6 +352,59 @@ def validate_capex_template(result: ParseResult, dims: Dimensions, options: dict
             rec.warn(
                 "CAPEX_BELOW_MIN_VALUE", "Valor unitário ≤ R$ 1.200: avaliar se é OPEX", "VLR UNIT", d["unit_value"]
             )
+
+
+def _cc_by_name(dims: Dimensions, company_id: int, name: str, file_cc_names: dict) -> str | None:
+    key = " ".join(name.upper().split())
+    for (cid, code), cc in dims.cost_centers.items():
+        if cid == company_id and " ".join(cc.name.upper().split()) == key:
+            return code
+    return file_cc_names.get(key)
+
+
+def _account_by_name(dims: Dimensions, name: str, file_accounts: dict) -> str | None:
+    key = " ".join(name.upper().split())
+    found = [code for code, acc in dims.accounts.items() if " ".join(acc.name.upper().split()) == key]
+    found += [code for code, d in file_accounts.items() if " ".join((d.get("name") or "").upper().split()) == key]
+    unique = set(found)
+    return unique.pop() if len(unique) == 1 else None
+
+
+def _branch_by_name(dims: Dimensions, company_id: int, name: str) -> str | None:
+    for (cid, code), branch in dims.branch_objs.items():
+        if cid == company_id and branch.name.upper() == name.strip().upper():
+            return code
+    return None
+
+
+def _validate_travel(rec: Record, dims: Dimensions, file_ccs: set, file_cc_names: dict) -> None:
+    """Viagem da aba I - Viagens: CC pelo código (fórmula do template) ou, sem ele, pelo nome."""
+    d = rec.data
+    company_id = _company(rec, dims, None)
+    d["company_id"] = company_id
+    if company_id is None:
+        return
+    if not d.get("cost_center") and d.get("cost_center_name"):
+        d["cost_center"] = _cc_by_name(dims, company_id, d["cost_center_name"], file_cc_names)
+    cc = d.get("cost_center")
+    if not cc:
+        rec.error(
+            "UNKNOWN_COST_CENTER",
+            f"Centro de custo '{d.get('cost_center_name') or ''}' não encontrado no cadastro",
+            "CENTRO DE CUSTO",
+            d.get("cost_center_name"),
+        )
+    elif dims.cost_centers.get((company_id, cc)) is None and cc not in file_ccs:
+        rec.error("UNKNOWN_COST_CENTER", f"Centro de custo {cc} não cadastrado", "CENTRO DE CUSTO", cc)
+    for code in ("6010301011", "6010301036", "6010301001"):
+        if code not in dims.accounts:
+            rec.error("UNKNOWN_ACCOUNT", f"Conta de viagem {code} não cadastrada", "Conta", code)
+    if d.get("branch") is None and d.get("branch_name"):
+        d["branch"] = _branch_by_name(dims, company_id, d["branch_name"])
+    if d.get("amounts") is None:
+        rec.warn("TRAVEL_RECALCULATED", "Valores da viagem não vieram no arquivo: calculados pelas tarifas do ciclo")
+    elif not d["amounts"]:
+        rec.warn("TRAVEL_NO_VALUES", "Viagem sem valores (tarifa não encontrada na planilha)")
 
 
 def validate(result: ParseResult, dims: Dimensions, options: dict) -> None:

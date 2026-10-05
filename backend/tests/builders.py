@@ -191,24 +191,48 @@ def opex_template_filled(budget_cc: str = "1050101011") -> bytes:
     months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"]
 
     viagens = wb.create_sheet("I - Viagens")
-    for col, text in (
-        (2, "CHAVE"),
-        (3, "CHAVE"),
-        (4, "CHAVE"),
-        (5, "FILIAL"),
-        (9, "OBJETIVO DA VIAGEM"),
-        (28, "CHAVE"),
-    ):
+    header = [
+        "CHAVE",
+        "CHAVE",
+        "CHAVE",
+        "FILIAL",
+        "DIVISÃO",
+        "DENOMINAÇÃO DO CENTRO DE CUSTO",
+        "CENTRO DE CUSTO",
+        "OBJETIVO DA VIAGEM",
+        "CARGO",
+        "IDA (mês)",
+        "VOLTA (mês)",
+        "PERÍODO (nº de dias)",
+        "ORIGEM",
+        "DESTINO",
+        "TIPO",
+        "DESPESAS COM PASSAGENS",
+        "DIÁRIA DE VIAGEM",
+        "HOSPEDAGEM",
+    ]
+    for col, text in enumerate(header, start=2):
         viagens.cell(61, col, text)
+    viagens.cell(61, 28, "CHAVE")
     for i, m in enumerate(months):
         viagens.cell(61, 29 + i, m)
     viagens.cell(61, 41, 2027)
-    viagens.cell(62, 2, f"1001-0001-{budget_cc}-6010301011")  # coluna de linha de viagem (ignorada)
-    viagens.cell(62, 28, f"1001-0001-{budget_cc}-6010301011")  # consolidador
-    viagens.cell(62, 31, 1800)  # MAR
-    viagens.cell(63, 28, f"1001-0001-{budget_cc}-6010301001")
+    keys = [f"1001-0001-{budget_cc}-{acc}" for acc in ("6010301011", "6010301036", "6010301001")]
+    trips = [  # valores como o Excel grava (fórmulas já calculadas); "-" = zero
+        ("Auditoria SP", "Gerentes", "MAR", "MAR", 3, "AM", "SP", "Nacional", 1800, "-", 0),
+        ("Visita base Belém", "Anal./Espec./Coord.", "MAR", None, 4, "AM", "PA", "Nacional", 0, 0, 2400),
+    ]
+    for r, t in enumerate(trips, start=62):
+        row = [*keys, "MANAUS", "0001", "DADOS E PROJ. APLICADOS A CONTROLADORIA", budget_cc, *t]
+        for col, value in enumerate(row, start=2):
+            viagens.cell(r, col, value)
+    viagens.cell(64, 2, "1001-0-0-6010301011")  # linha vazia do template (só fórmulas)
+    # consolidador (só conferência): soma por CHAVE e mês de ida
+    viagens.cell(62, 28, keys[0])
+    viagens.cell(62, 31, 1800)
+    viagens.cell(63, 28, keys[2])
     viagens.cell(63, 31, 2400)
-    viagens.cell(64, 28, "1001-0-0-6010301036")  # linha vazia do template
+    viagens.cell(64, 28, "1001-0-0-6010301036")
 
     st = wb.create_sheet("II - Serviços de Terceiros")
     for col, text in enumerate(
