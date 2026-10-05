@@ -31,7 +31,7 @@ def parse_month_header(cell: Any) -> tuple[int | None, int] | None:
     m = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", text)  # dd/mm/aaaa
     if m:
         return int(m.group(3)), int(m.group(2))
-    m = re.fullmatch(r"(\d{4}) (\d{1,2})(?: (\d{1,2}))?", text)  # 2026-01[-01] (traços viram espaço)
+    m = re.fullmatch(r"(\d{4}) (\d{1,2})(?: (\d{1,2}))?(?: 00 00 00)?", text)  # 2026-01[-01 00:00:00]
     if m and 1 <= int(m.group(2)) <= 12:
         return int(m.group(1)), int(m.group(2))
     m = re.fullmatch(r"(\d{1,2})/(\d{4})", text)

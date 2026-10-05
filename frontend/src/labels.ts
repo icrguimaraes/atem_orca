@@ -1,0 +1,132 @@
+export const DATASET_LABELS: Record<string, string> = {
+  MASTER_DATA: "Cadastros (filiais, CCs, contas)",
+  COST_CENTERS: "Centros de custo",
+  ACCOUNTS: "Contas contábeis",
+  ACTUAL: "Realizado",
+  REFERENCE_BUDGET: "Orçamento de referência",
+  EMPLOYEES: "Quadro de funcionários",
+  MACRO_ASSUMPTIONS: "Premissas macroeconômicas",
+};
+
+export const LAYOUT_LABELS: Record<string, string> = {
+  TEMPLATE_BD: "Aba BD-Novo do template",
+  WIDE_MONTHLY: "Planilha mensal (colunas por mês)",
+  SAP_KSB1: "Exportação SAP KSB1",
+  TEMPLATE_QUADRO: "Quadro de funcionários",
+  TEMPLATE_PREMISSAS: "Premissas macroeconômicas",
+};
+
+export const IMPORT_STATUS: Record<string, { label: string; tone: Tone }> = {
+  UPLOADED: { label: "Na fila", tone: "neutral" },
+  VALIDATING: { label: "Validando", tone: "info" },
+  VALIDATED: { label: "Aguardando confirmação", tone: "warn" },
+  FAILED: { label: "Falhou", tone: "bad" },
+  CONFIRMED: { label: "Confirmada", tone: "info" },
+  PROCESSING: { label: "Carregando", tone: "info" },
+  COMPLETED: { label: "Concluída", tone: "good" },
+  REJECTED: { label: "Descartada", tone: "neutral" },
+};
+
+export const ROW_STATUS: Record<string, { label: string; tone: Tone }> = {
+  VALID: { label: "Válido", tone: "good" },
+  WARNING: { label: "Aviso", tone: "warn" },
+  ERROR: { label: "Inconsistente", tone: "bad" },
+  DUPLICATE: { label: "Duplicado", tone: "bad" },
+};
+
+export const CYCLE_STATUS: Record<string, { label: string; tone: Tone }> = {
+  DRAFT: { label: "Em preparação", tone: "neutral" },
+  OPEN: { label: "Aberto", tone: "good" },
+  CLOSED: { label: "Fechado", tone: "bad" },
+};
+
+export const ROLE_LABELS: Record<string, string> = {
+  ADMIN: "Administrador",
+  CONTROLLER: "Controladoria",
+  MANAGER: "Gestor de CC",
+  PACKAGE_MANAGER: "Gestor de pacote",
+  HR: "RH",
+  VIEWER: "Consulta",
+};
+
+export const NATURE_LABELS: Record<string, string> = {
+  OPEX: "OPEX",
+  CAPEX: "CAPEX",
+  PESSOAL: "Pessoal",
+  FINANCEIRO: "Financeiro",
+  CUSTO: "Custo",
+};
+
+export const PARAM_LABELS: Record<string, string> = {
+  "alert.growth_pct": "Alerta de crescimento (vs. realizado anualizado)",
+  "alert.reduction_pct": "Alerta de redução (vs. realizado anualizado)",
+  "alert.history_band_pct": "Banda em torno da média histórica",
+  "alert.min_relevant_amount": "Valor mínimo para alertar conta sem orçamento (R$)",
+  "travel.one_way_factor": "Fator da passagem só de ida",
+  "capex.min_unit_value": "Valor unitário mínimo para CAPEX (R$)",
+  "capex.min_useful_life_months": "Vida útil mínima para CAPEX (meses)",
+  "personnel.salary_adjustment_pct": "Reajuste salarial",
+  "personnel.adjustment_month": "Mês do reajuste (data-base)",
+};
+
+export type Tone = "good" | "warn" | "bad" | "info" | "neutral";
+
+export const fmtInt = (n: number) => n.toLocaleString("pt-BR");
+export const fmtMoney = (v: string | number) =>
+  Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+export const fmtDate = (iso: string | null) =>
+  iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString("pt-BR") : "—";
+export const fmtDateTime = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
+export const fmtSize = (bytes: number) =>
+  bytes > 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.ceil(bytes / 1024)} KB`;
+
+export const MONTHS = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+
+/** Rótulos e ordem das colunas da prévia de importação. */
+export const FIELD_LABELS: Record<string, string> = {
+  company: "Empresa",
+  branch: "Filial",
+  branch_name: "Nome filial",
+  code: "Código",
+  name: "Nome",
+  cost_center: "Centro de custo",
+  cost_center_name: "Denominação CC",
+  manager: "Gestor",
+  account: "Conta",
+  account_name: "Descrição conta",
+  package: "Pacote",
+  detail: "Detalhamento",
+  dre_group: "Agrupamento DRE",
+  year: "Ano",
+  period: "Período",
+  values: "Valores mensais",
+  amount: "Valor",
+  posting_date: "Data lançamento",
+  document: "Documento",
+  text: "Texto",
+  vendor_name: "Fornecedor",
+  registration: "Matrícula",
+  position: "Cargo",
+  salary: "Salário",
+  contract: "Contrato",
+  action: "Ação",
+  action_month: "Mês ação",
+  new_salary: "Novo salário",
+  benefits: "Benefícios",
+  category: "Categoria",
+  indicator: "Indicador",
+  segment: "Segmento",
+  source: "Fonte",
+  value: "Valor",
+};
+
+export const RECORD_TYPES: Record<string, string> = {
+  FACT: "Lançamentos",
+  BRANCH: "Filiais",
+  COST_CENTER: "Centros de custo",
+  ACCOUNT: "Contas",
+  EMPLOYEE: "Colaboradores",
+  VACANCY: "Vagas",
+  MACRO: "Premissas",
+};

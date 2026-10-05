@@ -117,3 +117,16 @@ def test_common_helpers():
     assert budget_key("2001", "0001", "123", "6010301001") == "2001-0001-123-6010301001"
     with pytest.raises(ValueError):
         normalize_months({13: 1})
+
+
+def test_month_header_variants():
+    from datetime import datetime
+
+    from app.imports.parsers.common import parse_month_header
+
+    assert parse_month_header(datetime(2026, 3, 1)) == (2026, 3)
+    assert parse_month_header("2026-03-01 00:00:00") == (2026, 3)
+    assert parse_month_header("01/03/2026") == (2026, 3)
+    assert parse_month_header("mar/26") == (2026, 3)
+    assert parse_month_header("Março") == (None, 3)
+    assert parse_month_header("Total") is None

@@ -5,3 +5,5 @@ backend/data
 docs
 *.xlsx
 .git
+frontend/node_modules
+frontend/dist

@@ -192,6 +192,10 @@ def test_actual_wide_validation_counts_and_versioning(client, admin, run_worker,
         1,
     )
     assert b["summary"]["meta"]["year"] == 2026
+    codes_preview = {
+        e["code"] for e in client.get(f"/api/v1/imports/{batch_id}/preview", headers=admin).json()["errors_by_code"]
+    }
+    assert "UNKNOWN_COLUMNS" not in codes_preview  # cabeçalhos de mês (datas) não são colunas desconhecidas
     report = load_workbook(io.BytesIO(client.get(f"/api/v1/imports/{batch_id}/errors.xlsx", headers=admin).content))
     codes = {r[4] for r in report["Inconsistências"].iter_rows(min_row=2, values_only=True)}
     assert {"UNKNOWN_COST_CENTER", "INVALID_NUMBER", "DUPLICATE", "TOTAL_MISMATCH"} <= codes

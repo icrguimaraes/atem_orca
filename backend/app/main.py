@@ -1,8 +1,9 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -18,7 +19,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 settings = get_settings()
 if settings.environment == "production" and (settings.secret_key == "change-me" or len(settings.secret_key) < 32):
     raise RuntimeError("Defina SECRET_KEY (>= 32 caracteres) nas variáveis do serviço")
-FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend_dist"
+FRONTEND_DIST = Path(os.getenv("FRONTEND_DIST", Path(__file__).resolve().parent.parent / "frontend_dist"))
 
 
 @asynccontextmanager
@@ -65,5 +66,9 @@ if FRONTEND_DIST.exists():  # SPA servida pelo mesmo container (Fase 2)
 
     @app.get("/{path:path}", include_in_schema=False)
     def spa(path: str) -> FileResponse:
-        candidate = FRONTEND_DIST / path
-        return FileResponse(candidate if candidate.is_file() else FRONTEND_DIST / "index.html")
+        if path.startswith("api/"):
+            raise HTTPException(404, "Rota não encontrada")
+        candidate = (FRONTEND_DIST / path).resolve()
+        if candidate.is_file() and candidate.is_relative_to(FRONTEND_DIST.resolve()):
+            return FileResponse(candidate)
+        return FileResponse(FRONTEND_DIST / "index.html")

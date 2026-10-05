@@ -21,9 +21,10 @@ com importação versionada, workflow de aprovação, auditoria e comparação 2
 | Regras de cálculo puras (viagem, evento, CAPEX, projeção de pessoal, what-if CLT×PJ, desligamentos) + endpoints de simulação | ✅ |
 | Seed com domínios extraídos dos templates (90 contas, 15 pacotes, 107 valores de listas, tarifas de viagem, gestores de pacote) | ✅ |
 | 27 testes automatizados (regras, importação ponta a ponta, RBAC, auditoria) | ✅ |
-| Frontend (React) e telas de OPEX | Fase 2 |
+| Interface web (React): login, painel, importação com prévia/erros/confirmação, cadastros, ciclo e parâmetros, usuários, auditoria | ✅ |
+| Telas de OPEX (histórico e preenchimento) | Fase 2 |
 
-A API está documentada em `/api/docs` (Swagger), que também serve de interface operacional da Fase 1.
+A interface fica na raiz do domínio; a API está documentada em `/api/docs` (Swagger).
 
 ## Rodando localmente
 
@@ -35,6 +36,12 @@ cp .env.example .env            # ajuste DATABASE_URL, SECRET_KEY e ADMIN_PASSWO
 alembic upgrade head
 python -m app.seed              # idempotente
 uvicorn app.main:app --reload   # http://localhost:8000/api/docs
+```
+
+Frontend (outro terminal; faz proxy de `/api` para `localhost:8000`):
+
+```bash
+cd frontend && npm install && npm run dev   # http://localhost:5173
 ```
 
 Testes (requerem um PostgreSQL de teste):
@@ -85,5 +92,6 @@ backend/
     seed_data.py     domínios extraídos dos templates/cartilha
   alembic/           migrações
   tests/
+frontend/            React + Vite (build copiado para backend/frontend_dist no Docker)
 docs/                análise e especificação
 ```
