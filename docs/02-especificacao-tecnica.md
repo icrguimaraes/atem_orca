@@ -236,7 +236,8 @@ Edição só em DRAFT/IN_PROGRESS/ADJUSTMENT_REQUESTED. **Congelamento:** ao con
 | Workflow | `POST /submissions/{id}/actions/{action}`, `GET /submissions/{id}/events`, `package-reviews` | 2 |
 | CAPEX | `/submissions/{id}/capex-projects`, itens, cronograma | 3 |
 | Pessoal | `/employees`, `/submissions/{id}/movements`, `/personnel/scenarios`, `/personnel/what-if`, `/personnel/headcount`, `/personnel/terminations` | 4 |
-| Dashboard/Alertas/Export | `/dashboard/kpis`, `/dashboard/series`, `/attention-points`, `/exports/{tipo}.xlsx` | 5 |
+| Painel | `/dashboard/overview` (KPIs, mensal, pacotes, rankings, com filtros e escopo do usuário), `/dashboard/data-quality` | 1 ✅ |
+| Alertas/Export | `/attention-points`, `/exports/{tipo}.xlsx` | 5 |
 
 ## 8. Importação de dados
 
@@ -263,7 +264,14 @@ UPLOADED → VALIDATING → VALIDATED ──confirm──▶ PROCESSING → COMP
 
 3. **Validação** por linha: obrigatórios, tipos (número/data/mês), domínio (empresa/CC/conta/filial existentes — CC/conta inexistentes podem ser **auto-criados** se o usuário marcar a opção, para cargas mestres), duplicidade pela chave natural, colunas desconhecidas (warning).
 4. **Prévia**: contagens (`4.392 encontrados / 4.350 válidos / 32 inconsistentes / 10 duplicados`), 100 primeiras linhas, erros agrupados por código; relatório `.xlsx` de erros.
-5. **Confirmação** → transação única: cria `dataset_version` (n+1), marca a anterior `is_current=false` (não apaga), insere fatos válidos, registra `audit_logs`.
+5. **Comparação com a base vigente** (antes de confirmar): novos, alterados, idênticos e combinações ausentes do arquivo, com total vigente × total após a carga.
+6. **Proteção contra carga repetida:** se o arquivo é idêntico (mesmo SHA-256) a um já carregado, ou não traz nenhuma alteração, a confirmação é bloqueada e só prossegue com `force=true` (registrado na auditoria).
+7. **Modo de carga** (realizado e orçamento de referência):
+   - `MERGE` (padrão) — grava as combinações filial × CC × conta do arquivo e **mantém** as demais da versão vigente (cargas parciais não apagam dados);
+   - `REPLACE` — a base da empresa no ano passa a ser exatamente o arquivo; a prévia lista o que deixará de valer.
+8. **Confirmação** → transação única: cria `dataset_version` (n+1) por empresa × ano, marca a anterior `is_current=false` (não apaga), insere fatos, registra `audit_logs`. **Toda consulta soma apenas versões vigentes** — versões anteriores existem só para histórico.
+
+Checagens pós-carga (`GET /dashboard/data-quality`): realizado dos dois anos carregado, escopos com mais de uma versão vigente, CCs sem usuário gestor, contas sem pacote, realizado em contas sem pacote, importações pendentes, arquivos repetidos, colaboradores sem CC.
 
 ## 9. Fluxo do gestor (UX)
 

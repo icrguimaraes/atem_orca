@@ -15,6 +15,7 @@ from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session
 
 from app.imports.base import StructureError, load_sheets
+from app.imports.compare import compare
 from app.imports.detector import detect_and_parse
 from app.imports.loaders import LOADERS
 from app.imports.resolver import Dimensions, final_status, validate
@@ -90,6 +91,7 @@ def validate_batch(db: Session, batch: ImportBatch, storage: LocalStorage) -> Im
         return batch
 
     validate(result, Dimensions(db), options)
+    comparison = compare(db, result, options)
     batch.dataset_type = result.dataset_type
     batch.layout = result.layout
 
@@ -160,7 +162,7 @@ def validate_batch(db: Session, batch: ImportBatch, storage: LocalStorage) -> Im
     batch.warning_rows = counts["WARNING"]
     batch.error_rows = counts["ERROR"]
     batch.duplicate_rows = counts["DUPLICATE"]
-    batch.summary = (batch.summary or {}) | {"meta": result.meta} | _summarize(result)
+    batch.summary = (batch.summary or {}) | {"meta": result.meta, "comparison": comparison} | _summarize(result)
     blocking = any(i.severity == "ERROR" for i in result.structural)
     batch.status = "FAILED" if blocking or batch.valid_rows == 0 else "VALIDATED"
     if batch.status == "FAILED" and not batch.error_message:
@@ -189,13 +191,34 @@ def _summarize(result) -> dict:
     return summary
 
 
-def confirm_batch(db: Session, batch: ImportBatch, user_id: int | None) -> ImportBatch:
+def confirmation_blockers(batch: ImportBatch) -> list[str]:
+    """Situações que exigem confirmação explícita (force) para evitar cargas redundantes."""
+    summary = batch.summary or {}
+    blockers = []
+    if summary.get("same_file_imported_in"):
+        blockers.append(f"Este mesmo arquivo já foi importado (importação #{summary['same_file_imported_in']}).")
+    if (summary.get("comparison") or {}).get("no_changes"):
+        blockers.append("O arquivo não traz nenhuma alteração em relação aos dados vigentes.")
+    return blockers
+
+
+def confirm_batch(db: Session, batch: ImportBatch, user_id: int | None, *, force: bool = False) -> ImportBatch:
     if batch.status != "VALIDATED":
         raise ImportStateError(f"Importação em status {batch.status} não pode ser confirmada")
+    blockers = confirmation_blockers(batch)
+    if blockers and not force:
+        raise ImportStateError(" ".join(blockers) + " Para importar mesmo assim, confirme novamente marcando 'forçar'.")
     batch.status = "CONFIRMED"
     batch.confirmed_by = user_id
     batch.confirmed_at = datetime.utcnow()
-    audit.record(db, user_id=user_id, action="CONFIRM", entity_type="import_batch", entity_id=batch.id)
+    audit.record(
+        db,
+        user_id=user_id,
+        action="CONFIRM",
+        entity_type="import_batch",
+        entity_id=batch.id,
+        after={"forced": bool(blockers), "blockers": blockers} if blockers else None,
+    )
     db.commit()
     return batch
 

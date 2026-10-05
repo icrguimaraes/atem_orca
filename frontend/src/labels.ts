@@ -130,3 +130,45 @@ export const RECORD_TYPES: Record<string, string> = {
   VACANCY: "Vagas",
   MACRO: "Premissas",
 };
+
+/** Valor compacto para eixos e rótulos: R$ 1,2 mi · R$ 350 mil. */
+export const fmtCompact = (v: string | number) => {
+  const n = Number(v);
+  const abs = Math.abs(n);
+  if (abs >= 1e9) return `R$ ${(n / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} bi`;
+  if (abs >= 1e6) return `R$ ${(n / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi`;
+  if (abs >= 1e3) return `R$ ${(n / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 0 })} mil`;
+  return `R$ ${n.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+};
+
+export const fmtPct = (v: string | null | undefined) =>
+  v === null || v === undefined
+    ? "—"
+    : `${Number(v) > 0 ? "+" : ""}${(Number(v) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+
+export const ERROR_LABELS: Record<string, string> = {
+  STRUCTURE: "Estrutura do arquivo",
+  REQUIRED: "Campo obrigatório vazio",
+  INVALID_CODE: "Código inválido",
+  INVALID_NUMBER: "Número inválido",
+  INVALID_DATE: "Data inválida",
+  INVALID_PERIOD: "Período inválido",
+  INVALID_DOMAIN: "Valor fora da lista permitida",
+  INVALID_CONTRACT: "Tipo de contrato não parametrizado",
+  UNKNOWN_COMPANY: "Empresa não cadastrada",
+  UNKNOWN_BRANCH: "Filial não cadastrada",
+  UNKNOWN_COST_CENTER: "Centro de custo não cadastrado",
+  UNKNOWN_ACCOUNT: "Conta não cadastrada",
+  UNKNOWN_COLUMNS: "Colunas não reconhecidas",
+  DUPLICATE: "Registro duplicado no arquivo",
+  TOTAL_MISMATCH: "Total difere da soma dos meses",
+  NO_VALUES: "Linha sem valores",
+  NEW_PACKAGE: "Pacote novo será criado",
+  NEW_COST_CENTER: "Centro de custo novo será criado",
+  NEW_ACCOUNT: "Conta nova será criada",
+  NEGATIVE_VALUE: "Valor negativo",
+  SPECIAL_PERIOD: "Período especial (13–16)",
+  VACANCY: "Vaga sem matrícula",
+  NO_COST_CENTER: "Sem centro de custo",
+  YEAR_REQUIRED: "Ano não identificado",
+};

@@ -14,13 +14,16 @@ class Dimensions:
     def __init__(self, db: Session) -> None:
         self.companies = {c.code: c.id for c in db.scalars(select(Company))}
         self.branches: dict[tuple[int, str], int] = {}
+        self.branch_objs: dict[tuple[int, str], Branch] = {}
         self.branch_names: dict[tuple[int, str], int] = {}
         for b in db.scalars(select(Branch)):
             self.branches[(b.company_id, b.code)] = b.id
+            self.branch_objs[(b.company_id, b.code)] = b
             self.branch_names[(b.company_id, b.name.upper())] = b.id
         self.cost_centers = {(c.company_id, c.code): c for c in db.scalars(select(CostCenter))}
         self.accounts = {a.code: a for a in db.scalars(select(Account))}
         self.packages = {p.name.upper(): p.id for p in db.scalars(select(BudgetPackage))}
+        self.package_names = {p.id: p.name.upper() for p in db.scalars(select(BudgetPackage))}
         self.contracts = {c.code for c in db.scalars(select(ContractType))}
 
     def branch_id(self, company_id: int, value: str | None) -> int | None:
@@ -53,6 +56,35 @@ def _mark_duplicates(records: list[Record]) -> None:
             rec.data["_duplicate"] = True
 
 
+def _differs(current: object, new: object) -> bool:
+    """Campo vazio no arquivo não conta como alteração (a carga não apaga informação)."""
+    return new not in (None, "") and str(current or "").strip().upper() != str(new).strip().upper()
+
+
+def _master_action(rec: Record, dims: Dimensions, company_id: int | None) -> str:
+    d = rec.data
+    if rec.record_type == "BRANCH":
+        obj = dims.branch_objs.get((company_id, d["code"]))
+        if obj is None:
+            return "CREATE"
+        changed = _differs(obj.name, d.get("name")) or _differs(obj.uf, d.get("uf"))
+    elif rec.record_type == "COST_CENTER":
+        obj = dims.cost_centers.get((company_id, d["code"]))
+        if obj is None:
+            return "CREATE"
+        changed = _differs(obj.name, d.get("name")) or _differs(obj.manager_name, d.get("manager"))
+    else:
+        obj = dims.accounts.get(d["code"])
+        if obj is None:
+            return "CREATE"
+        changed = (
+            _differs(obj.name, d.get("name"))
+            or _differs(obj.dre_group, d.get("dre_group"))
+            or _differs(dims.package_names.get(obj.package_id), d.get("package"))
+        )
+    return "UPDATE" if changed else "UNCHANGED"
+
+
 def validate_master(result: ParseResult, dims: Dimensions, options: dict) -> None:
     default_company = options.get("company_code")
     for rec in result.records:
@@ -62,15 +94,10 @@ def validate_master(result: ParseResult, dims: Dimensions, options: dict) -> Non
             rec.data["company_id"] = company_id
             rec.natural_key = f"{rt}|{rec.data['company']}|{rec.data['code']}"
             if company_id is not None:
-                exists = (
-                    (company_id, rec.data["code"]) in dims.branches
-                    if rt == "BRANCH"
-                    else (company_id, rec.data["code"]) in dims.cost_centers
-                )
-                rec.data["_action"] = "UPDATE" if exists else "CREATE"
+                rec.data["_action"] = _master_action(rec, dims, company_id)
         elif rt == "ACCOUNT":
             rec.natural_key = f"ACCOUNT|{rec.data['code']}"
-            rec.data["_action"] = "UPDATE" if rec.data["code"] in dims.accounts else "CREATE"
+            rec.data["_action"] = _master_action(rec, dims, None)
             package = rec.data.get("package")
             if package and package.upper() not in dims.packages:
                 rec.warn("NEW_PACKAGE", f"Pacote '{package}' não cadastrado: será criado", "Pacote GMD", package)

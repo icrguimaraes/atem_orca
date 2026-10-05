@@ -1,8 +1,39 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type Account, type CostCenter, type Cycle, type DatasetVersion, type ImportBatch, type Page } from "../api";
+import {
+  api,
+  type Company,
+  type CostCenter,
+  type Cycle,
+  type DatasetVersion,
+  type ImportBatch,
+  type Overview,
+  type Package,
+  type Page,
+  type QualityCheck,
+} from "../api";
 import { useAuth } from "../auth";
-import { Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
-import { CYCLE_STATUS, DATASET_LABELS, IMPORT_STATUS, fmtDate, fmtDateTime, fmtInt } from "../labels";
+import { Legend, MonthlyChart, PairedBars, SERIES } from "../components/charts";
+import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
+import {
+  CYCLE_STATUS,
+  DATASET_LABELS,
+  IMPORT_STATUS,
+  MONTHS,
+  fmtCompact,
+  fmtDate,
+  fmtDateTime,
+  fmtInt,
+  fmtMoney,
+  fmtPct,
+} from "../labels";
+
+const SEVERITY = {
+  ERROR: { tone: "bad", label: "Erro" },
+  WARNING: { tone: "warn", label: "Atenção" },
+  INFO: { tone: "info", label: "Info" },
+  OK: { tone: "good", label: "OK" },
+} as const;
 
 function daysUntil(iso: string | null): string | undefined {
   if (!iso) return undefined;
@@ -10,58 +41,287 @@ function daysUntil(iso: string | null): string | undefined {
   return diff >= 0 ? `faltam ${diff} dia(s)` : `encerrado há ${-diff} dia(s)`;
 }
 
+function Delta({ pct, invert = false }: { pct: string | null; invert?: boolean }) {
+  if (pct === null) return null;
+  const n = Number(pct);
+  // em despesa, crescer é "pior": seta para cima em tom de alerta
+  const cls = n === 0 ? "" : (n > 0) !== invert ? "up" : "down";
+  return <span className={`delta ${cls}`}>{n > 0 ? "▲" : n < 0 ? "▼" : "•"} {fmtPct(pct)}</span>;
+}
+
+function RankTable({ rows, refLabel, prevLabel, empty }: { rows: Overview["top_accounts"]; refLabel: string; prevLabel: string; empty: string }) {
+  if (!rows.length) return <Empty>{empty}</Empty>;
+  return (
+    <div className="table-wrap">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Código · descrição</th>
+            <th className="right">{prevLabel}</th>
+            <th className="right">{refLabel}</th>
+            <th className="right">Var.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td>
+                <div>{r.name}</div>
+                <div className="muted small mono">{r.code}</div>
+              </td>
+              <td className="right nowrap" title={fmtMoney(r.prev_ytd)}>{fmtCompact(r.prev_ytd)}</td>
+              <td className="right nowrap" title={fmtMoney(r.ref_ytd)}><strong>{fmtCompact(r.ref_ytd)}</strong></td>
+              <td className="right nowrap"><Delta pct={r.ytd_var_pct} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function Home() {
   const { user, can } = useAuth();
-  const canImport = can("CONTROLLER");
-  const { data } = useLoad(async () => {
-    const [cycles, ccs, accounts] = await Promise.all([
-      api<Cycle[]>("/cycles"),
-      api<CostCenter[]>("/cost-centers"),
-      api<Account[]>("/accounts"),
-    ]);
-    const [imports, versions] = canImport
-      ? await Promise.all([
-          api<Page<ImportBatch>>("/imports?limit=5"),
-          api<DatasetVersion[]>("/dataset-versions?current_only=true"),
-        ])
-      : [null, []];
-    return { cycle: cycles[0] ?? null, ccs, accounts, imports, versions };
-  }, [canImport]);
+  const isController = can("CONTROLLER");
+  const [filters, setFilters] = useState({ company_id: "", cost_center_id: "", package_id: "" });
+  const [showTable, setShowTable] = useState(false);
 
-  if (!data) return <Loading />;
-  const { cycle, ccs, accounts, imports, versions } = data;
-  const actualScopes = versions.filter((v) => v.dataset_type === "ACTUAL");
+  const base = useLoad(async () => {
+    const [cycles, companies, ccs, packages] = await Promise.all([
+      api<Cycle[]>("/cycles"),
+      api<Company[]>("/companies"),
+      api<CostCenter[]>("/cost-centers"),
+      api<Package[]>("/packages"),
+    ]);
+    return { cycle: cycles[0] ?? null, companies, ccs, packages };
+  });
+
+  const query = new URLSearchParams(Object.entries(filters).filter(([, v]) => v)).toString();
+  const overview = useLoad(() => api<Overview>(`/dashboard/overview${query ? `?${query}` : ""}`), [query]);
+
+  const admin = useLoad(async () => {
+    if (!isController) return null;
+    const [quality, imports, versions] = await Promise.all([
+      api<{ checks: QualityCheck[]; issues: number }>("/dashboard/data-quality"),
+      api<Page<ImportBatch>>("/imports?limit=5"),
+      api<DatasetVersion[]>("/dataset-versions?current_only=true"),
+    ]);
+    return { quality, imports, versions };
+  }, [isController]);
+
+  if (!base.data) return <Loading />;
+  const { cycle, companies, ccs, packages } = base.data;
+  const o = overview.data;
+  const ccOptions = ccs.filter((c) => !filters.company_id || String(c.company_id) === filters.company_id);
+  const monthName = o?.last_closed_period ? MONTHS[o.last_closed_period - 1] : null;
+  const prevLabel = o ? `${o.previous_year} até ${monthName ?? "—"}` : "";
+  const refLabel = o ? `${o.reference_year} até ${monthName ?? "—"}` : "";
+  const hasData = Boolean(o && (o.years_loaded.length || Number(o.kpis.budget_total)));
 
   return (
     <>
       <PageHeader
-        title={`Olá, ${user?.name.split(" ")[0]}`}
-        subtitle={cycle ? `${cycle.name} · realizado de referência ${cycle.actual_reference_year}` : "Nenhum ciclo cadastrado"}
+        title="Painel"
+        subtitle={
+          o?.last_closed_period
+            ? `Olá, ${user?.name.split(" ")[0]}. Realizado ${o.reference_year} até ${monthName} comparado ao mesmo período de ${o.previous_year}.`
+            : `Olá, ${user?.name.split(" ")[0]}. ${cycle ? cycle.name : ""}`
+        }
       />
-      <div className="stats">
-        <Stat
-          label="Status do ciclo"
-          value={cycle ? <Badge tone={CYCLE_STATUS[cycle.status]?.tone ?? "neutral"}>{CYCLE_STATUS[cycle.status]?.label}</Badge> : "—"}
-        />
-        <Stat label="Prazo OPEX" value={fmtDate(cycle?.opex_deadline ?? null)} hint={daysUntil(cycle?.opex_deadline ?? null)} />
-        <Stat label="Prazo CAPEX" value={fmtDate(cycle?.capex_deadline ?? null)} hint={daysUntil(cycle?.capex_deadline ?? null)} />
-        <Stat label="Centros de custo" value={fmtInt(ccs.length)} hint={canImport ? "cadastrados" : "sob sua gestão"} />
-        <Stat label="Contas contábeis" value={fmtInt(accounts.length)} />
-        {canImport && <Stat label="Bases de realizado" value={fmtInt(actualScopes.length)} hint="empresa × ano carregados" />}
+
+      <div className="filters">
+        <select value={filters.company_id} onChange={(e) => setFilters({ company_id: e.target.value, cost_center_id: "", package_id: filters.package_id })}>
+          <option value="">Todas as empresas</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>{c.code} · {c.short_name ?? c.name}</option>
+          ))}
+        </select>
+        <select value={filters.cost_center_id} onChange={(e) => setFilters({ ...filters, cost_center_id: e.target.value })}>
+          <option value="">{isController ? "Todos os centros de custo" : "Meus centros de custo"}</option>
+          {ccOptions.map((c) => (
+            <option key={c.id} value={c.id}>{c.code} · {c.name}</option>
+          ))}
+        </select>
+        <select value={filters.package_id} onChange={(e) => setFilters({ ...filters, package_id: e.target.value })}>
+          <option value="">Todos os pacotes</option>
+          {packages.filter((p) => p.nature !== "CAPEX").map((p) => (
+            <option key={p.id} value={p.id}>{p.roman ? `${p.roman} · ` : ""}{p.name}</option>
+          ))}
+        </select>
+        {(filters.company_id || filters.cost_center_id || filters.package_id) && (
+          <button className="btn btn-ghost btn-sm" onClick={() => setFilters({ company_id: "", cost_center_id: "", package_id: "" })}>
+            Limpar filtros
+          </button>
+        )}
       </div>
 
-      {canImport && (
+      {overview.error && <Alert>{overview.error}</Alert>}
+      {!o ? (
+        <Loading />
+      ) : !hasData ? (
+        <Card>
+          <Empty>
+            Ainda não há realizado carregado para montar o painel.
+            {isController && (
+              <>
+                {" "}<Link className="link" to="/importacoes">Importe o realizado {o.previous_year} e {o.reference_year}</Link> no layout da aba “Realizado”.
+              </>
+            )}
+          </Empty>
+        </Card>
+      ) : (
+        <>
+          <div className="stats">
+            <Stat label={`Realizado ${o.previous_year} (ano)`} value={fmtCompact(o.kpis.prev_total)} hint={fmtMoney(o.kpis.prev_total)} />
+            <Stat label={`Realizado ${prevLabel}`} value={fmtCompact(o.kpis.prev_ytd)} hint="base de comparação" />
+            <Stat
+              label={`Realizado ${refLabel}`}
+              value={fmtCompact(o.kpis.ref_ytd)}
+              tone="warn"
+              hint={fmtMoney(o.kpis.ref_ytd)}
+            />
+            <div className="stat stat-inline-delta">
+              <span className="stat-label">Variação no período</span>
+              <span className="stat-value"><Delta pct={o.kpis.ytd_var_pct} /></span>
+              <span className="stat-hint">{o.reference_year} vs {o.previous_year}, mesmos meses</span>
+            </div>
+            <Stat
+              label={`${o.reference_year} anualizado`}
+              value={fmtCompact(o.kpis.ref_annualized)}
+              hint={o.kpis.annualized_vs_prev_pct !== null ? `${fmtPct(o.kpis.annualized_vs_prev_pct)} vs ${o.previous_year} cheio` : "projeção linear"}
+            />
+            {o.has_budget && (
+              <Stat
+                label={`Orçado ${o.reference_year}`}
+                value={fmtCompact(o.kpis.budget_total)}
+                hint={o.kpis.budget_consumption_pct !== null ? `realizado ${fmtPct(o.kpis.budget_consumption_pct)} vs orçado no período` : undefined}
+              />
+            )}
+          </div>
+
+          <Card
+            title="Evolução mensal do realizado"
+            actions={
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowTable(!showTable)}>
+                {showTable ? "Ver gráfico" : "Ver tabela"}
+              </button>
+            }
+          >
+            <Legend
+              items={[
+                { label: String(o.previous_year), color: SERIES.prev },
+                { label: String(o.reference_year), color: SERIES.ref },
+                ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget, line: true }] : []),
+              ]}
+            />
+            {showTable ? (
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Mês</th>
+                      <th className="right">{o.previous_year}</th>
+                      <th className="right">{o.reference_year}</th>
+                      {o.has_budget && <th className="right">Orçado {o.reference_year}</th>}
+                      <th className="right">Var.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {o.monthly.map((m) => (
+                      <tr key={m.month}>
+                        <td>{MONTHS[m.month - 1]}</td>
+                        <td className="right">{fmtMoney(m.prev)}</td>
+                        <td className="right">{Number(m.ref) ? fmtMoney(m.ref) : "—"}</td>
+                        {o.has_budget && <td className="right">{fmtMoney(m.budget)}</td>}
+                        <td className="right">
+                          {Number(m.prev) && Number(m.ref) ? <Delta pct={String((Number(m.ref) - Number(m.prev)) / Number(m.prev))} /> : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <MonthlyChart rows={o.monthly} prevYear={o.previous_year} refYear={o.reference_year} showBudget={o.has_budget} />
+            )}
+          </Card>
+
+          <div className="grid-2">
+            <Card title={`Por pacote GMD · acumulado até ${monthName ?? "—"}`}>
+              <Legend items={[{ label: String(o.previous_year), color: SERIES.prev }, { label: String(o.reference_year), color: SERIES.ref }]} />
+              {o.by_package.length ? (
+                <PairedBars
+                  prevLabel={prevLabel}
+                  refLabel={refLabel}
+                  rows={o.by_package.map((p) => ({
+                    label: p.package,
+                    prev: Number(p.prev_ytd),
+                    ref: Number(p.ref_ytd),
+                    note: p.ytd_var_pct !== null ? fmtPct(p.ytd_var_pct) : undefined,
+                  }))}
+                />
+              ) : (
+                <Empty>Sem dados.</Empty>
+              )}
+            </Card>
+            {isController && admin.data ? (
+              <Card
+                title="Qualidade da base"
+                actions={admin.data.quality.issues ? <Badge tone="warn">{admin.data.quality.issues} ponto(s)</Badge> : <Badge tone="good">Tudo certo</Badge>}
+              >
+                <ul className="checks-list">
+                  {admin.data.quality.checks.map((c) => (
+                    <li key={c.code}>
+                      <Badge tone={SEVERITY[c.severity].tone}>{SEVERITY[c.severity].label}</Badge>
+                      <div>
+                        <div>
+                          {c.title}
+                          {c.count > 0 && c.severity !== "OK" && <strong> · {fmtInt(c.count)}</strong>}
+                        </div>
+                        {c.severity !== "OK" && c.detail && <div className="muted small">{c.detail}</div>}
+                        {c.severity !== "OK" && c.samples.length > 0 && (
+                          <div className="muted small mono">{c.samples.slice(0, 6).join(" · ")}{c.samples.length > 6 ? " …" : ""}</div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ) : (
+              <Card title={`Prazos · ${cycle?.name ?? ""}`}>
+                <dl className="kv">
+                  <dt>Status</dt>
+                  <dd>{cycle ? <Badge tone={CYCLE_STATUS[cycle.status]?.tone ?? "neutral"}>{CYCLE_STATUS[cycle.status]?.label}</Badge> : "—"}</dd>
+                  <dt>OPEX</dt>
+                  <dd>{fmtDate(cycle?.opex_deadline ?? null)} <span className="muted small">{daysUntil(cycle?.opex_deadline ?? null)}</span></dd>
+                  <dt>CAPEX</dt>
+                  <dd>{fmtDate(cycle?.capex_deadline ?? null)} <span className="muted small">{daysUntil(cycle?.capex_deadline ?? null)}</span></dd>
+                </dl>
+              </Card>
+            )}
+          </div>
+
+          <div className="stack-lg">
+            <Card title={`Maiores centros de custo · ${refLabel}`}>
+              <RankTable rows={o.top_cost_centers} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." />
+            </Card>
+            <Card title={`Maiores contas · ${refLabel}`}>
+              <RankTable rows={o.top_accounts} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." />
+            </Card>
+          </div>
+        </>
+      )}
+
+      {isController && admin.data && (
         <div className="grid-2">
           <Card title="Últimas importações" actions={<Link to="/importacoes" className="link">Ver todas</Link>}>
-            {imports && imports.items.length ? (
+            {admin.data.imports.items.length ? (
               <table className="table">
                 <tbody>
-                  {imports.items.map((b) => (
+                  {admin.data.imports.items.map((b) => (
                     <tr key={b.id}>
                       <td>
-                        <Link to={`/importacoes/${b.id}`} className="link">
-                          {b.file_name}
-                        </Link>
+                        <Link to={`/importacoes/${b.id}`} className="link">{b.file_name}</Link>
                         <div className="muted small">{DATASET_LABELS[b.dataset_type ?? ""] ?? "Detectando…"}</div>
                       </td>
                       <td className="right">
@@ -73,34 +333,32 @@ export default function Home() {
                 </tbody>
               </table>
             ) : (
-              <Empty>
-                Nenhum arquivo importado. <Link to="/importacoes" className="link">Importar agora</Link>
-              </Empty>
+              <Empty>Nenhum arquivo importado. <Link to="/importacoes" className="link">Importar agora</Link></Empty>
             )}
           </Card>
-          <Card title="Dados carregados (versão vigente)">
-            {versions.length ? (
+          <Card title="Bases vigentes">
+            {admin.data.versions.length ? (
               <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Base</th>
-                    <th>Escopo</th>
-                    <th className="right">Versão</th>
-                    <th className="right">Registros</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {versions.map((v) => (
-                    <tr key={v.id}>
-                      <td>{DATASET_LABELS[v.dataset_type] ?? v.dataset_type}</td>
-                      <td className="mono small">{v.scope_key}</td>
-                      <td className="right">v{v.version_number}</td>
-                      <td className="right">{fmtInt(v.row_count)}</td>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Base</th>
+                      <th>Escopo</th>
+                      <th className="right">Versão</th>
+                      <th className="right">Registros</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {admin.data.versions.map((v) => (
+                      <tr key={v.id}>
+                        <td>{DATASET_LABELS[v.dataset_type] ?? v.dataset_type}</td>
+                        <td className="mono small">{v.scope_key}</td>
+                        <td className="right">v{v.version_number}</td>
+                        <td className="right">{fmtInt(v.row_count)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : (
               <Empty>Nenhuma base carregada ainda.</Empty>
@@ -108,16 +366,6 @@ export default function Home() {
           </Card>
         </div>
       )}
-
-      <Card title="Roteiro de implantação">
-        <ol className="roadmap">
-          <li className="done"><strong>Fase 1 — Fundação:</strong> cadastros, importação versionada, auditoria, parâmetros.</li>
-          <li><strong>Fase 2 — OPEX:</strong> histórico 2025 → 2026 → 2027, preenchimento por pacote, justificativas, aprovação.</li>
-          <li><strong>Fase 3 — CAPEX:</strong> projetos, itens, cronograma mensal e validação de consistência.</li>
-          <li><strong>Fase 4 — Pessoal:</strong> quadro, movimentações, what-if de multiplicador, admissões e desligamentos.</li>
-          <li><strong>Fase 5 — Consolidação:</strong> dashboard executivo, pontos de atenção, exportações e versões.</li>
-        </ol>
-      </Card>
     </>
   );
 }

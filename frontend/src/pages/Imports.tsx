@@ -21,6 +21,7 @@ function UploadForm({ onDone }: { onDone: (id: number) => void }) {
   const [year, setYear] = useState("");
   const [company, setCompany] = useState("1001");
   const [createMissing, setCreateMissing] = useState(false);
+  const [mode, setMode] = useState<"MERGE" | "REPLACE">("MERGE");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const financial = type === "ACTUAL" || type === "REFERENCE_BUDGET";
@@ -36,6 +37,7 @@ function UploadForm({ onDone }: { onDone: (id: number) => void }) {
     if (year) form.append("reference_year", year);
     if (company) form.append("company_code", company);
     form.append("create_missing_dimensions", String(createMissing));
+    form.append("mode", mode);
     try {
       const batch = await api<ImportBatch>("/imports", { method: "POST", body: form });
       onDone(batch.id);
@@ -82,6 +84,25 @@ function UploadForm({ onDone }: { onDone: (id: number) => void }) {
         </label>
       </div>
       <p className="muted small">{HELP[type] ?? ""}</p>
+      {(financial || type === "") && (
+        <div className="mode-choice">
+          <span className="muted small">Para realizado e orçamento de referência:</span>
+          <label className="check">
+            <input type="radio" name="mode" checked={mode === "MERGE"} onChange={() => setMode("MERGE")} />
+            <span>
+              <strong>Atualizar</strong> — grava as linhas do arquivo e mantém o que já existe para os demais CCs e contas
+              (recomendado para cargas parciais).
+            </span>
+          </label>
+          <label className="check">
+            <input type="radio" name="mode" checked={mode === "REPLACE"} onChange={() => setMode("REPLACE")} />
+            <span>
+              <strong>Substituir</strong> — a base da empresa no ano passa a ser exatamente este arquivo (use só com o
+              realizado completo).
+            </span>
+          </label>
+        </div>
+      )}
       {financial && (
         <label className="check">
           <input type="checkbox" checked={createMissing} onChange={(e) => setCreateMissing(e.target.checked)} />

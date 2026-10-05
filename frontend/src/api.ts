@@ -116,3 +116,45 @@ export interface AuditLog {
   reason: string | null;
 }
 export interface Page<T> { total: number; items: T[] }
+
+export interface ImportErrorItem {
+  sheet: string | null; row_number: number | null; column: string | null; code: string; severity: string;
+  message: string; value: string | null;
+}
+
+export interface ScopeComparison {
+  scope: string; year: number; company: string; current_version: number | null; new: number; changed: number;
+  unchanged: number; absent: number; absent_action: "KEEP" | "REMOVE"; absent_total: string; current_total: string;
+  after_total: string; difference: string; absent_samples: string[];
+}
+
+export interface Comparison {
+  kind: "FINANCIAL" | "MASTER" | "EMPLOYEES" | "MACRO" | "NONE";
+  no_changes: boolean;
+  mode?: "MERGE" | "REPLACE";
+  scopes?: ScopeComparison[];
+  by_type?: Record<string, { CREATE: number; UPDATE: number; UNCHANGED: number }>;
+  new?: number; changed?: number; unchanged?: number;
+}
+
+export interface Ranked { id: number; code: string | null; name: string | null; ref_ytd: string; prev_ytd: string; ytd_var_pct: string | null }
+export interface PackageRow {
+  package_id: number | null; package: string; package_type: number | null; prev_total: string; prev_ytd: string;
+  ref_ytd: string; ref_annualized: string; budget: string; ytd_var_pct: string | null;
+}
+export interface Overview {
+  reference_year: number; previous_year: number; last_closed_period: number | null; years_loaded: number[];
+  has_budget: boolean;
+  kpis: {
+    prev_total: string; prev_ytd: string; ref_ytd: string; ytd_var_pct: string | null; ref_annualized: string;
+    annualized_vs_prev_pct: string | null; budget_total: string; budget_ytd: string; budget_consumption_pct: string | null;
+  };
+  monthly: { month: number; prev: string; ref: string; budget: string }[];
+  by_package: PackageRow[];
+  top_cost_centers: Ranked[];
+  top_accounts: Ranked[];
+}
+export interface QualityCheck {
+  code: string; title: string; severity: "ERROR" | "WARNING" | "INFO" | "OK"; count: number; detail: string | null;
+  samples: string[];
+}

@@ -37,11 +37,12 @@ def status(client, headers, batch_id):
     return client.get(f"/api/v1/imports/{batch_id}", headers=headers).json()
 
 
-def import_and_load(client, headers, run_worker, content, name, **form):
+def import_and_load(client, headers, run_worker, content, name, force=False, **form):
     batch_id = upload(client, headers, content, name, **form)
     run_worker()
     assert status(client, headers, batch_id)["status"] == "VALIDATED", status(client, headers, batch_id)
-    assert client.post(f"/api/v1/imports/{batch_id}/confirm", headers=headers).status_code == 200
+    resp = client.post(f"/api/v1/imports/{batch_id}/confirm", headers=headers, params={"force": force})
+    assert resp.status_code == 200, resp.text
     run_worker()
     final = status(client, headers, batch_id)
     assert final["status"] == "COMPLETED", final
@@ -209,7 +210,13 @@ def test_actual_wide_validation_counts_and_versioning(client, admin, run_worker,
 
     # nova carga do mesmo escopo → versão 2; versão 1 preservada e não corrente
     import_and_load(
-        client, admin, run_worker, builders.realizado_wide([rows[0]]), "realizado_v2.xlsx", dataset_type="ACTUAL"
+        client,
+        admin,
+        run_worker,
+        builders.realizado_wide([rows[0]]),
+        "realizado_v2.xlsx",
+        force=True,
+        dataset_type="ACTUAL",
     )
     db.expire_all()
     versions = db.scalars(

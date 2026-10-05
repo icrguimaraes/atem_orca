@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, download, type Preview } from "../api";
+import { api, download, type Comparison, type Preview } from "../api";
+import { ComparisonCard, ErrorsPanel } from "../components/ImportExtras";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import {
   DATASET_LABELS,
+  ERROR_LABELS,
   FIELD_LABELS,
   IMPORT_STATUS,
   LAYOUT_LABELS,
@@ -12,6 +14,7 @@ import {
   ROW_STATUS,
   fmtDateTime,
   fmtInt,
+  fmtCompact,
   fmtMoney,
 } from "../labels";
 
@@ -62,6 +65,9 @@ export default function ImportDetail() {
   const [filter, setFilter] = useState("");
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [force, setForce] = useState(false);
+  const [errorsOpen, setErrorsOpen] = useState(false);
+  const [errorCode, setErrorCode] = useState("");
   const { data, error, reload } = useLoad(
     () => api<Preview>(`/imports/${id}/preview?limit=200${filter ? `&status=${filter}` : ""}`),
     [id, filter],
@@ -79,7 +85,7 @@ export default function ImportDetail() {
     setBusy(true);
     setActionError(null);
     try {
-      await api(`/imports/${id}/${action}`, { method: "POST" });
+      await api(`/imports/${id}/${action}${action === "confirm" && force ? "?force=true" : ""}`, { method: "POST" });
       reload();
     } catch (err) {
       setActionError((err as Error).message);
@@ -95,6 +101,17 @@ export default function ImportDetail() {
   const summary = batch.summary ?? {};
   const meta = (summary.meta ?? {}) as Record<string, unknown>;
   const load = (summary.load ?? null) as Record<string, unknown> | null;
+  const comparison = (summary.comparison ?? null) as Comparison | null;
+  const blockers = [
+    summary.same_file_imported_in ? `Este mesmo arquivo já foi importado (importação #${summary.same_file_imported_in}).` : null,
+    comparison?.no_changes ? "O arquivo não traz alterações em relação aos dados vigentes." : null,
+  ].filter(Boolean) as string[];
+  const hasIssues = batch.error_rows > 0 || batch.duplicate_rows > 0 || batch.warning_rows > 0 || data.errors_by_code.length > 0;
+  const openErrors = (code = "") => {
+    setErrorCode(code);
+    setErrorsOpen(true);
+    setTimeout(() => document.getElementById("errors-panel")?.scrollIntoView({ behavior: "smooth" }), 50);
+  };
   const present = new Set(data.rows.flatMap((r) => Object.keys(r.data)));
   const columns = [
     ...FIELD_ORDER.filter((k) => present.has(k)),
@@ -111,10 +128,15 @@ export default function ImportDetail() {
             <Link to="/importacoes" className="btn btn-ghost">
               Voltar
             </Link>
-            {(batch.error_rows > 0 || batch.duplicate_rows > 0 || batch.warning_rows > 0 || batch.status === "FAILED") && (
-              <button className="btn" onClick={() => download(`/imports/${id}/errors.xlsx`, `inconsistencias_${id}.xlsx`)}>
-                Baixar relatório de erros
-              </button>
+            {(hasIssues || batch.status === "FAILED") && (
+              <>
+                <button className="btn" onClick={() => openErrors()}>
+                  Ver inconsistências
+                </button>
+                <button className="btn btn-ghost" onClick={() => download(`/imports/${id}/errors.xlsx`, `inconsistencias_${id}.xlsx`)}>
+                  Baixar Excel
+                </button>
+              </>
             )}
             {["VALIDATED", "FAILED", "UPLOADED"].includes(batch.status) && (
               <button className="btn btn-ghost" disabled={busy} onClick={() => act("reject")}>
@@ -122,7 +144,7 @@ export default function ImportDetail() {
               </button>
             )}
             {batch.status === "VALIDATED" && (
-              <button className="btn btn-primary" disabled={busy} onClick={() => act("confirm")}>
+              <button className="btn btn-primary" disabled={busy || (blockers.length > 0 && !force)} onClick={() => act("confirm")}>
                 Confirmar importação de {fmtInt(batch.valid_rows)} registros
               </button>
             )}
@@ -133,12 +155,16 @@ export default function ImportDetail() {
       <div className="status-line">
         <Badge tone={status.tone}>{status.label}</Badge>
         {ACTIVE.has(batch.status) && <span className="muted small">atualizando automaticamente…</span>}
-        {summary.same_file_imported_in && (
-          <span className="muted small">
-            Atenção: este mesmo arquivo já foi importado na importação #{String(summary.same_file_imported_in)}.
-          </span>
-        )}
       </div>
+      {batch.status === "VALIDATED" && blockers.length > 0 && (
+        <Alert tone="warn">
+          <strong>Confirmação bloqueada para evitar carga repetida.</strong> {blockers.join(" ")}
+          <label className="check" style={{ marginTop: 8 }}>
+            <input type="checkbox" checked={force} onChange={(e) => setForce(e.target.checked)} />
+            Entendi, quero importar mesmo assim (gera nova versão; os valores não são somados em dobro)
+          </label>
+        </Alert>
+      )}
       {batch.error_message && <Alert>{batch.error_message}</Alert>}
       {actionError && <Alert>{actionError}</Alert>}
 
@@ -148,7 +174,7 @@ export default function ImportDetail() {
         <Stat label="Com avisos" value={fmtInt(batch.warning_rows)} tone="warn" hint="entram na carga" />
         <Stat label="Inconsistentes" value={fmtInt(batch.error_rows)} tone="bad" hint="não entram na carga" />
         <Stat label="Duplicados" value={fmtInt(batch.duplicate_rows)} tone="bad" hint="não entram na carga" />
-        {summary.total_amount !== undefined && <Stat label="Valor válido" value={fmtMoney(summary.total_amount)} />}
+        {summary.total_amount !== undefined && <Stat label="Valor válido" value={fmtCompact(summary.total_amount)} hint={fmtMoney(summary.total_amount)} />}
       </div>
 
       {(meta.year !== undefined || summary.cost_centers !== undefined || summary.actions) && (
@@ -192,24 +218,36 @@ export default function ImportDetail() {
         </Card>
       )}
 
+      {comparison && batch.status !== "FAILED" && <ComparisonCard comparison={comparison} />}
+
       {data.errors_by_code.length > 0 && (
-        <Card title="Inconsistências e avisos">
+        <Card
+          title="Inconsistências e avisos"
+          actions={
+            <button className="btn btn-sm" onClick={() => openErrors()}>
+              Ver todas as ocorrências
+            </button>
+          }
+        >
           <table className="table">
             <thead>
               <tr>
-                <th>Tipo</th>
-                <th>Código</th>
+                <th>Situação</th>
+                <th>Tipo de ocorrência</th>
                 <th className="right">Ocorrências</th>
                 <th>Exemplo</th>
               </tr>
             </thead>
             <tbody>
               {data.errors_by_code.map((e) => (
-                <tr key={`${e.code}-${e.severity}`}>
+                <tr key={`${e.code}-${e.severity}`} className="clickable" onClick={() => openErrors(e.code)} title="Ver ocorrências">
                   <td>
                     <Badge tone={e.severity === "ERROR" ? "bad" : "warn"}>{e.severity === "ERROR" ? "Erro" : "Aviso"}</Badge>
                   </td>
-                  <td className="mono small">{e.code}</td>
+                  <td>
+                    {ERROR_LABELS[e.code] ?? e.code}
+                    <div className="muted small mono">{e.code}</div>
+                  </td>
                   <td className="right">{fmtInt(e.count)}</td>
                   <td>{e.example}</td>
                 </tr>
@@ -217,6 +255,12 @@ export default function ImportDetail() {
             </tbody>
           </table>
         </Card>
+      )}
+
+      {errorsOpen && id && (
+        <div id="errors-panel">
+          <ErrorsPanel batchId={id} code={errorCode} onCode={setErrorCode} onClose={() => setErrorsOpen(false)} />
+        </div>
       )}
 
       <Card

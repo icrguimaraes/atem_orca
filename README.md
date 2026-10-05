@@ -20,8 +20,10 @@ com importação versionada, workflow de aprovação, auditoria e comparação 2
 | Layouts: BD-Novo dos templates, Realizado (largo), SAP KSB1 (`.csv`/`.xlsx`), Orçamento de referência, Quadro de funcionários, Premissas macro | ✅ |
 | Regras de cálculo puras (viagem, evento, CAPEX, projeção de pessoal, what-if CLT×PJ, desligamentos) + endpoints de simulação | ✅ |
 | Seed com domínios extraídos dos templates (90 contas, 15 pacotes, 107 valores de listas, tarifas de viagem, gestores de pacote) | ✅ |
-| 27 testes automatizados (regras, importação ponta a ponta, RBAC, auditoria) | ✅ |
+| 33 testes automatizados (regras, importação ponta a ponta, RBAC, auditoria) | ✅ |
 | Interface web (React): login, painel, importação com prévia/erros/confirmação, cadastros, ciclo e parâmetros, usuários, auditoria | ✅ |
+| Proteção contra reimportação, comparação com a base vigente, modos Atualizar/Substituir, lista de erros na tela | ✅ |
+| Painel: realizado ano anterior × ano de referência (mesmo período), anualizado, pacotes, rankings, qualidade da base | ✅ |
 | Telas de OPEX (histórico e preenchimento) | Fase 2 |
 
 A interface fica na raiz do domínio; a API está documentada em `/api/docs` (Swagger).

@@ -311,6 +311,8 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None) -> dict
     dataset = batch.dataset_type
     scenario = (batch.options or {}).get("scenario", "ORC")
     source = "SAP_KSB1" if batch.layout == "SAP_KSB1" else "EXCEL"
+    mode = (batch.options or {}).get("mode", "MERGE")
+    model = ActualEntry if dataset == "ACTUAL" else ReferenceBudgetEntry
     # uma versão por empresa × ano: cargas parciais de outra empresa não substituem esta
     groups: dict[tuple[str, int], list[ImportRow]] = defaultdict(list)
     for row in rows:
@@ -320,8 +322,14 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None) -> dict
         scope = (
             f"ACTUAL:{year}:{company_code}" if dataset == "ACTUAL" else f"{dataset}:{scenario}:{year}:{company_code}"
         )
+        previous = db.scalar(
+            select(DatasetVersion).where(
+                DatasetVersion.dataset_type == dataset, DatasetVersion.scope_key == scope, DatasetVersion.is_current
+            )
+        )
         version = new_version(db, batch, dataset, scope, user_id, source)
         payload = []
+        file_keys: set[tuple] = set()
         max_period = 0
         for row in group:
             d = dict(row.data)
@@ -333,6 +341,7 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None) -> dict
                 "cost_center_id": d["cost_center_id"],
                 "account_id": d["account_id"],
             }
+            file_keys.add((d.get("branch_id"), d["cost_center_id"], d["account_id"]))
             if batch.layout == "SAP_KSB1":
                 period = int(d["period"])
                 payload.append(
@@ -364,13 +373,25 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None) -> dict
                         entry |= {"scenario": scenario}
                     payload.append(entry)
                     max_period = max(max_period, int(month))
-        model = ActualEntry if dataset == "ACTUAL" else ReferenceBudgetEntry
+        carried = 0
+        if mode == "MERGE" and previous is not None:
+            # mantém as combinações filial × CC × conta que não vieram neste arquivo
+            columns = [c for c in model.__table__.columns if c.name not in ("id", "dataset_version_id")]
+            for row in db.execute(select(*columns).where(model.dataset_version_id == previous.id)).mappings():
+                if (row["branch_id"], row["cost_center_id"], row["account_id"]) in file_keys:
+                    continue
+                payload.append(dict(row) | {"dataset_version_id": version.id})
+                max_period = max(max_period, int(row["period"]))
+                carried += 1
         for start in range(0, len(payload), 5000):
             db.execute(insert(model), payload[start : start + 5000])
         version.row_count = len(payload)
         version.last_closed_period = max_period or None
-        versions.append({"scope": scope, "version": version.version_number, "entries": len(payload)})
-        stats["entries"] += len(payload)
+        versions.append(
+            {"scope": scope, "version": version.version_number, "entries": len(payload), "kept_from_previous": carried}
+        )
+        stats["entries"] += len(payload) - carried
+        stats["entries_kept_from_previous"] += carried
     return dict(stats) | {"versions": versions}
 
 

@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import Response
@@ -47,6 +47,13 @@ async def upload(
     company_code: Annotated[str | None, Form(description="Empresa padrão quando o arquivo não tem a coluna")] = "1001",
     scenario: Annotated[str | None, Form(description="Cenário do orçamento de referência")] = "ORC",
     create_missing_dimensions: Annotated[bool, Form()] = False,
+    mode: Annotated[
+        Literal["MERGE", "REPLACE"],
+        Form(
+            description="Realizado/orçamento: MERGE atualiza só as combinações CC×conta×filial do arquivo e mantém as "
+            "demais; REPLACE substitui toda a base da empresa no ano"
+        ),
+    ] = "MERGE",
     deactivate_missing: Annotated[bool, Form(description="Colaboradores ausentes ficam inativos")] = False,
     db: Session = Depends(get_db),
     storage: LocalStorage = Depends(get_storage),
@@ -63,6 +70,7 @@ async def upload(
         "company_code": company_code,
         "scenario": scenario,
         "create_missing_dimensions": create_missing_dimensions,
+        "mode": mode,
         "deactivate_missing": deactivate_missing,
     }
     try:
@@ -160,10 +168,15 @@ def errors_xlsx(batch_id: int, db: Session = Depends(get_db), _: User = Depends(
     response_model=ImportBatchOut,
     summary="Confirmar carga dos registros válidos (gera nova versão)",
 )
-def confirm(batch_id: int, request: Request, db: Session = Depends(get_db), actor: User = Depends(importer)):
+def confirm(
+    batch_id: int,
+    force: bool = Query(False, description="Confirmar mesmo se o arquivo já foi importado ou não traz alterações"),
+    db: Session = Depends(get_db),
+    actor: User = Depends(importer),
+):
     batch = _batch(db, batch_id)
     try:
-        return pipeline.confirm_batch(db, batch, actor.id)
+        return pipeline.confirm_batch(db, batch, actor.id, force=force)
     except pipeline.ImportStateError as exc:
         raise HTTPException(409, str(exc)) from exc
 
