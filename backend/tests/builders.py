@@ -289,3 +289,145 @@ def opex_template_filled(budget_cc: str = "1050101011") -> bytes:
         ]
     )
     return _bytes(wb)
+
+
+def capex_template_filled(cc: str = "1050101011") -> bytes:
+    """Template CAPEX como volta do gestor: BD-Novo (CC, filiais, contas de ativo), LISTA ATIVOS e
+    Template_Orç 2027 com cabeçalho na linha 6 e meses datados do ano anterior (como no arquivo real)."""
+    wb = Workbook()
+    wb.active.title = "Instruções"
+    ws = wb.create_sheet("Template_Orç 2027")
+    header = [
+        "NOME FILIAL",
+        "FILIAL",
+        "NOME CENTRO DE CUSTO",
+        "CENTRO DE CUSTO",
+        "DESCRIÇÃO DA CONTA",
+        "CONTA",
+        "Projeto?",
+        "TIPO DO PROJETO",
+        "ITEM",
+        "DESCRIÇÃO DETALHADA DO ITEM OU PROJETO",
+        "VLR UNIT",
+        "QTD",
+        "VLR TOTAL",
+        "JUSTIFICATIVA",
+        *[datetime(2026, m, 1) for m in range(1, 13)],
+        "Orçamento 2026",
+        None,
+        "Check",
+    ]
+    ws.cell(5, 10, "Não preencher")
+    for col, value in enumerate(header, start=2):
+        ws.cell(6, col, value)
+
+    def row(r, values, months):
+        for col, value in enumerate(values, start=2):
+            ws.cell(r, col, value)
+        for m, amount in months.items():
+            ws.cell(r, 15 + m, amount)
+
+    base = ["MANAUS", "0001", "DADOS E PROJ.", cc]
+    # projeto com 2 itens (mesmo tipo e justificativa) → 1 solicitação
+    just = "Automatizar a conciliação; redução estimada de R$ 50 mil/ano"
+    row(
+        7,
+        [
+            *base,
+            "Equipamentos de Informática",
+            "1020601005",
+            "Sim",
+            "Automação e Transformação Digital",
+            "NOTEBOOK",
+            "Notebooks para o time de dados",
+            6000,
+            3,
+            18000,
+            just,
+        ],
+        {3: 18000},
+    )
+    row(
+        8,
+        [
+            *base,
+            "Licenças e Software",
+            "1020701002",
+            "Sim",
+            "Automação e Transformação Digital",
+            "LICENÇA",
+            "Licença da ferramenta de BI",
+            12000,
+            1,
+            12000,
+            just,
+        ],
+        {3: 6000, 9: 6000},
+    )
+    # aquisição avulsa com cronograma divergente e valor baixo → avisos
+    row(
+        9,
+        [
+            *base,
+            "Móveis, Utensílios e Instalações",
+            "1020601004",
+            "Não",
+            None,
+            "CADEIRA",
+            "Cadeiras ergonômicas",
+            1000,
+            4,
+            4000,
+            "Reposição",
+        ],
+        {5: 3000},
+    )
+    # conta de despesa → erro
+    row(10, [*base, "Telefonia", "6010301002", "Não", None, "LINK", "Link", 2000, 1, 2000, None], {1: 2000})
+    row(11, [None] * 12 + [0], {})  # linha do modelo só com fórmula zerada
+
+    bd = wb.create_sheet("BD-Novo")
+    for cell, value in {
+        "B2": "Centro de Custo",
+        "C2": "Denominação de centro de custos",
+        "D2": "Gestor do Centro de Custo",
+        "F2": "Local de negócios",
+        "G2": "Filial",
+        "I2": "Descrição",
+        "J2": "Conta do Razão",
+        "K2": "Agrupamento DRE",
+        "L2": "Pacote GMD",
+    }.items():
+        bd[cell] = value
+    bd["B3"], bd["C3"], bd["D3"] = cc, "DADOS E PROJ. APLICADOS A CONTROLADORIA", "Gestor Teste"
+    bd["F3"], bd["G3"] = "0001", "MANAUS"
+    for i, (name, code) in enumerate(
+        [
+            ("Equipamentos de Informática", 1020601005),
+            ("Licenças e Software", 1020701002),
+            ("Móveis, Utensílios e Instalações", 1020601004),
+        ],
+        start=3,
+    ):
+        bd[f"I{i}"], bd[f"J{i}"], bd[f"K{i}"], bd[f"L{i}"] = name, code, "Sem Agrupamento", "Capex"
+
+    lista = wb.create_sheet("LISTA ATIVOS")
+    lista.append(["Item Principal", "Nome Classe", "ATEM", "REAM", None, None, None, "Item Principal", "Nome Classe"])
+    lista.append(
+        [
+            "NOTEBOOK",
+            "Equipamentos de Informática",
+            "1020601005",
+            "1020601005",
+            None,
+            None,
+            None,
+            "NOTEBOOK",
+            "Equipamentos de Informática",
+        ]
+    )
+    lista.append(
+        ["CADEIRA", "Móveis, Utensílios e Instalações", "1020601004", "1020601004", None, None, None, "#REF!", "#REF!"]
+    )
+    lista.append(["DRONE", "Classe Nova", "1020601003", None])
+    return _bytes(wb)

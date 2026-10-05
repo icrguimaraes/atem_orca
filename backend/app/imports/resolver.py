@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.imports.base import ParseResult, Record
-from app.models import Account, Branch, BudgetPackage, Company, ContractType, CostCenter
+from app.models import Account, AssetClass, Branch, BudgetPackage, Company, ContractType, CostCenter, LookupValue
 
 
 class Dimensions:
@@ -25,6 +25,11 @@ class Dimensions:
         self.packages = {p.name.upper(): p.id for p in db.scalars(select(BudgetPackage))}
         self.package_names = {p.id: p.name.upper() for p in db.scalars(select(BudgetPackage))}
         self.contracts = {c.code for c in db.scalars(select(ContractType))}
+        self.capex_types = {
+            lv.code.upper(): lv.code
+            for lv in db.scalars(select(LookupValue).where(LookupValue.domain == "CAPEX_PROJECT_TYPE"))
+        }
+        self.asset_classes = {c.name.upper() for c in db.scalars(select(AssetClass))}
 
     def branch_id(self, company_id: int, value: str | None) -> int | None:
         if not value:
@@ -251,9 +256,84 @@ def validate_opex_template(result: ParseResult, dims: Dimensions, options: dict)
             )
 
 
+def validate_capex_template(result: ParseResult, dims: Dimensions, options: dict) -> None:
+    from app.imports.loaders import infer_nature
+
+    validate_master(_subset(result, "BRANCH", "COST_CENTER", "ACCOUNT"), dims, options)
+    file_ccs = {r.data["code"] for r in result.records if r.record_type == "COST_CENTER" and r.status != "ERROR"}
+    file_accounts = {
+        r.data["code"]: r.data for r in result.records if r.record_type == "ACCOUNT" and r.status != "ERROR"
+    }
+
+    def nature(code: str | None) -> str | None:
+        if not code:
+            return None
+        acc = dims.accounts.get(code)
+        if acc:
+            return acc.nature
+        if code in file_accounts:
+            return infer_nature(code, file_accounts[code].get("dre_group"), file_accounts[code].get("package"))
+        return None
+
+    for rec in result.records:
+        d = rec.data
+        if rec.record_type == "ASSET_ITEM":
+            if d.get("account") and nature(d["account"]) not in (None, "CAPEX"):
+                rec.warn("WRONG_NATURE", f"Conta {d['account']} não é de ativo: item fica sem conta sugerida")
+                d["account"] = None
+            if d["asset_class"].upper() not in dims.asset_classes:
+                rec.warn("NEW_ASSET_CLASS", f"Classe de ativo '{d['asset_class']}' será criada", "Nome Classe")
+            continue
+        if rec.record_type != "CAPEX_ITEM":
+            continue
+        company_id = _company(rec, dims, options.get("company_code"))
+        d["company_id"] = company_id
+        if company_id is None or rec.status == "ERROR":
+            continue
+        if dims.cost_centers.get((company_id, d["cost_center"])) is None and d["cost_center"] not in file_ccs:
+            rec.error(
+                "UNKNOWN_COST_CENTER",
+                f"Centro de custo {d['cost_center']} não cadastrado",
+                "CENTRO DE CUSTO",
+                d["cost_center"],
+            )
+        acc_nature = nature(d["account"])
+        if acc_nature is None:
+            rec.error("UNKNOWN_ACCOUNT", f"Conta {d['account']} não cadastrada", "CONTA", d["account"])
+        elif acc_nature != "CAPEX":
+            rec.error("WRONG_NATURE", f"Conta {d['account']} é de {acc_nature}; não entra no CAPEX", "CONTA")
+        if d.get("branch") and dims.branch_id(company_id, d["branch"]) is None:
+            rec.warn("UNKNOWN_BRANCH", f"Filial {d['branch']} não cadastrada (fica sem filial)", "FILIAL", d["branch"])
+        if d.get("project_type"):
+            code = dims.capex_types.get(d["project_type"].strip().upper())
+            if code is None:
+                rec.warn("UNKNOWN_PROJECT_TYPE", f"Tipo de projeto '{d['project_type']}' não cadastrado", "TIPO")
+            d["project_type"] = code
+        if d["is_project"] and not d.get("project_type"):
+            rec.warn(
+                "CAPEX_NO_PROJECT_TYPE", "Projeto sem tipo: complete no sistema antes de enviar", "TIPO DO PROJETO"
+            )
+        if d["is_project"] and not d.get("justification"):
+            rec.warn("CAPEX_NO_JUSTIFICATION", "Projeto sem justificativa: complete antes de enviar", "JUSTIFICATIVA")
+        unit, qty = Decimal(d["unit_value"]), Decimal(d["quantity"])
+        total = (unit * qty).quantize(Decimal("0.01"))
+        scheduled = sum((Decimal(v) for v in d["values"].values()), Decimal(0))
+        if abs(scheduled - total) > Decimal("0.01"):
+            rec.warn(
+                "CAPEX_SCHEDULE_MISMATCH",
+                f"Cronograma ({scheduled}) difere do total ({total}): ajuste no sistema antes de enviar",
+            )
+        if 0 < unit <= Decimal(str(options.get("capex_min_unit_value", 1200))):
+            rec.warn(
+                "CAPEX_BELOW_MIN_VALUE", "Valor unitário ≤ R$ 1.200: avaliar se é OPEX", "VLR UNIT", d["unit_value"]
+            )
+
+
 def validate(result: ParseResult, dims: Dimensions, options: dict) -> None:
     if result.dataset_type == "OPEX_TEMPLATE":
         return validate_opex_template(result, dims, options)
+    if result.dataset_type == "CAPEX_TEMPLATE":
+        return validate_capex_template(result, dims, options)
     if result.dataset_type in ("MASTER_DATA", "COST_CENTERS", "ACCOUNTS"):
         validate_master(result, dims, options)
     elif result.dataset_type in ("ACTUAL", "REFERENCE_BUDGET"):

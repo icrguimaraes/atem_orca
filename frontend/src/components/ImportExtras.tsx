@@ -94,11 +94,11 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
     return (
       <>
         {comparison.budget && comparison.budget.length > 0 && (
-          <Card title="Orçamento 2027 que será carregado">
+          <Card title={comparison.module === "CAPEX" ? "CAPEX 2027 que será carregado" : "Orçamento 2027 que será carregado"}>
             <div className="table-wrap">
               <table className="table">
                 <thead>
-                  <tr><th>Centro de custo</th><th>Situação</th><th className="right">Linhas</th><th className="right">Total 2027</th><th className="right">Substitui (de template anterior)</th></tr>
+                  <tr><th>Centro de custo</th><th>Situação</th><th className="right">{comparison.module === "CAPEX" ? "Itens" : "Linhas"}</th><th className="right">Total 2027</th><th className="right">Substitui (de template anterior)</th></tr>
                 </thead>
                 <tbody>
                   {comparison.budget.map((b) => (
@@ -107,13 +107,24 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
                       <td>{b.editable ? <Badge tone="good">aceita carga</Badge> : <Badge tone="bad">bloqueado ({b.status})</Badge>}</td>
                       <td className="right">{fmtInt(b.lines)}</td>
                       <td className="right"><strong>{fmtMoney(b.total)}</strong></td>
-                      <td className="right">{b.replaces_lines ? `${fmtInt(b.replaces_lines)} linhas · ${fmtMoney(b.replaces_total)}` : "—"}</td>
+                      <td className="right">{b.replaces_lines ? `${fmtInt(b.replaces_lines)} ${comparison.module === "CAPEX" ? "itens" : "linhas"} · ${fmtMoney(b.replaces_total)}` : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="muted small">Linhas lançadas diretamente no sistema não são afetadas.</p>
+            <p className="muted small">
+              {comparison.module === "CAPEX"
+                ? "Solicitações cadastradas diretamente no sistema não são afetadas. Linhas de projeto com o mesmo tipo e justificativa viram uma solicitação com vários itens."
+                : "Linhas lançadas diretamente no sistema não são afetadas."}
+            </p>
+          </Card>
+        )}
+        {comparison.catalog && (comparison.catalog.new > 0 || comparison.catalog.existing > 0) && (
+          <Card title="Catálogo de ativos (aba LISTA ATIVOS)">
+            <p>
+              <strong>{fmtInt(comparison.catalog.new)}</strong> itens novos · {fmtInt(comparison.catalog.existing)} já cadastrados. O catálogo sugere a conta contábil a partir do item escolhido.
+            </p>
           </Card>
         )}
         {comparison.actual && <ComparisonCard comparison={comparison.actual} />}

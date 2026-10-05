@@ -353,3 +353,36 @@ tr.saving { opacity: 0.6; }
 .sb-neutral { background: #9aa1ad; } .sb-info { background: #2a78d6; } .sb-warn { background: #eda100; color: #1a1a1a; }
 .sb-bad { background: #e34948; } .sb-good { background: #1d7f4e; }
 @media (max-width: 860px) { .wf-row, .dv-row { grid-template-columns: minmax(90px, 36%) 1fr 76px; } }
+
+/* ---------- CAPEX */
+.rank-bar { height: 12px; }
+.capex-project { border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; background: var(--surface); }
+.capex-project.has-critical { border-left: 4px solid var(--bad); }
+.capex-project-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: flex-start; }
+.capex-project-head h3 { margin: 0; font-size: 15px; }
+.capex-project-head .meta { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+.capex-total { text-align: right; }
+.capex-total strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.issue-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 12.5px; }
+.issue-list li { display: flex; gap: 6px; align-items: baseline; }
+.issue-list .crit { color: var(--bad); }
+.issue-list .warn { color: var(--warn); }
+.schedule-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.schedule-grid label { font-size: 12px; }
+.schedule-grid .money { width: 100%; }
+.schedule-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+.schedule-tools select { width: auto; }
+.schedule-status { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; font-variant-numeric: tabular-nums; }
+.schedule-status .bad { color: var(--bad); font-weight: 600; }
+.schedule-status .good { color: var(--good); font-weight: 600; }
+.mini-schedule { display: grid; grid-template-columns: repeat(12, 6px); gap: 2px; align-items: end; height: 22px; }
+.mini-schedule i { display: block; background: var(--series-1); border-radius: 1px; min-height: 1px; }
+.mini-schedule i.zero { background: var(--border); }
+.check-row { display: flex; gap: 8px; align-items: center; }
+.check-row input { width: auto; }
+.modal-wide { width: min(880px, calc(100vw - 32px)); }
+@media (max-width: 640px) {
+  .schedule-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.modal .form-row .money { width: 100%; }
+.nowrap { white-space: nowrap; }

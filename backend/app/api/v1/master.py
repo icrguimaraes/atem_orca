@@ -15,6 +15,8 @@ from app.models import (
     Account,
     AccountDetail,
     Area,
+    AssetClass,
+    AssetItem,
     Branch,
     BudgetPackage,
     Company,
@@ -200,6 +202,16 @@ _register_crud(
     s.PackageManagerOut,
     "package_manager",
     filters={"cycle_id": PackageManager.cycle_id, "package_id": PackageManager.package_id},
+)
+_register_crud("/asset-classes", AssetClass, s.AssetClassIn, s.AssetClassOut, "asset_class", order_by=AssetClass.name)
+_register_crud(
+    "/asset-items",
+    AssetItem,
+    s.AssetItemIn,
+    s.AssetItemOut,
+    "asset_item",
+    order_by=AssetItem.name,
+    filters={"asset_class_id": AssetItem.asset_class_id},
 )
 _register_crud("/accounts", Account, s.AccountIn, s.AccountOut, "account", list_endpoint=False)
 _register_crud("/cost-centers", CostCenter, s.CostCenterIn, s.CostCenterOut, "cost_center", list_endpoint=False)

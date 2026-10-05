@@ -121,8 +121,13 @@ class CapexProject(TimestampMixin, Base):
     priority: Mapped[str | None] = mapped_column(String(30))
     budget_prev_year: Mapped[Decimal | None] = mapped_column(Money)
     observations: Mapped[str | None] = mapped_column(Text)
+    attributes: Mapped[dict | None] = mapped_column(JSONB)  # origem (template/sistema), linha do arquivo
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
 
-    items: Mapped[list["CapexItem"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
+    items: Mapped[list["CapexItem"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="CapexItem.id"
+    )
 
 
 class CapexItem(Base):
@@ -139,7 +144,9 @@ class CapexItem(Base):
     total_value: Mapped[Decimal] = mapped_column(Money)
     useful_life_months: Mapped[int | None] = mapped_column(Integer)
 
-    values: Mapped[list["CapexItemValue"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
+    values: Mapped[list["CapexItemValue"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="CapexItemValue.month"
+    )
 
 
 class CapexItemValue(Base):

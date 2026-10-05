@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from "./auth";
 import Layout from "./components/Layout";
 import { Loading } from "./components/ui";
 import Audit from "./pages/Audit";
+import CapexCostCenter from "./pages/CapexCostCenter";
+import CapexList from "./pages/CapexList";
 import CyclePage from "./pages/CyclePage";
 import Home from "./pages/Home";
 import ImportDetail from "./pages/ImportDetail";
@@ -40,6 +42,8 @@ export default function App() {
             <Route path="importacoes/:id" element={<Protected roles={["CONTROLLER"]}><ImportDetail /></Protected>} />
             <Route path="orcamento" element={<OpexList />} />
             <Route path="orcamento/:ccId" element={<OpexCostCenter />} />
+            <Route path="capex" element={<CapexList />} />
+            <Route path="capex/:ccId" element={<CapexCostCenter />} />
             <Route path="cadastros" element={<MasterData />} />
             <Route path="ciclo" element={<CyclePage />} />
             <Route path="usuarios" element={<Protected roles={["CONTROLLER"]}><Users /></Protected>} />

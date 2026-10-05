@@ -175,6 +175,24 @@ class NamedOut(ORM):
     name: str
 
 
+class AssetClassIn(BaseModel):
+    name: str
+    account_id: int | None = None
+
+
+class AssetClassOut(AssetClassIn, ORM):
+    id: int
+
+
+class AssetItemIn(BaseModel):
+    name: str
+    asset_class_id: int
+
+
+class AssetItemOut(AssetItemIn, ORM):
+    id: int
+
+
 class PackageManagerIn(BaseModel):
     cycle_id: int
     package_id: int

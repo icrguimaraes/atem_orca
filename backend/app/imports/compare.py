@@ -272,9 +272,102 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
     return {"kind": "TEMPLATE", "master": master, "actual": actual, "budget": budget, "no_changes": no_changes}
 
 
+def compare_capex_template(db: Session, result: ParseResult, options: dict) -> dict:
+    """Template CAPEX: cadastros, catálogo de ativos e, por CC, se o orçamento CAPEX aceita a carga."""
+    from app.domain.workflow import EDITABLE, STATUS_LABELS
+    from app.models import AssetItem, CapexProject, Company
+    from app.services import opex as opex_svc
+
+    master = compare_master(
+        ParseResult(
+            result.dataset_type,
+            result.layout,
+            [r for r in result.records if r.record_type in ("BRANCH", "COST_CENTER", "ACCOUNT")],
+        )
+    )
+    existing_assets = {name.upper() for name in db.scalars(select(AssetItem.name))}
+    assets = [r for r in result.records if r.record_type == "ASSET_ITEM"]
+    catalog = {
+        "new": sum(1 for r in assets if r.data["name"] not in existing_assets),
+        "existing": sum(1 for r in assets if r.data["name"] in existing_assets),
+    }
+    items = [r for r in result.records if r.record_type == "CAPEX_ITEM"]
+    budget = []
+    if items:
+        try:
+            ctx = opex_svc.context(db)
+        except opex_svc.OpexError as exc:
+            for r in items:
+                r.error("NO_CYCLE", str(exc))
+            ctx = None
+        groups = defaultdict(list)
+        for r in items:
+            groups[(r.data.get("company") or "", r.data.get("cost_center") or "")].append(r)
+        companies = {c.code: c.id for c in db.scalars(select(Company))}
+        for (company, cc_code), recs in sorted(groups.items()):
+            cc = db.scalar(
+                select(CostCenter).where(CostCenter.company_id == companies.get(company), CostCenter.code == cc_code)
+            )
+            sub = (
+                opex_svc.get_submission(db, ctx, cc.id, create=False, module="CAPEX")
+                if (cc is not None and ctx is not None)
+                else None
+            )
+            status = sub.status if sub else "DRAFT"
+            editable = status in EDITABLE and (ctx is None or ctx.cycle.status != "CLOSED")
+            if not editable:
+                for r in recs:
+                    r.error(
+                        "BUDGET_LOCKED",
+                        f"O CAPEX do CC {cc_code} está '{STATUS_LABELS.get(status, status)}' e não aceita "
+                        "alterações; peça à Controladoria para devolver para ajuste",
+                    )
+            replaced = []
+            if sub is not None:
+                replaced = [
+                    p
+                    for p in db.scalars(select(CapexProject).where(CapexProject.submission_id == sub.id))
+                    if (p.attributes or {}).get("source") == "TEMPLATE"
+                ]
+            valid = [r for r in recs if final_status(r) in ("VALID", "WARNING")]
+            total = sum(
+                (
+                    (Decimal(r.data["unit_value"]) * Decimal(r.data["quantity"])).quantize(Decimal("0.01"))
+                    for r in valid
+                ),
+                Decimal(0),
+            )
+            budget.append(
+                {
+                    "cost_center": cc_code,
+                    "company": company,
+                    "status": status,
+                    "editable": editable,
+                    "lines": len(valid),
+                    "total": str(total),
+                    "replaces_lines": sum(len(p.items) for p in replaced),
+                    "replaces_total": str(sum((i.total_value for p in replaced for i in p.items), Decimal(0))),
+                }
+            )
+    no_changes = (
+        (master["no_changes"] or not master["by_type"]) and not catalog["new"] and not any(b["lines"] for b in budget)
+    )
+    return {
+        "kind": "TEMPLATE",
+        "module": "CAPEX",
+        "master": master,
+        "actual": None,
+        "catalog": catalog,
+        "budget": budget,
+        "no_changes": no_changes,
+    }
+
+
 def compare(db: Session, result: ParseResult, options: dict) -> dict:
     if result.dataset_type == "OPEX_TEMPLATE":
         return compare_opex_template(db, result, options)
+    if result.dataset_type == "CAPEX_TEMPLATE":
+        return compare_capex_template(db, result, options)
     if result.dataset_type in ("ACTUAL", "REFERENCE_BUDGET"):
         return compare_financial(db, result, options)
     if result.dataset_type in ("MASTER_DATA", "COST_CENTERS", "ACCOUNTS"):

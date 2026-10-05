@@ -582,8 +582,150 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
     return dict(stats)
 
 
+def load_capex_template(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
+    """Cadastros → catálogo de ativos → solicitações CAPEX, na mesma transação."""
+    stats = {"master": load_master(db, batch, user_id), "catalog": load_asset_catalog(db, batch)}
+    stats["capex"] = load_capex_items(db, batch, user_id)
+    return stats
+
+
+def load_asset_catalog(db: Session, batch: ImportBatch) -> dict:
+    from app.models import AssetClass, AssetItem
+
+    stats: dict = defaultdict(int)
+    classes = {c.name.upper(): c for c in db.scalars(select(AssetClass))}
+    items = {i.name.upper(): i for i in db.scalars(select(AssetItem))}
+    accounts = {a.code: a.id for a in db.scalars(select(Account))}
+    for row in _rows(db, batch.id, "ASSET_ITEM"):
+        d = row.data
+        klass = classes.get(d["asset_class"].upper())
+        if klass is None:
+            klass = AssetClass(name=d["asset_class"], account_id=accounts.get(d.get("account") or ""))
+            db.add(klass)
+            db.flush()
+            classes[klass.name.upper()] = klass
+            stats["classes_created"] += 1
+        elif klass.account_id is None and d.get("account") in accounts:
+            klass.account_id = accounts[d["account"]]
+        item = items.get(d["name"])
+        if item is None:
+            item = AssetItem(name=d["name"], asset_class_id=klass.id)
+            db.add(item)
+            items[d["name"]] = item
+            stats["items_created"] += 1
+        elif item.asset_class_id != klass.id:
+            item.asset_class_id = klass.id
+            stats["items_updated"] += 1
+    db.flush()
+    return dict(stats)
+
+
+def load_capex_items(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
+    """Solicitações vindas do template substituem as que vieram de template antes (no mesmo CC);
+    as cadastradas no sistema são preservadas. Linhas de projeto com o mesmo tipo e justificativa viram
+    uma única solicitação com vários itens; aquisições avulsas, uma solicitação por linha."""
+    from app.domain.workflow import EDITABLE
+    from app.models import AssetItem, CapexProject, Company
+    from app.services import capex as capex_svc
+    from app.services import opex as opex_svc
+
+    rows = _rows(db, batch.id, "CAPEX_ITEM")
+    if not rows:
+        return {}
+    ctx = opex_svc.context(db)
+    companies = {c.code: c.id for c in db.scalars(select(Company))}
+    accounts = {a.code: a.id for a in db.scalars(select(Account))}
+    assets = {i.name.upper(): i.id for i in db.scalars(select(AssetItem))}
+    by_cc: dict[tuple, list[ImportRow]] = defaultdict(list)
+    for row in rows:
+        by_cc[(row.data["company"], row.data["cost_center"])].append(row)
+    stats: dict = defaultdict(int)
+    for (company, cc_code), cc_rows in by_cc.items():
+        company_id = companies[company]
+        cc = db.scalar(select(CostCenter).where(CostCenter.company_id == company_id, CostCenter.code == cc_code))
+        sub = opex_svc.get_submission(db, ctx, cc.id, module="CAPEX")
+        if sub.status not in EDITABLE:
+            stats["cost_centers_locked"] += 1
+            continue
+        for old in db.scalars(select(CapexProject).where(CapexProject.submission_id == sub.id)):
+            if (old.attributes or {}).get("source") == "TEMPLATE":
+                db.delete(old)
+                stats["requests_replaced"] += 1
+        db.flush()
+        groups: dict[tuple, list[ImportRow]] = defaultdict(list)
+        for row in cc_rows:
+            d = row.data
+            key = (
+                ("P", d.get("branch"), d.get("project_type"), (d.get("justification") or "").strip().upper())
+                if d["is_project"]
+                else ("A", row.row_number)
+            )
+            groups[key].append(row)
+        total = Decimal("0")
+        for group in groups.values():
+            first = group[0].data
+            branch_id = None
+            if first.get("branch"):
+                branch_id = db.scalar(
+                    select(Branch.id).where(Branch.company_id == company_id, Branch.code == first["branch"])
+                )
+            title = first.get("description") or first["item"]
+            project = capex_svc.create_project(
+                db,
+                ctx,
+                sub,
+                {
+                    "title": title[:200],
+                    "is_project": first["is_project"],
+                    "project_type_code": first.get("project_type"),
+                    "branch_id": branch_id,
+                    "description": first.get("description"),
+                    "justification": first.get("justification"),
+                },
+                user_id,
+                attributes={
+                    "source": "TEMPLATE",
+                    "sheet": group[0].sheet,
+                    "rows": [r.row_number for r in group],
+                    "import_batch": batch.id,
+                },
+            )
+            for row in group:
+                d = row.data
+                item = capex_svc.add_item(
+                    db,
+                    ctx,
+                    project,
+                    {
+                        "account_id": accounts[d["account"]],
+                        "asset_item_id": assets.get((d["item"] or "").upper()),
+                        "item_name": d["item"],
+                        "description": d.get("description"),
+                        "unit_value": Decimal(d["unit_value"]),
+                        "quantity": Decimal(d["quantity"]),
+                        "useful_life_months": d.get("useful_life_months"),
+                        "values": d["values"],
+                    },
+                )
+                total += item.total_value
+                stats["items_created"] += 1
+            stats["requests_created"] += 1
+        audit.record(
+            db,
+            user_id=user_id,
+            action="IMPORT_CAPEX",
+            entity_type="budget_submission",
+            entity_id=sub.id,
+            after={"items": len(cc_rows), "total": str(total), "import_batch": batch.id},
+        )
+        stats["cost_centers"] += 1
+    db.flush()
+    return dict(stats)
+
+
 LOADERS = {
     "OPEX_TEMPLATE": load_opex_template,
+    "CAPEX_TEMPLATE": load_capex_template,
     "MASTER_DATA": load_master,
     "COST_CENTERS": load_master,
     "ACCOUNTS": load_master,

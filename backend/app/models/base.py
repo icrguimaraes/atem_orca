@@ -93,6 +93,7 @@ class DatasetType(StrEnum):
     EMPLOYEES = "EMPLOYEES"
     MACRO_ASSUMPTIONS = "MACRO_ASSUMPTIONS"
     OPEX_TEMPLATE = "OPEX_TEMPLATE"
+    CAPEX_TEMPLATE = "CAPEX_TEMPLATE"
 
 
 class MovementType(StrEnum):

@@ -234,7 +234,7 @@ Edição só em DRAFT/IN_PROGRESS/ADJUSTMENT_REQUESTED. **Congelamento:** ao con
 | Regras (simulação) | `POST /rules/travel`, `/rules/event`, `/rules/capex-item`, `/rules/personnel-projection` | 1 |
 | OPEX | `/opex/summary`, `/opex/cost-centers/{cc}` (abre/cria), `/opex/submissions/{id}/accounts` (2025R → 2026R/anualizado → 2026O → 2027P com alertas), `.../lines` (GENERIC/TRAVEL/EVENT), `/opex/lines/{id}`, `.../justifications/{conta}`, `/opex/options` | 2 ✅ |
 | Workflow | `POST /opex/submissions/{id}/actions/{submit\|recall\|start_review\|request_adjustment\|approve\|reopen\|consolidate}`, `.../events`, `.../package-reviews/{pacote}`, `/opex/review-queue` | 2 ✅ |
-| CAPEX | `/submissions/{id}/capex-projects`, itens, cronograma | 3 |
+| CAPEX | `/capex/summary`, `/capex/cost-centers/{id}`, `/capex/submissions/{id}/view`, `/projects`, `/items`, `/actions/{acao}`, `/options` | 3 |
 | Pessoal | `/employees`, `/submissions/{id}/movements`, `/personnel/scenarios`, `/personnel/what-if`, `/personnel/headcount`, `/personnel/terminations` | 4 |
 | Painel | `/dashboard/overview` (KPIs, mensal, pacotes, rankings, com filtros e escopo do usuário), `/dashboard/data-quality` | 1 ✅ |
 | Alertas/Export | `/attention-points`, `/exports/{tipo}.xlsx` | 5 |
@@ -290,7 +290,7 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 |---|---|---|
 | 1 — Fundação | Arquitetura, banco completo (todas as entidades), auth/RBAC, cadastros, ciclos/parâmetros, importação (mestres, realizado template/KSB1, orçamento de referência, colaboradores, premissas) com validação/prévia/versão, auditoria, regras de cálculo puras + testes, deploy Railway | **entregue** |
 | 2 — OPEX | Histórico comparativo por conta; grade de preenchimento por pacote (colar do Excel, ÷12, média 2026); calculadoras de viagem e evento; justificativas obrigatórias; workflow + validação GMD Tipo 1; fila do gestor de pacote | **entregue** |
-| 3 — CAPEX | Projetos/itens/cronograma, catálogo de ativos, bloqueio por inconsistência | próxima |
+| 3 — CAPEX | Projetos/itens/cronograma, catálogo de ativos, bloqueio por inconsistência | concluída |
 | 4 — Pessoal | Quadro, movimentos, what-if, admissões/desligamentos, headcount | |
 | 5 — Consolidação | Dashboard executivo, variações, exportações xlsx, consolidação final e versões | |
 
@@ -315,3 +315,14 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 - **Evento:** alimentação por pessoa (Interno/Externo, lista parametrizável) + materiais, no mês do evento.
 - **GMD:** ao enviar, cada pacote **Tipo 1** presente recebe validação pendente; gestor do pacote valida ou pede ajuste (volta para o gestor); a aprovação exige todos os Tipo 1 validados. Tipo 2 é consultivo.
 - **Auditoria:** cada linha criada/alterada/excluída, justificativa e transição de workflow.
+
+## 13. Regras implementadas na Fase 3 (CAPEX)
+
+- **Orçamento CAPEX por CC** é uma `budget_submission` própria (`module = CAPEX`), com o mesmo workflow do OPEX e prazo `capex_deadline`. OPEX e CAPEX do mesmo CC andam de forma independente.
+- **Solicitação** (`capex_projects`): projeto (vários itens, tipo e justificativa obrigatórios, redução de custo / receita esperada) ou aquisição avulsa. Código sequencial `CPX-001` por CC. `attributes.source` = `TEMPLATE` ou `SYSTEM`.
+- **Item** (`capex_items`): conta de ativo (natureza CAPEX), item do catálogo opcional, `total = vlr unit × qtd`, vida útil, cronograma mensal.
+- **Pendências críticas** (bloqueiam envio **e** aprovação): cronograma ≠ total (tolerância R$ 0,01), valor/quantidade inválidos, projeto sem tipo ou sem justificativa, solicitação sem itens.
+- **Avisos** (não bloqueiam): valor unitário ≤ `capex.min_unit_value` (possível OPEX), vida útil ≤ `capex.min_useful_life_months`, aquisição sem justificativa.
+- **Catálogo de ativos**: `asset_items` → `asset_classes` → conta. Ao escolher o item, a conta é sugerida. Editável em Cadastros › Catálogo de ativos.
+- **Importação do template CAPEX** (detectada automaticamente, `CAPEX_TEMPLATE`): BD-Novo → cadastros; LISTA ATIVOS → catálogo (ignora `#REF!`, cria classes ausentes); Template_Orç → itens. Os meses são lidos por posição (o arquivo traz cabeçalhos datados de 2026) e valem para o ano do ciclo. Linhas de projeto com mesmo tipo, filial e justificativa viram uma solicitação com vários itens; aquisições avulsas, uma por linha. Reimportar substitui só as solicitações vindas de template; as digitadas no sistema ficam. CC enviado/aprovado bloqueia a carga (`BUDGET_LOCKED`). Divergências de cronograma e valor baixo entram como aviso na importação e viram pendência no sistema.
+- Migração `0002`: `capex_projects.attributes`, `created_by`, `updated_by`.

@@ -367,3 +367,38 @@ export function StatusBar({ items }: { items: { key: string; label: string; coun
     </div>
   );
 }
+
+/** Ranking em barras horizontais de uma série, com participação no total. */
+export function RankBars({ rows, color = SERIES.ref, limit = 10 }: { rows: { label: string; sub?: string | null; value: number }[]; color?: string; limit?: number }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const total = rows.reduce((s, r) => s + Math.max(r.value, 0), 0) || 1;
+  const shown = rows.slice(0, limit);
+  const rest = rows.slice(limit).reduce((s, r) => s + r.value, 0);
+  const all = rest > 0 ? [...shown, { label: `Outros (${rows.length - limit})`, value: rest }] : shown;
+  const max = niceMax(Math.max(0, ...all.map((r) => r.value)));
+  return (
+    <div className="paired">
+      {all.map((r, i) => (
+        <div key={r.label} className={`paired-row ${hover === i ? "hover" : ""}`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+          <div className="paired-label" title={r.label}>
+            {r.label}
+            {"sub" in r && r.sub && <span className="muted small mono"> · {r.sub}</span>}
+          </div>
+          <div className="paired-bars">
+            <div className="paired-bar rank-bar" style={{ width: `${(Math.max(r.value, 0) / max) * 100}%`, background: color }} />
+          </div>
+          <div className="paired-value">
+            {fmtCompact(r.value)}
+            <span className="delta">{((r.value / total) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%</span>
+          </div>
+          {hover === i && (
+            <div className="tooltip tooltip-inline">
+              <strong>{r.label}</strong>
+              <span><i style={{ background: color }} />{fmtMoney(r.value)} · {((r.value / total) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% do total</span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}

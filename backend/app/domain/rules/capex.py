@@ -28,6 +28,12 @@ class CapexItemCheck:
         return not any(i.severity == "CRITICAL" for i in self.issues)
 
 
+def brl(value: Decimal) -> str:
+    """R$ 1.234,56 (mensagens para o usuário)."""
+    text = f"{abs(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{'-' if value < 0 else ''}R$ {text}"
+
+
 def item_total(unit_value: Decimal, quantity: Decimal) -> Decimal:
     """Excel: VLR TOTAL = VLR UNIT × QTD."""
     return money(Decimal(unit_value) * Decimal(quantity))
@@ -57,7 +63,7 @@ def check_item(
             Issue(
                 "CAPEX_SCHEDULE_MISMATCH",
                 "CRITICAL",
-                f"Distribuição mensal ({scheduled}) difere do valor total ({value}) em {diff}",
+                f"Cronograma ({brl(scheduled)}) difere do valor total ({brl(value)}) em {brl(diff)}",
             )
         )
     if 0 < unit_value <= min_unit_value:
@@ -65,7 +71,7 @@ def check_item(
             Issue(
                 "CAPEX_BELOW_MIN_VALUE",
                 "WARNING",
-                f"Valor unitário ≤ R$ {min_unit_value}: avaliar se é OPEX (bem de pequeno valor)",
+                f"Valor unitário até {brl(Decimal(min_unit_value))}: avaliar se é OPEX (bem de pequeno valor)",
             )
         )
     if useful_life_months is not None and useful_life_months <= 12:

@@ -71,16 +71,18 @@ def context(db: Session) -> Context:
     return Context(cycle, version, ref - 1, ref, cycle.fiscal_year, params)
 
 
-def get_submission(db: Session, ctx: Context, cost_center_id: int, *, create: bool = True) -> BudgetSubmission | None:
+def get_submission(
+    db: Session, ctx: Context, cost_center_id: int, *, create: bool = True, module: str = "OPEX"
+) -> BudgetSubmission | None:
     sub = db.scalar(
         select(BudgetSubmission).where(
             BudgetSubmission.version_id == ctx.version.id,
             BudgetSubmission.cost_center_id == cost_center_id,
-            BudgetSubmission.module == "OPEX",
+            BudgetSubmission.module == module,
         )
     )
     if sub is None and create:
-        sub = BudgetSubmission(version_id=ctx.version.id, cost_center_id=cost_center_id, module="OPEX", status="DRAFT")
+        sub = BudgetSubmission(version_id=ctx.version.id, cost_center_id=cost_center_id, module=module, status="DRAFT")
         db.add(sub)
         db.flush()
     return sub

@@ -138,6 +138,8 @@ export interface Comparison {
   master?: Comparison;
   actual?: Comparison | null;
   budget?: BudgetImportScope[];
+  module?: "CAPEX";
+  catalog?: { new: number; existing: number };
   no_changes: boolean;
   mode?: "MERGE" | "REPLACE";
   scopes?: ScopeComparison[];
@@ -259,4 +261,63 @@ export interface ReviewQueueItem {
 export interface WorkflowEventItem {
   action: string; from_status: string | null; to_status: string; to_label: string; comment: string | null;
   user: string | null; version: string | null; created_at: string;
+}
+
+// ---------------------------------------------------------------- CAPEX
+
+export interface CapexIssue { code: string; severity: "CRITICAL" | "WARNING"; message: string }
+export interface CapexItem {
+  id: number; project_id: number; account_id: number; account_code: string | null; account_name: string | null;
+  asset_item_id: number | null; item_name: string; description: string | null; unit_value: string; quantity: string;
+  total_value: string; useful_life_months: number | null; values: Record<string, string>; scheduled: string;
+  difference: string; issues: CapexIssue[];
+}
+export interface CapexProject {
+  id: number; code: string; branch_id: number | null; is_project: boolean; project_type_code: string | null;
+  title: string; description: string | null; justification: string | null; expected_cost_reduction: string | null;
+  expected_revenue: string | null; priority: string | null; budget_prev_year: string | null; observations: string | null;
+  source: "TEMPLATE" | "SYSTEM"; items: CapexItem[]; total: string; issues: CapexIssue[]; updated_at: string | null;
+}
+export interface CapexView {
+  prev_year: number; ref_year: number; target_year: number;
+  projects: CapexProject[];
+  accounts: { account_id: number; code: string; name: string; prev_actual: string; ref_actual: string; ref_budget: string; proposed: string }[];
+  monthly: string[];
+  by_type: { label: string; total: string }[];
+  totals: {
+    proposed: string; projects_total: string; requests: number; projects: number; items: number;
+    prev_actual: string; ref_actual: string; ref_budget: string;
+  };
+  issues: { critical: number; warning: number };
+}
+export interface CapexHeader {
+  submission_id: number; status: string; status_label: string;
+  cost_center: { id: number; code: string; name: string; company_id: number; company_code: string; manager_name: string | null };
+  cycle: { id: number; name: string; status: string; deadline: string | null };
+  version: string;
+  years: { prev: number; ref: number; target: number };
+  permissions: { edit: boolean; owner: boolean; global: boolean; cycle_blocked: boolean };
+  actions: OpexAction[];
+  submitted_at: string | null;
+}
+export interface CapexOptions {
+  accounts: { id: number; code: string; name: string }[];
+  asset_items: { id: number; name: string; asset_class: string | null; account_id: number | null }[];
+  branches: { id: number; code: string; name: string; company_id: number }[];
+  lookups: Record<string, { code: string; label: string }[]>;
+  params: { min_unit_value: string; min_useful_life_months: number };
+}
+export interface CapexSummaryRow {
+  cost_center_id: number; code: string; name: string; company_code: string; manager_name: string | null;
+  submission_id: number | null; status: string; status_label: string; requests: number; projects: number;
+  items: number; total: string; ref_actual: string; critical: number;
+}
+export interface CapexSummary {
+  cycle: { name: string; status: string; deadline: string | null };
+  years: { prev: number; ref: number; target: number };
+  status_counts: Record<string, number>;
+  rows: CapexSummaryRow[];
+  monthly: string[];
+  by_account: { code: string; label: string; total: string }[];
+  by_type: { label: string; total: string }[];
 }

@@ -5,6 +5,7 @@ import { ROLE_LABELS } from "../labels";
 const NAV = [
   { to: "/", label: "Painel", end: true },
   { to: "/orcamento", label: "Orçamento OPEX" },
+  { to: "/capex", label: "Orçamento CAPEX" },
   { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"] },
   { to: "/cadastros", label: "Cadastros" },
   { to: "/ciclo", label: "Ciclo e parâmetros" },
@@ -12,7 +13,7 @@ const NAV = [
   { to: "/auditoria", label: "Auditoria", roles: ["CONTROLLER"] },
 ];
 
-const SOON = ["CAPEX", "Pessoal", "Consolidação e exportação"];
+const SOON = ["Pessoal", "Consolidação e exportação"];
 
 export default function Layout() {
   const { user, logout, can } = useAuth();

@@ -5,12 +5,16 @@ import { RecordForm, type Field } from "../components/RecordForm";
 import { Badge, Card, Empty, Loading, PageHeader, SearchBox, useLoad } from "../components/ui";
 import { NATURE_LABELS, fmtInt } from "../labels";
 
-type Tab = "cc" | "accounts" | "packages" | "branches" | "companies";
+type Tab = "cc" | "accounts" | "packages" | "assets" | "branches" | "companies";
+
+interface AssetClassRow { id: number; name: string; account_id: number | null }
+interface AssetItemRow { id: number; name: string; asset_class_id: number }
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "cc", label: "Centros de custo" },
   { key: "accounts", label: "Contas contábeis" },
   { key: "packages", label: "Pacotes GMD" },
+  { key: "assets", label: "Catálogo de ativos" },
   { key: "branches", label: "Filiais" },
   { key: "companies", label: "Empresas" },
 ];
@@ -37,15 +41,17 @@ export default function MasterData() {
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<Editing | null>(null);
   const { data, reload } = useLoad(async () => {
-    const [companies, branches, ccs, accounts, packages, users] = await Promise.all([
+    const [companies, branches, ccs, accounts, packages, users, assetClasses, assetItems] = await Promise.all([
       api<Company[]>("/companies"),
       api<Branch[]>("/branches"),
       api<CostCenter[]>("/cost-centers"),
       api<Account[]>("/accounts?include_inactive=true"),
       api<Package[]>("/packages"),
       isAdmin ? api<User[]>("/users") : Promise.resolve([] as User[]),
+      api<AssetClassRow[]>("/asset-classes"),
+      api<AssetItemRow[]>("/asset-items"),
     ]);
-    return { companies, branches, ccs, accounts, packages, users };
+    return { companies, branches, ccs, accounts, packages, users, assetClasses, assetItems };
   }, [isAdmin]);
 
   const maps = useMemo(
@@ -53,6 +59,8 @@ export default function MasterData() {
       company: new Map(data?.companies.map((c) => [c.id, c]) ?? []),
       pkg: new Map(data?.packages.map((p) => [p.id, p]) ?? []),
       user: new Map(data?.users.map((u) => [u.id, u]) ?? []),
+      assetClass: new Map(data?.assetClasses.map((c) => [c.id, c]) ?? []),
+      account: new Map(data?.accounts.map((a) => [a.id, a]) ?? []),
     }),
     [data],
   );
@@ -111,6 +119,19 @@ export default function MasterData() {
         { key: "is_active", label: "Ativo", type: "checkbox" },
       ],
     }),
+    assets: (r?: AssetItemRow) => ({
+      title: r ? `Item ${r.name}` : "Novo item do catálogo de ativos",
+      endpoint: "/asset-items",
+      id: r?.id,
+      initial: r ?? { name: "", asset_class_id: data.assetClasses[0]?.id },
+      fields: [
+        { key: "name", label: "Item principal", type: "text", required: true },
+        {
+          key: "asset_class_id", label: "Classe de ativo (define a conta sugerida)", type: "select", required: true,
+          options: data.assetClasses.map((c) => ({ value: c.id, label: `${c.name}${c.account_id ? ` · ${maps.account.get(c.account_id)?.code ?? ""}` : ""}` })),
+        },
+      ],
+    }),
     branches: (r?: Branch) => ({
       title: r ? `Filial ${r.code}` : "Nova filial",
       endpoint: "/branches",
@@ -148,6 +169,7 @@ export default function MasterData() {
     cc: data.ccs.length,
     accounts: data.accounts.length,
     packages: data.packages.length,
+    assets: data.assetItems.length,
     branches: data.branches.length,
     companies: data.companies.length,
   };
@@ -218,6 +240,23 @@ export default function MasterData() {
                   active(p.is_active),
                   editCell(p),
                 ])}
+            />
+          )}
+          {tab === "assets" && (
+            <Table
+              head={["Item principal", "Classe de ativo", "Conta sugerida", ""]}
+              rows={data.assetItems
+                .filter((i) => matches(q, i.name, maps.assetClass.get(i.asset_class_id)?.name))
+                .map((i) => {
+                  const klass = maps.assetClass.get(i.asset_class_id);
+                  const acc = klass?.account_id ? maps.account.get(klass.account_id) : undefined;
+                  return [
+                    i.name,
+                    klass?.name ?? "—",
+                    acc ? <><span className="mono">{acc.code}</span> · {acc.name}</> : <Badge tone="warn">sem conta</Badge>,
+                    editCell(i),
+                  ];
+                })}
             />
           )}
           {tab === "branches" && (

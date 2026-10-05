@@ -1,5 +1,6 @@
 export const DATASET_LABELS: Record<string, string> = {
   OPEX_TEMPLATE: "Template OPEX preenchido (cadastros + realizado + orçamento 2027)",
+  CAPEX_TEMPLATE: "Template CAPEX preenchido (cadastros + catálogo de ativos + solicitações 2027)",
   MASTER_DATA: "Cadastros (filiais, CCs, contas)",
   COST_CENTERS: "Centros de custo",
   ACCOUNTS: "Contas contábeis",
@@ -12,6 +13,7 @@ export const DATASET_LABELS: Record<string, string> = {
 export const LAYOUT_LABELS: Record<string, string> = {
   TEMPLATE_BD: "Aba BD-Novo do template",
   TEMPLATE_OPEX: "Template OPEX 2027 (todas as abas)",
+  TEMPLATE_CAPEX: "Template CAPEX 2027 (todas as abas)",
   WIDE_MONTHLY: "Planilha mensal (colunas por mês)",
   SAP_KSB1: "Exportação SAP KSB1",
   TEMPLATE_QUADRO: "Quadro de funcionários",
@@ -127,6 +129,8 @@ export const FIELD_LABELS: Record<string, string> = {
 export const RECORD_TYPES: Record<string, string> = {
   FACT: "Lançamentos",
   BUDGET_LINE: "Linhas de orçamento 2027",
+  CAPEX_ITEM: "Itens de CAPEX 2027",
+  ASSET_ITEM: "Catálogo de ativos",
   BRANCH: "Filiais",
   COST_CENTER: "Centros de custo",
   ACCOUNT: "Contas",
@@ -176,7 +180,18 @@ export const ERROR_LABELS: Record<string, string> = {
   NO_COST_CENTER: "Sem centro de custo",
   YEAR_REQUIRED: "Ano não identificado",
   BUDGET_LOCKED: "Orçamento do CC já enviado/aprovado",
-  WRONG_NATURE: "Conta não é de OPEX",
+  WRONG_NATURE: "Conta de natureza diferente do módulo",
+  NEW_ASSET_CLASS: "Classe de ativo nova será criada",
+  UNKNOWN_PROJECT_TYPE: "Tipo de projeto não cadastrado",
+  CAPEX_SCHEDULE_MISMATCH: "Cronograma difere do valor total",
+  CAPEX_BELOW_MIN_VALUE: "Valor unitário abaixo do mínimo CAPEX",
+  CAPEX_SHORT_LIFE: "Vida útil curta para CAPEX",
+  CAPEX_NO_PROJECT_TYPE: "Projeto sem tipo",
+  CAPEX_NO_JUSTIFICATION: "Sem justificativa",
+  CAPEX_INVALID_VALUE: "Valor ou quantidade inválidos",
+  CAPEX_NO_ITEMS: "Solicitação sem itens",
+  NO_CAPEX_ITEMS: "Template sem itens de CAPEX",
+  NO_MONTHS: "Cronograma mensal não encontrado",
   NO_BUDGET_VALUES: "Template sem valores de orçamento",
   NO_CYCLE: "Sem ciclo orçamentário",
 };
