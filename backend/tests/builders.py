@@ -1,0 +1,146 @@
+"""Gera planilhas sintéticas no mesmo layout dos templates reais (sem dados pessoais)."""
+
+import io
+from datetime import datetime
+
+from openpyxl import Workbook
+
+
+def _bytes(wb: Workbook) -> bytes:
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def opex_template_bd() -> bytes:
+    """Aba BD-Novo: tabelas lado a lado a partir da linha 5 (CC em B, Filiais em E, Pacotes em H)."""
+    wb = Workbook()
+    wb.active.title = "Instruções"
+    ws = wb.create_sheet("BD-Novo")
+    ws["O4"], ws["R4"] = "VIAGENS", "MKT"
+    headers = {
+        "B5": "Centro de Custo",
+        "C5": "Denominação de centro de custos",
+        "E5": "Local de negócios",
+        "F5": "Filial",
+        "H5": "Descrição",
+        "I5": "Conta do Razão",
+        "J5": "Agrupamento DRE",
+        "K5": "Pacote GMD",
+        "L5": "Detalhamento",
+        "O5": "Cargos",
+        "P5": "Multiplicadores",
+    }
+    for cell, value in headers.items():
+        ws[cell] = value
+    ws["B6"], ws["C6"] = "1050101011", "DADOS E PROJ. APLICADOS A CONTROLADORIA"
+    ws["B7"], ws["C7"] = 1050101012, "CENTRO NOVO"  # código numérico (Excel)
+    for i, (code, name) in enumerate([("0010", "ARAUCARIA"), ("0001", "MANAUS"), ("0099", "NOVA FILIAL")], start=6):
+        ws[f"E{i}"], ws[f"F{i}"] = code, name
+    accounts = [
+        ("Hospedagem", "6010301001", "Despesas", "Viagens", 0),
+        ("Telefonia, Links e Internet", "6010301002", "Despesas", "DTI", "Links de Internet"),
+        ("Conta Nova Teste", "6010309999", "Despesas", "Pacote Inédito", 0),
+        ("Conta Inválida", "ABC", "Despesas", "Viagens", 0),
+    ]
+    for i, row in enumerate(accounts, start=6):
+        for col, value in zip("HIJKL", row, strict=True):
+            ws[f"{col}{i}"] = value
+    ws["O6"], ws["P6"] = "Anal./Espec./Coord.", 1
+    wb.create_sheet("Realizado 2026")["B3"] = "Empresa"
+    return _bytes(wb)
+
+
+def realizado_wide(rows: list[tuple], year: int = 2026, months: int = 8) -> bytes:
+    """Aba 'Realizado 2026' (tabela larga, cabeçalhos de mês como data)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Realizado {year}"
+    ws["B2"] = f"ATEM - REALIZADO {year}"
+    header = [
+        "Empresa",
+        "Filial",
+        "Nome Filial",
+        "Centro de Custos",
+        "Denominação do Centro de Custos",
+        "Gestor do CC",
+        "Conta Razão",
+        "Denominação da Conta do Razão",
+        "Pacotes Orçamento",
+    ]
+    header += [datetime(year, m, 1) for m in range(1, months + 1)] + [f"TOTAL REALIZADO {year}"]
+    ws.append([])
+    ws.append([None, *header])
+    for row in rows:
+        ws.append([None, *row])
+    return _bytes(wb)
+
+
+def ksb1_csv(lines: list[tuple]) -> bytes:
+    header = (
+        "Empresa;Centro de custo;Classe de custo;Denominação da classe de custo;Exercício;Período;"
+        "Data de lançamento;Nº documento;Valor/moeda ACC;Moeda;Texto;Fornecedor;Nome do fornecedor"
+    )
+    body = "\n".join(";".join("" if v is None else str(v) for v in line) for line in lines)
+    return (header + "\n" + body + "\n").encode("utf-8")
+
+
+def quadro_funcionarios(rows: list[tuple]) -> bytes:
+    """Layout do template Pessoal: resumo no topo, cabeçalho na linha 15."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "QUADRO FUNCIONARIOS"
+    ws["C8"], ws["C9"], ws["E9"] = "Custo Real", "Premissa", 0.05
+    ws["Y13"] = "6010103005"
+    ws["B14"], ws["I14"] = "DADOS DOS FUNCIONÁRIOS", "DADOS DA AÇÃO"
+    header = [
+        "MATRICULA",
+        "NOME",
+        "CARGO ATUAL",
+        "EMPRESA",
+        "DIVISÃO",
+        "CENTRO DE CUSTO",
+        "SALÁRIO MENSAL R$",
+        "AÇÃO",
+        "MÊS DA AÇÃO",
+        "NOVO CARGO",
+        "NOVO SALARIO",
+        "TIPO DE CONTRATO",
+        "AUXILIO CRECHE",
+        "VALE TRANSPORTE",
+    ]
+    for col, value in enumerate(header, start=2):
+        ws.cell(15, col, value)
+    for r, row in enumerate(rows, start=16):
+        for col, value in enumerate(row, start=2):
+            ws.cell(r, col, value)
+    return _bytes(wb)
+
+
+def premissas() -> bytes:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "PREMISSAS MACROECONOMICAS"
+    ws["B9"] = "Indicadores Macroeconômicos"
+    ws.append([])
+    ws["B10"], ws["C10"], ws["D10"], ws["E10"], ws["F10"] = (
+        "Indicador",
+        "Fonte e Informações Adicionais",
+        "Atualização",
+        2026,
+        2027,
+    )
+    ws["B11"], ws["C11"], ws["D11"], ws["E11"], ws["F11"] = "IPCA", "BACEN", datetime(2026, 9, 1), 0.04, 0.035
+    ws["B12"], ws["C12"], ws["E12"] = "PTAX", "Focus", 5.4
+    ws["B14"] = "Premissas de Negócio"
+    ws["B15"], ws["C15"], ws["D15"], ws["E15"], ws["F15"] = (
+        "Indicador",
+        "Fonte e Informações Adicionais",
+        "Atualização",
+        2026,
+        2027,
+    )
+    ws["B16"], ws["C16"], ws["E16"], ws["F16"] = "Volume de Vendas (k M³)", "Comercial", 2900, 3000
+    ws["B17"], ws["E17"], ws["F17"] = "Diesel", 2000, 2100
+    ws["B18"], ws["C18"], ws["E18"] = "ATEM", "Crescimento da rede", 88
+    return _bytes(wb)

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.env
+data/
+node_modules/
+frontend/dist/
+# Planilhas reais (dados pessoais/financeiros) não devem ser versionadas
+*.xlsx
+*.xls

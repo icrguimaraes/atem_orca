@@ -1,0 +1,61 @@
+from collections.abc import Callable
+
+from app.imports.base import ParseResult, Sheet, StructureError, norm
+from app.imports.parsers.financial import parse_ksb1, parse_wide
+from app.imports.parsers.master import parse_master
+from app.imports.parsers.people import parse_employees, parse_macro
+
+Parser = Callable[[list[Sheet], dict], ParseResult]
+
+PARSERS: dict[str, list[Parser]] = {
+    "EMPLOYEES": [parse_employees],
+    "MACRO_ASSUMPTIONS": [parse_macro],
+    "ACTUAL": [parse_ksb1, lambda s, o: parse_wide(s, o, "ACTUAL")],
+    "REFERENCE_BUDGET": [lambda s, o: parse_wide(s, o, "REFERENCE_BUDGET")],
+    "MASTER_DATA": [parse_master],
+    "COST_CENTERS": [parse_master],
+    "ACCOUNTS": [parse_master],
+}
+
+# Ordem de tentativa quando o usuário não informa o tipo (mais específico primeiro)
+AUTO_ORDER = ("EMPLOYEES", "MACRO_ASSUMPTIONS", "ACTUAL", "MASTER_DATA")
+
+
+def _sheet_hint(sheets: list[Sheet]) -> str | None:
+    names = {norm(s.name) for s in sheets}
+    if "quadro funcionarios" in names:
+        return "EMPLOYEES"
+    if "premissas macroeconomicas" in names:
+        return "MACRO_ASSUMPTIONS"
+    if any(n.startswith("realizado") for n in names) and not any(n.startswith("bd") for n in names):
+        return "ACTUAL"
+    if any(n.startswith("bd") for n in names):
+        return "MASTER_DATA"
+    return None
+
+
+def detect_and_parse(sheets: list[Sheet], dataset_type: str | None, options: dict) -> ParseResult:
+    """Identifica o tipo/layout do arquivo e devolve os registros lidos.
+
+    Com `dataset_type` informado, apenas os parsers daquele tipo são tentados; caso
+    contrário usa-se o nome das abas como pista e, por fim, tentativa em ordem.
+    """
+    candidates = [dataset_type] if dataset_type else []
+    if not candidates:
+        hint = _sheet_hint(sheets)
+        candidates = ([hint] if hint else []) + [t for t in AUTO_ORDER if t != hint]
+    last: ParseResult | None = None
+    for candidate in candidates:
+        if candidate not in PARSERS:
+            raise StructureError(f"Tipo de dados não suportado: {candidate}")
+        for parser in PARSERS[candidate]:
+            result = parser(sheets, options)
+            if result.records or result.structural:
+                result.dataset_type = candidate if dataset_type else result.dataset_type
+                return result
+            last = result
+    expected = dataset_type or "qualquer layout conhecido"
+    raise StructureError(
+        f"Estrutura não reconhecida para {expected}: cabeçalhos obrigatórios não encontrados"
+        + ("" if last is None else f" (último layout testado: {last.layout})")
+    )
