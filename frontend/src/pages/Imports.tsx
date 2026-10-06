@@ -12,7 +12,8 @@ const HELP: Record<string, string> = {
   CAPEX_TEMPLATE: "Template CAPEX 2027 preenchido: carrega cadastros (BD-Novo), o catálogo de ativos (LISTA ATIVOS) e cada linha da aba Template_Orç como item de CAPEX do centro de custo. Linhas de projeto com o mesmo tipo e justificativa viram uma solicitação; reimportar substitui só o que veio do template.",
   OPEX_TEMPLATE: "Template OPEX 2027 como volta do gestor: carrega cadastros (BD-Novo), o realizado da aba Realizado e os valores das abas I a XII como orçamento 2027 do centro de custo. Reimportar substitui só as linhas que vieram do template.",
   MASTER_DATA: "Aba BD-Novo dos templates ou planilha com Filiais / Centro de Custo / Conta do Razão.",
-  ACTUAL: "Layout da aba Realizado (Empresa, Filial, Centro de Custos, Conta Razão e uma coluna por mês) ou KSB1.",
+  ACTUAL:
+    "Layout da aba Realizado (Empresa, Filial, Centro de Custos, Conta Razão e uma coluna por mês) ou exportação SAP KSB1 (partidas individuais: Centro custo, Classe de custo, Valor/moeda objeto e Data de lançamento; subtotais e total geral são ignorados). O último mês com lançamento vira o mês fechado do ano, base da anualização.",
   REFERENCE_BUDGET: "Mesmo layout do realizado, com os valores orçados (ex.: Orçamento 2026).",
   EMPLOYEES: "Aba QUADRO FUNCIONARIOS (matrícula, nome, cargo, CC, salário, ação). As ações (PROMOVER, REMOVER, INCLUIR) e as vagas entram no orçamento de Pessoal do CC. Se o arquivo não tiver a coluna CENTRO DE CUSTO preenchida, informe o CC padrão.",
   MACRO_ASSUMPTIONS: "Aba PREMISSAS MACROECONOMICAS (indicador, fonte, anos).",

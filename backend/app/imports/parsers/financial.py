@@ -29,17 +29,29 @@ WIDE_ALIASES = {
     "total": ("Total Realizado 2025", "Total Realizado 2026", "Total Realizado", "Total Orçado", "Total"),
 }
 
+# A exportação do SAP abrevia os cabeçalhos ("Centro custo", "Denominação objeto", "Denom.classe custo");
+# "Centro" é a planta (C001 = filial 0001) — ver resolver.Dimensions.branch_id.
 KSB1_ALIASES = {
     "company": ("Empresa", "Empresa CO", "Código da empresa", "Area contab custos"),
-    "branch": ("Local de negócios", "Divisão", "Filial"),
-    "cost_center": ("Centro de custo", "Centro cst", "Centro de custos", "Objeto"),
-    "cost_center_name": ("Denominação do objeto", "Denominação centro de custo"),
+    "branch": ("Local de negócios", "Divisão", "Filial", "Centro"),
+    "cost_center": ("Centro de custo", "Centro custo", "Centro cst", "Centro de custos", "Objeto"),
+    "cost_center_name": ("Denominação do objeto", "Denominação objeto", "Denominação centro de custo"),
     "account": ("Classe de custo", "Classe custo", "Conta do Razão", "Conta Razão"),
-    "account_name": ("Denominação da classe de custo", "Denom classe custo", "Txt classe custo"),
+    "account_name": ("Denominação da classe de custo", "Denom classe custo", "Denom.classe custo", "Txt classe custo"),
     "year": ("Exercício", "Ano"),
     "period": ("Período", "Mês", "Período contábil"),
+    # a data de lançamento define o período; a data do documento é só reserva (ordem = prioridade)
     "posting_date": ("Data de lançamento", "Data lançamento", "Dt lançamento", "Data do documento"),
-    "document": ("Nº documento", "No documento", "Número documento", "Documento", "Nº doc ref", "Doc compras"),
+    "document": (
+        "Nº documento",
+        "No documento",
+        "Número documento",
+        "Documento",
+        "Nº doc.de referência",
+        "Nº doc de referência",
+        "Nº doc ref",
+        "Doc compras",
+    ),
     "document_type": ("Tipo de documento", "Tipo doc", "Ctg doc"),
     "amount": (
         "Valor/moeda ACC",
@@ -137,7 +149,7 @@ def parse_ksb1(sheets: list[Sheet], options: dict) -> ParseResult:
     """Exportação SAP KSB1 (partidas individuais de centro de custo)."""
     result = ParseResult("ACTUAL", "SAP_KSB1")
     for sheet in sheets:
-        table = find_table(sheet, KSB1_ALIASES, ("cost_center", "account", "amount"))
+        table = find_table(sheet, KSB1_ALIASES, ("cost_center", "account", "amount"), prefer_alias_order=True)
         if table is None or not ({"year", "period"} <= table.columns.keys() or "posting_date" in table.columns):
             continue
         result.meta["sheet"] = sheet.name
@@ -146,8 +158,11 @@ def parse_ksb1(sheets: list[Sheet], options: dict) -> ParseResult:
                 continue
             rec = Record("FACT", sheet.name, row_no, {})
             rec.data.update(_identity(rec, table, row))
-            if rec.data["cost_center"] is None and rec.data["account"] is None:
-                continue  # linhas de total/subtotal do relatório
+            dated = any(
+                table.value(row, k) not in (None, "") for k in ("posting_date", "year", "period") if k in table.columns
+            )
+            if rec.data["account"] is None and not dated:
+                continue  # total geral ou subtotal por CC do relatório (só CC e valor preenchidos)
             try:
                 amount = to_decimal(table.value(row, "amount"))
             except ValueError as exc:
@@ -185,12 +200,18 @@ def parse_ksb1(sheets: list[Sheet], options: dict) -> ParseResult:
                     "vendor_name": clean_str(table.value(row, "vendor_name")),
                 }
             )
-            if rec.data["document"]:
-                rec.natural_key = "|".join(
-                    str(rec.data[k]) for k in ("company", "cost_center", "account", "document", "amount", "text")
-                )
+            # Sem chave natural: cada partida individual é um fato. Linhas idênticas (mesmo documento,
+            # conta, valor e texto) são comuns e legítimas — ex.: depreciação de dois ativos iguais.
             result.records.append(rec)
         years = {r.data["year"] for r in result.records if r.data.get("year")}
         result.meta["years"] = sorted(years)
+        # último mês com lançamento por ano: vira o mês fechado da versão carregada (anualização)
+        result.meta["last_periods"] = {
+            str(y): max(
+                (r.data["period"] for r in result.records if r.data.get("year") == y and r.data.get("period")),
+                default=None,
+            )
+            for y in sorted(years)
+        }
         return result
     return result

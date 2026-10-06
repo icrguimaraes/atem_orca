@@ -455,3 +455,74 @@ def capex_template_filled(cc: str = "1050101011") -> bytes:
     )
     lista.append(["DRONE", "Classe Nova", "1020601003", None])
     return _bytes(wb)
+
+
+KSB1_EXPORT_HEADER = [
+    "Empresa",
+    "Centro",
+    "Centro custo",
+    "Denominação objeto",
+    "Classe de custo",
+    "Denom.classe custo",
+    "Denominação",
+    "Documento de compras",
+    "Texto do pedido",
+    "Material",
+    "Texto breve material",
+    "Nº doc.de referência",
+    "Tipo de conta de contraparti",
+    "Conta lnçto.contrap.",
+    "Nº ref.estorno",
+    "Denom.conta de contrapartida",
+    "Nome do usuário",
+    "Valor/moeda objeto",
+    "Data do documento",
+    "Data de lançamento",
+    "Qtd.total entrada",
+    "Unid.medida lançada",
+    "Data de entrada",
+    "Hora do registro",
+]
+
+
+def ksb1_export_xlsx(rows: list[dict], subtotals: dict[str, float] | None = None, total: float | None = None) -> bytes:
+    """Exportação SAP KSB1 em xlsx (aba "Data", cabeçalhos abreviados, planta em "Centro", duas datas,
+    subtotais por centro de custo e total geral só com o valor preenchido)."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Data"
+    ws.append(KSB1_EXPORT_HEADER)
+    for row in rows:
+        ws.append(
+            [
+                row.get("company", "1001"),
+                row.get("plant", "C001"),
+                row["cost_center"],
+                row.get("cost_center_name", "CENTRO"),
+                row["account"],
+                row.get("account_name", "CONTA"),
+                row.get("text", "Lançamento"),
+                None,
+                None,
+                None,
+                None,
+                row.get("document", "5100001"),
+                "S",
+                "2010501001",
+                None,
+                "Contrapartida",
+                "USUARIO",
+                row["amount"],
+                row.get("document_date"),
+                row.get("posting_date"),
+                0,
+                None,
+                row.get("posting_date"),
+                "10:00:00",
+            ]
+        )
+    for cc, amount in (subtotals or {}).items():
+        ws.append([None, None, cc] + [None] * 14 + [amount] + [None] * 6)
+    if total is not None:
+        ws.append([None] * 17 + [total] + [None] * 6)
+    return _bytes(wb)

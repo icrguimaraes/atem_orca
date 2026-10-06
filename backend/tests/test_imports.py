@@ -1,4 +1,5 @@
 import io
+from datetime import datetime
 from decimal import Decimal
 
 from openpyxl import load_workbook
@@ -312,22 +313,92 @@ def test_ksb1_csv(client, admin, run_worker, db):
             "Hotel",
             "100200",
             "HOTEL X",
-        ),  # duplicado
+        ),  # partida idêntica à primeira: legítima no KSB1 (não é deduplicada)
         ("1001", None, None, None, None, None, None, None, "1.334,56", None, "Total", None, None),  # subtotal
     ]
     batch_id = upload(client, admin, builders.ksb1_csv(lines), "ksb1_2025.csv")
     run_worker()
     b = status(client, admin, batch_id)
     assert b["layout"] == "SAP_KSB1" and b["dataset_type"] == "ACTUAL"
-    assert (b["valid_rows"], b["duplicate_rows"]) == (2, 1)
+    assert (b["valid_rows"], b["duplicate_rows"]) == (3, 0)
     client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin)
     run_worker()
     entries = db.scalars(select(ActualEntry).order_by(ActualEntry.period)).all()
     assert [(e.period, e.amount, e.source) for e in entries] == [
         (3, Decimal("1234.56"), "SAP_KSB1"),
+        (3, Decimal("1234.56"), "SAP_KSB1"),
         (12, Decimal("100.00"), "SAP_KSB1"),
     ]
     assert entries[0].vendor_name == "HOTEL X" and entries[0].document_number == "5100001"
+
+
+def test_ksb1_sap_export_xlsx(client, admin, run_worker, db):
+    """Layout real da exportação KSB1: cabeçalhos abreviados, planta, duas datas, subtotais e total geral."""
+    _seed_cc(client, admin, run_worker)
+    rows = [
+        # período pela Data de lançamento (setembro), não pela Data do documento (agosto)
+        {
+            "cost_center": "1050101011",
+            "account": "6010301001",
+            "amount": 117.62,
+            "document_date": datetime(2026, 8, 31),
+            "posting_date": datetime(2026, 9, 2),
+        },
+        {
+            "cost_center": "1050101011",
+            "account": "6010301001",
+            "amount": 117.62,
+            "document_date": datetime(2026, 8, 31),
+            "posting_date": datetime(2026, 9, 2),
+        },  # idêntica: as duas partidas entram
+        {
+            "cost_center": "1050101011",
+            "account": "6010301001",
+            "plant": "C999",  # planta sem filial correspondente: aviso, fica sem filial
+            "amount": 100,
+            "document_date": datetime(2026, 1, 10),
+            "posting_date": datetime(2026, 1, 10),
+        },
+        {
+            "cost_center": "1050101011",
+            "account": "6010399999",  # conta nova: criada com o nome do arquivo
+            "account_name": "Conta Nova KSB1",
+            "plant": None,
+            "amount": 50,
+            "document_date": datetime(2025, 12, 31),
+            "posting_date": datetime(2025, 12, 31),
+        },
+    ]
+    content = builders.ksb1_export_xlsx(rows, subtotals={"1050101011": 385.24}, total=385.24)
+    batch_id = upload(client, admin, content, "KSB1 2025 a 2026.xlsx", create_missing_dimensions="true")
+    run_worker()
+    b = status(client, admin, batch_id)
+    assert b["status"] == "VALIDATED", b
+    assert b["layout"] == "SAP_KSB1" and b["dataset_type"] == "ACTUAL"  # detecção automática
+    assert (b["valid_rows"], b["duplicate_rows"], b["error_rows"]) == (4, 0, 0)  # subtotal e total ignorados
+    resp = client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin)
+    assert resp.status_code == 200, resp.text
+    run_worker()
+    assert status(client, admin, batch_id)["status"] == "COMPLETED"
+
+    manaus = db.scalar(select(Branch.id).where(Branch.code == "0001"))
+    entries = db.scalars(
+        select(ActualEntry).order_by(ActualEntry.fiscal_year, ActualEntry.period, ActualEntry.id)
+    ).all()
+    assert [(e.fiscal_year, e.period, e.amount, e.branch_id) for e in entries] == [
+        (2025, 12, Decimal("50.00"), None),
+        (2026, 1, Decimal("100.00"), None),
+        (2026, 9, Decimal("117.62"), manaus),
+        (2026, 9, Decimal("117.62"), manaus),
+    ]
+    assert entries[-1].document_number == "5100001" and entries[-1].source == "SAP_KSB1"
+    new_account = db.scalar(select(Account).where(Account.code == "6010399999"))
+    assert new_account is not None and new_account.name == "Conta Nova KSB1" and new_account.nature == "OPEX"
+    closed = {
+        v.scope_key: v.last_closed_period
+        for v in db.scalars(select(DatasetVersion).where(DatasetVersion.dataset_type == "ACTUAL"))
+    }
+    assert closed == {"ACTUAL:2025:1001": 12, "ACTUAL:2026:1001": 9}  # 2026 fecha em setembro
 
 
 def test_employees_and_vacancy(client, admin, run_worker, db):

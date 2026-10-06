@@ -276,7 +276,7 @@ def _ensure_dimensions(db: Session, d: dict, stats: dict) -> None:
             cc = CostCenter(
                 company_id=d["company_id"],
                 code=d["cost_center"],
-                name=d["cost_center_name"],
+                name=d.get("cost_center_name") or d["cost_center"],
                 manager_name=d.get("manager"),
             )
             db.add(cc)
@@ -293,7 +293,7 @@ def _ensure_dimensions(db: Session, d: dict, stats: dict) -> None:
                 )
             acc = Account(
                 code=d["account"],
-                name=d["account_name"],
+                name=d.get("account_name") or d["account"],
                 package_id=package_id,
                 nature=infer_nature(d["account"], None, d.get("package")),
             )

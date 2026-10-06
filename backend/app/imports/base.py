@@ -216,27 +216,32 @@ def find_table(
     required: tuple[str, ...],
     *,
     max_scan_rows: int = 40,
+    prefer_alias_order: bool = False,
 ) -> Table | None:
     """Procura a linha de cabeçalho que contenha todos os campos obrigatórios.
 
     `aliases` mapeia campo lógico → nomes aceitos. Colunas não mapeadas são devolvidas
-    em `unknown` (geram aviso de coluna desconhecida quando aplicável).
+    em `unknown` (geram aviso de coluna desconhecida quando aplicável). Quando duas colunas
+    casam com o mesmo campo, vale a primeira da planilha; com `prefer_alias_order`, vale a
+    que aparece antes na lista de aliases (ex.: "Data de lançamento" antes de "Data do documento").
     """
-    lookup = {norm(a): key for key, names in aliases.items() for a in names}
+    lookup = {norm(a): (key, rank) for key, names in aliases.items() for rank, a in enumerate(names)}
     for idx, row in sheet.iter_rows(1):
         if idx > max_scan_rows:
             break
         columns: dict[str, int] = {}
+        ranks: dict[str, int] = {}
         unknown: list[str] = []
         for i, cell in enumerate(row):
             header = norm(cell)
             if not header:
                 continue
-            key = lookup.get(header)
-            if key and key not in columns:
-                columns[key] = i + 1
-            elif key is None:
+            key, rank = lookup.get(header, (None, 0))
+            if key is None:
                 unknown.append(str(cell))
+            elif key not in columns or (prefer_alias_order and rank < ranks[key]):
+                columns[key] = i + 1
+                ranks[key] = rank
         if all(r in columns for r in required):
             return Table(sheet, idx, columns, unknown)
     return None

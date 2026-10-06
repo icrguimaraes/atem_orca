@@ -257,7 +257,7 @@ UPLOADED → VALIDATING → VALIDATED ──confirm──▶ PROCESSING → COMP
 | `MASTER_DATA` | `TEMPLATE_BD` | aba `BD-Novo` com tabelas Filiais/Centro_de_Custos/Pacotes |
 | `COST_CENTERS` / `ACCOUNTS` | `FLAT` | colunas `Centro de Custo`/`Conta do Razão` |
 | `ACTUAL` | `TEMPLATE_REALIZADO` | aba `Realizado AAAA` (formato largo mês a mês) |
-| `ACTUAL` | `SAP_KSB1` | colunas `Centro de custo`, `Classe de custo`, `Período`, `Exercício`, `Valor/moeda ACC` (aliases) |
+| `ACTUAL` | `SAP_KSB1` | colunas `Centro custo`/`Centro de custo`, `Classe de custo` e `Valor/moeda objeto`/`Valor/moeda ACC`, com `Data de lançamento` ou `Exercício` + `Período` (aliases abreviados da exportação SAP) |
 | `REFERENCE_BUDGET` | `TEMPLATE_REALIZADO`/`FLAT` | mesmo layout largo com cenário informado |
 | `EMPLOYEES` | `TEMPLATE_QUADRO` | aba `QUADRO FUNCIONARIOS` |
 | `MACRO_ASSUMPTIONS` | `TEMPLATE_PREMISSAS` | aba `PREMISSAS MACROECONOMICAS` |
@@ -270,6 +270,7 @@ UPLOADED → VALIDATING → VALIDATED ──confirm──▶ PROCESSING → COMP
    - `MERGE` (padrão) — grava as combinações filial × CC × conta do arquivo e **mantém** as demais da versão vigente (cargas parciais não apagam dados);
    - `REPLACE` — a base da empresa no ano passa a ser exatamente o arquivo; a prévia lista o que deixará de valer.
 8. **Confirmação** → transação única: cria `dataset_version` (n+1) por empresa × ano, marca a anterior `is_current=false` (não apaga), insere fatos, registra `audit_logs`. **Toda consulta soma apenas versões vigentes** — versões anteriores existem só para histórico.
+9. **KSB1 (partidas individuais do SAP)**: o período vem da **Data de lançamento** (a Data do documento é ignorada quando as duas existem); subtotais por CC e o total geral do relatório (só CC e valor preenchidos) são descartados; a coluna `Centro` (planta `C001`) vira a filial de mesmo número (`0001`; planta sem filial cadastrada fica sem filial, com aviso `UNKNOWN_BRANCH`); **não há deduplicação** — partidas idênticas no mesmo documento (mesma conta, valor e texto) são legítimas e todas entram; `Nº doc.de referência` é guardado como número do documento. O **mês fechado** da versão (`last_closed_period`, base da anualização e dos KPIs) é o último mês com lançamento no arquivo, por empresa × ano — uma carga de 2025 e 2026 até setembro fecha 2025 em 12 e 2026 em 9. Um arquivo com vários anos gera uma versão por ano; CCs e contas ausentes do cadastro entram com o nome do arquivo quando a opção "cadastrar automaticamente" está marcada (natureza pela faixa do código).
 
 Checagens pós-carga (`GET /dashboard/data-quality`): realizado dos dois anos carregado, escopos com mais de uma versão vigente, CCs sem usuário gestor, contas sem pacote, realizado em contas sem pacote, importações pendentes, arquivos repetidos, colaboradores sem CC.
 

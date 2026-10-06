@@ -1,5 +1,6 @@
 """Validação dos registros lidos contra os cadastros (empresa, filial, CC, conta, contrato)."""
 
+import re
 from collections import Counter
 from decimal import Decimal
 
@@ -36,6 +37,9 @@ class Dimensions:
             return None
         if value.isdigit():
             return self.branches.get((company_id, value.zfill(4)))
+        plant = re.fullmatch(r"[A-Za-z](\d{3,4})", value.strip())
+        if plant:  # planta SAP da exportação KSB1 ("C001") = filial com o mesmo número ("0001")
+            return self.branches.get((company_id, plant.group(1).zfill(4)))
         return self.branch_names.get((company_id, value.upper()))
 
 
