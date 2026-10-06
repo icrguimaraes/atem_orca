@@ -73,10 +73,10 @@ export default function Layout() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <BrandMark />
+          <BrandMark size={56} />
           <div>
-            <strong>ATEM</strong>
-            <span>Orçamento 2027</span>
+            <strong>Orçamento 2027</strong>
+            <span>Ciclo orçamentário</span>
           </div>
         </div>
         <nav id="main-nav">

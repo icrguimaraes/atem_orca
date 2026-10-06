@@ -1,19 +1,12 @@
-import { useState } from "react";
-
 /**
- * Marca do grupo. Usa a logo oficial em `public/brand/logo.svg` (ou .png) quando o arquivo existir;
- * sem o arquivo, cai no monograma "A" do design system.
+ * Marca do Grupo Atem (`public/brand/logo.png` e `logo-dark.png`, fundo transparente).
+ * O CSS mostra a variante conforme o tema (automático ou escolhido em data-theme).
  */
-export function BrandMark({ size = 40 }: { size?: number }) {
-  const [src, setSrc] = useState<string | null>("/brand/logo.svg");
-  if (!src) return <span className="brand-mark" style={{ width: size, height: size }}>A</span>;
+export function BrandMark({ size = 44 }: { size?: number }) {
   return (
-    <img
-      className="brand-logo"
-      src={src}
-      alt="Grupo Atem"
-      style={{ height: size }}
-      onError={() => setSrc(src.endsWith(".svg") ? "/brand/logo.png" : null)}
-    />
+    <span className="brand-logo" style={{ height: size }}>
+      <img className="logo-light" src="/brand/logo.png" alt="Grupo Atem" style={{ height: size }} />
+      <img className="logo-dark" src="/brand/logo-dark.png" alt="Grupo Atem" style={{ height: size }} />
+    </span>
   );
 }

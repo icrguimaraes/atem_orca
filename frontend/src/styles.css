@@ -128,16 +128,25 @@ a { color: inherit; }
   position: sticky; top: 0; height: 100vh;
 }
 .brand { display: flex; align-items: center; gap: 12px; color: var(--text); }
-.brand strong { display: block; font: 800 18px/22px var(--font-display); letter-spacing: 0.02em; }
-.brand span:not(.brand-mark) { display: block; font-size: 12px; color: var(--muted); }
+.sidebar .brand { flex-direction: column; align-items: flex-start; gap: 10px; }  /* logo em cima, texto embaixo (barra estreita) */
+.brand strong { display: block; font: 800 16px/20px var(--font-display); letter-spacing: 0.01em; }
+.brand > div > span { display: block; font-size: 12px; color: var(--muted); }
 .brand-mark {
   width: 40px; height: 40px; border-radius: 9999px; background: var(--brand); color: #fff;
   display: grid; place-items: center; font: 800 18px/1 var(--font-display);
 }
-.brand-logo { display: block; width: auto; max-width: 160px; object-fit: contain; }
+.brand-logo { display: block; flex: 0 0 auto; }
+.brand-logo img { display: block; width: auto; max-width: 160px; object-fit: contain; }
+.brand-logo .logo-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .brand-logo .logo-light { display: none; }
+  :root:not([data-theme="light"]) .brand-logo .logo-dark { display: block; }
+}
+:root[data-theme="dark"] .brand-logo .logo-light { display: none; }
+:root[data-theme="dark"] .brand-logo .logo-dark { display: block; }
 .tabbar, .sheet-backdrop, .mobile-only { display: none; }
 .brand-lg { color: var(--text); margin-bottom: 8px; }
-.brand-lg span:not(.brand-mark) { color: var(--muted); }
+.brand-lg > div > span { color: var(--muted); }
 .sidebar nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .sidebar nav a, .nav-disabled {
   padding: 10px 14px; border-radius: 9999px; text-decoration: none; color: var(--sidebar-text);
@@ -277,7 +286,10 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
   }
   .brand strong { font-size: 16px; line-height: 20px; }
   .brand .brand-mark { width: 32px; height: 32px; font-size: 15px; }
-  .brand .brand-logo { height: 32px !important; }
+  .brand .brand-logo, .brand .brand-logo img { height: 34px !important; }
+  .brand strong { font-size: 14px; line-height: 18px; }
+  .brand > div > span { display: none; }
+  .sidebar .brand { flex-direction: row; align-items: center; gap: 10px; }
   .sidebar nav, .sidebar-foot, .nav-section, .nav-disabled { display: none; }
   .content { padding: 20px 16px calc(84px + env(safe-area-inset-bottom)); gap: 16px; }
   h1 { font-size: 24px; line-height: 32px; }

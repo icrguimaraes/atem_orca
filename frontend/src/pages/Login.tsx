@@ -31,9 +31,9 @@ export default function Login() {
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
         <div className="brand brand-lg">
-          <BrandMark size={56} />
+          <BrandMark size={72} />
           <div>
-            <strong>ATEM</strong>
+            <strong>Orçamento 2027</strong>
             <span>Planejamento e Orçamento</span>
           </div>
         </div>

@@ -32,8 +32,8 @@ A interface fica na raiz do domínio; a API está documentada em `/api/docs` (Sw
 
 ### Logo do grupo
 
-Coloque a logo oficial em `frontend/public/brand/logo.svg` (ou `.png`); o app a usa na barra lateral, no celular e no login.
-Sem o arquivo, aparece o monograma "A".
+A logo oficial está em `frontend/public/brand/` (`logo.png`, `logo-dark.png` para o tema escuro e `favicon.png`); o app a usa na
+barra lateral, no celular e no login. Chegando o arquivo vetorial, substitua os três mantendo os nomes.
 
 ### Testes de interface (Playwright)
 
