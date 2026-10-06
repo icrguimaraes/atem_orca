@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { api } from "../api";
 import { BrandMark } from "./Brand";
 import { Alert, Modal } from "./ui";
@@ -64,10 +64,12 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
 export default function Layout() {
   const { user, logout, can } = useAuth();
   const [pwd, setPwd] = useState(false);
-  const [open, setOpen] = useState(false); // menu no celular
+  const [more, setMore] = useState(false); // folha "Mais" da barra inferior (celular)
+  const location = useLocation();
+  useEffect(() => setMore(false), [location.pathname]);
   return (
     <div className="shell">
-      <aside className={`sidebar ${open ? "open" : ""}`}>
+      <aside className="sidebar">
         <div className="brand">
           <BrandMark />
           <div>
@@ -75,19 +77,9 @@ export default function Layout() {
             <span>Orçamento 2027</span>
           </div>
         </div>
-        <button
-          className="menu-toggle"
-          type="button"
-          aria-label={open ? "Fechar menu" : "Abrir menu"}
-          aria-expanded={open}
-          aria-controls="main-nav"
-          onClick={() => setOpen((o) => !o)}
-        >
-          <span aria-hidden>{open ? "✕" : "☰"}</span> Menu
-        </button>
         <nav id="main-nav">
           {NAV.filter((n) => !n.roles || can(...n.roles)).map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")} onClick={() => setOpen(false)}>
+            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")}>
               {n.label}
             </NavLink>
           ))}
@@ -102,7 +94,7 @@ export default function Layout() {
           <div className="user-name">{user?.name}</div>
           <div className="muted small">{user?.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</div>
           <div className="inline-controls">
-            <button className="btn btn-ghost btn-sm" onClick={() => { setOpen(false); setPwd(true); }}>Alterar senha</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setPwd(true)}>Alterar senha</button>
             <button className="btn btn-ghost btn-sm" onClick={logout}>Sair</button>
           </div>
           {pwd && <PasswordModal onClose={() => setPwd(false)} />}
@@ -111,6 +103,65 @@ export default function Layout() {
       <main className="content">
         <Outlet />
       </main>
+      <MobileTabs can={can} more={more} setMore={setMore} onPassword={() => setPwd(true)} onLogout={logout} userName={user?.name} />
     </div>
+  );
+}
+
+// Barra de abas inferior (celular): destinos principais + "Mais" com o restante da navegação e a conta.
+const TABS = [
+  { to: "/", label: "Painel", end: true, icon: "M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
+  { to: "/orcamento", label: "OPEX", icon: "M4 19h16M6 16V9m4 7V5m4 11v-6m4 6V7" },
+  { to: "/capex", label: "CAPEX", icon: "M3 20h18M5 20V9l7-5 7 5v11M10 20v-6h4v6" },
+  { to: "/pessoal", label: "Pessoal", icon: "M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0zM4 21a8 8 0 0 1 16 0" },
+];
+
+function Icon({ d }: { d: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d={d} />
+    </svg>
+  );
+}
+
+function MobileTabs({ can, more, setMore, onPassword, onLogout, userName }: {
+  can: (...roles: string[]) => boolean; more: boolean; setMore: (v: boolean) => void;
+  onPassword: () => void; onLogout: () => void; userName?: string;
+}) {
+  const rest = NAV.filter((n) => !TABS.some((t) => t.to === n.to) && (!n.roles || can(...n.roles)));
+  return (
+    <>
+      {more && (
+        <div className="sheet-backdrop" onClick={() => setMore(false)}>
+          <div className="sheet" role="dialog" aria-label="Mais opções" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-handle" aria-hidden />
+            <nav className="sheet-nav">
+              {rest.map((n) => (
+                <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")}>
+                  {n.label}
+                </NavLink>
+              ))}
+            </nav>
+            <div className="sheet-foot">
+              <span className="user-name">{userName}</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setMore(false); onPassword(); }}>Alterar senha</button>
+              <button className="btn btn-ghost btn-sm" onClick={onLogout}>Sair</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <nav className="tabbar" aria-label="Navegação principal">
+        {TABS.map((t) => (
+          <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => (isActive && !more ? "active" : "")}>
+            <Icon d={t.icon} />
+            <span>{t.label}</span>
+          </NavLink>
+        ))}
+        <button type="button" className={more ? "active" : ""} aria-expanded={more} onClick={() => setMore(!more)}>
+          <Icon d="M5 12h.01M12 12h.01M19 12h.01" />
+          <span>Mais</span>
+        </button>
+      </nav>
+    </>
   );
 }

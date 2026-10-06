@@ -29,16 +29,18 @@ test.describe("todas as páginas abrem sem erro e sem overflow", () => {
   }
 });
 
-test("celular: menu abre, navega e fecha", async ({ page }, testInfo) => {
+test("celular: barra de abas e folha Mais", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile", "só no celular");
   await login(page);
-  const toggle = page.locator(".menu-toggle");
-  await expect(toggle).toBeVisible();
-  await expect(page.locator("#main-nav")).toBeHidden();
-  await toggle.click();
-  await expect(page.locator("#main-nav")).toBeVisible();
-  await page.locator("#main-nav a", { hasText: "Cadastros" }).click();
+  const tabbar = page.locator(".tabbar");
+  await expect(tabbar).toBeVisible();
+  await expect(page.locator(".sidebar nav")).toBeHidden();
+  await tabbar.locator("a", { hasText: "CAPEX" }).click();
+  await expect(page).toHaveURL(/\/capex/);
+  await tabbar.locator("button", { hasText: "Mais" }).click();
+  await expect(page.locator(".sheet")).toBeVisible();
+  await page.locator(".sheet-nav a", { hasText: "Cadastros" }).click();
   await expect(page).toHaveURL(/\/cadastros/);
-  await expect(page.locator("#main-nav")).toBeHidden();
+  await expect(page.locator(".sheet")).toHaveCount(0);
   await expectNoHorizontalOverflow(page);
 });
