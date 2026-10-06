@@ -28,3 +28,17 @@ test.describe("todas as páginas abrem sem erro e sem overflow", () => {
     });
   }
 });
+
+test("celular: menu abre, navega e fecha", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "só no celular");
+  await login(page);
+  const toggle = page.locator(".menu-toggle");
+  await expect(toggle).toBeVisible();
+  await expect(page.locator("#main-nav")).toBeHidden();
+  await toggle.click();
+  await expect(page.locator("#main-nav")).toBeVisible();
+  await page.locator("#main-nav a", { hasText: "Cadastros" }).click();
+  await expect(page).toHaveURL(/\/cadastros/);
+  await expect(page.locator("#main-nav")).toBeHidden();
+  await expectNoHorizontalOverflow(page);
+});

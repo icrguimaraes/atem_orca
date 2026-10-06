@@ -1,3 +1,4 @@
+import { BrandMark } from "../components/Brand";
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
@@ -30,7 +31,7 @@ export default function Login() {
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
         <div className="brand brand-lg">
-          <span className="brand-mark">A</span>
+          <BrandMark size={56} />
           <div>
             <strong>ATEM</strong>
             <span>Planejamento e Orçamento</span>

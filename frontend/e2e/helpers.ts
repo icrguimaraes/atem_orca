@@ -14,7 +14,8 @@ export async function login(page: Page) {
   await page.fill("input[type=email]", EMAIL);
   await page.fill("input[type=password]", PASSWORD);
   await page.click("button[type=submit], form button");
-  await expect(page.locator("nav a", { hasText: "Painel" })).toBeVisible();
+  await expect(page).not.toHaveURL(/\/login/);
+  await expect(page.locator("main h1").first()).toBeVisible();
 }
 
 /** Nenhum elemento fora da tabela rolável pode passar da largura da janela (regra do design system). */

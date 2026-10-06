@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { api } from "../api";
+import { BrandMark } from "./Brand";
 import { Alert, Modal } from "./ui";
 import { useAuth } from "../auth";
 import { ROLE_LABELS } from "../labels";
@@ -63,19 +64,30 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
 export default function Layout() {
   const { user, logout, can } = useAuth();
   const [pwd, setPwd] = useState(false);
+  const [open, setOpen] = useState(false); // menu no celular
   return (
     <div className="shell">
-      <aside className="sidebar">
+      <aside className={`sidebar ${open ? "open" : ""}`}>
         <div className="brand">
-          <span className="brand-mark">A</span>
+          <BrandMark />
           <div>
             <strong>ATEM</strong>
             <span>Orçamento 2027</span>
           </div>
         </div>
-        <nav>
+        <button
+          className="menu-toggle"
+          type="button"
+          aria-label={open ? "Fechar menu" : "Abrir menu"}
+          aria-expanded={open}
+          aria-controls="main-nav"
+          onClick={() => setOpen((o) => !o)}
+        >
+          <span aria-hidden>{open ? "✕" : "☰"}</span> Menu
+        </button>
+        <nav id="main-nav">
           {NAV.filter((n) => !n.roles || can(...n.roles)).map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")}>
+            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")} onClick={() => setOpen(false)}>
               {n.label}
             </NavLink>
           ))}
@@ -90,7 +102,7 @@ export default function Layout() {
           <div className="user-name">{user?.name}</div>
           <div className="muted small">{user?.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</div>
           <div className="inline-controls">
-            <button className="btn btn-ghost btn-sm" onClick={() => setPwd(true)}>Alterar senha</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setOpen(false); setPwd(true); }}>Alterar senha</button>
             <button className="btn btn-ghost btn-sm" onClick={logout}>Sair</button>
           </div>
           {pwd && <PasswordModal onClose={() => setPwd(false)} />}

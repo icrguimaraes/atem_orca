@@ -79,6 +79,11 @@ Shadow strategy is subtle and warm, using slightly tinted shadows to feel less c
 
 ## Aplicação no ATEM
 
+### Marca e celular
+
+- **Logo**: `frontend/public/brand/logo.svg` (ou `.png`) é usada por `components/Brand.tsx` na barra lateral, na barra superior do celular e no login; sem o arquivo, monograma "A" em coral.
+- **Celular (≤ 860 px)**: a barra lateral vira barra superior fixa (marca + botão "Menu"); a navegação e os dados do usuário abrem como gaveta abaixo da barra e fecham ao navegar. Filtros ocupam a largura toda; cards em uma coluna; tabelas rolam dentro de `.table-wrap`.
+
 - **Navegação:** mantida a barra lateral (o sistema tem 9+ seções; um header de 80px não comporta). Ela é branca com borda #DDDDDD; o item ativo usa o estilo de chip selecionado (#222222, texto branco, pílula). No celular vira faixa horizontal no topo.
 - **Coral:** só em botões primários (Enviar, Salvar, Confirmar), marca e seleção de texto. Abas, foco de campos e filtros usam #222222.
 - **Warning:** #E07912 em bordas e barras; em texto pequeno usa-se #B4600E (contraste ≥ 4,5:1 no branco).

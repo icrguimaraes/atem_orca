@@ -30,6 +30,11 @@ A interface fica na raiz do domínio; a API está documentada em `/api/docs` (Sw
 - Notificações por e-mail (prazos, ajuste solicitado, envio recebido).
 - Confirmar com a contabilidade as contas de pessoal da consolidação (parâmetros `personnel.*_account`).
 
+### Logo do grupo
+
+Coloque a logo oficial em `frontend/public/brand/logo.svg` (ou `.png`); o app a usa na barra lateral, no celular e no login.
+Sem o arquivo, aparece o monograma "A".
+
 ### Testes de interface (Playwright)
 
 Rodam contra um app no ar (local ou Railway) com um usuário válido:
