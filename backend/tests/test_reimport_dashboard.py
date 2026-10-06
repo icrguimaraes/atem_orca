@@ -112,7 +112,11 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     import_and_load(client, admin, run_worker, builders.realizado_wide(rows_2025, year=2025, months=8), "r2025.xlsx")
 
     data = client.get("/api/v1/dashboard/overview", headers=admin).json()
+    # padrão: ano mais recente com realizado (2026), comparado com 2025 no mesmo período (até AGO)
     assert data["reference_year"] == 2026 and data["last_closed_period"] == 8
+    assert data["selected_years"] == [2026] and data["previous_year"] == 2025 and data["has_prev"] is True
+    assert data["period"]["years_label"] == "2026" and data["period"]["base_label"] == "2025 até AGO"
+    assert data["period"]["compare_available"] is True and data["period"]["same_period_available"] is True
     assert data["kpis"]["ref_ytd"] == "430.00" and data["kpis"]["prev_ytd"] == "860.00"
     assert data["kpis"]["ytd_var_pct"] == "-0.5000"
     assert data["kpis"]["ref_annualized"] == "645.00"
@@ -120,45 +124,56 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     packages = {p["package"]: p for p in data["by_package"]}
     assert packages["Viagens"]["ref_ytd"] == "350.00" and packages["DTI"]["prev_total"] == "160.00"
     assert [c["code"] for c in data["top_cost_centers"]] == ["1050101011", "1050101012"]
-    assert data["selected_years"] == [2025, 2026] and data["previous_year"] == 2025
+    assert 2027 in data["available_years"] and data["target_year"] == 2027  # ano do ciclo (orçamento proposto)
 
-    # um ano só: sem comparação (o ano anterior não entra em nenhum número)
+    # comparação desligada: nada do ano anterior entra
+    off = client.get("/api/v1/dashboard/overview?years=2026&compare=false", headers=admin).json()
+    assert off["previous_year"] is None and off["has_prev"] is False and off["kpis"]["prev_ytd"] == "0.00"
+    assert off["kpis"]["ytd_var_pct"] is None and off["account_deltas"] == []
+    # 2025 sozinho: 2024 não existe, então não há comparação; o ano fecha em AGO
     only = client.get("/api/v1/dashboard/overview?years=2025", headers=admin).json()
     assert (only["reference_year"], only["previous_year"], only["selected_years"]) == (2025, None, [2025])
-    assert only["has_prev"] is False and only["last_closed_period"] == 8
-    assert only["kpis"]["ref_ytd"] == "860.00" and only["kpis"]["prev_ytd"] == "0.00"
-    assert only["kpis"]["ytd_var_pct"] is None and only["account_deltas"] == []
-    assert only["monthly"][0] == {"month": 1, "prev": "0.00", "ref": "220.00", "budget": "0.00"}
-    assert only["heatmap"]["year"] == 2025 and only["top_cost_centers"][0]["ytd_var_pct"] is None
-    # dois anos: o maior é a referência e o menor a base, qualquer que seja a ordem informada
+    assert only["period"]["compare_available"] is False and only["last_closed_period"] == 8
+    assert only["kpis"]["ref_ytd"] == "860.00" and only["monthly"][0]["ref"] == "220.00"
+    assert only["heatmap"]["years"] == [2025] and only["top_cost_centers"][0]["ytd_var_pct"] is None
+    # dois anos: os períodos são somados (sem comparação entre eles)
     both = client.get("/api/v1/dashboard/overview?years=2026,2025", headers=admin).json()
-    assert (both["reference_year"], both["previous_year"], both["kpis"]["ytd_var_pct"]) == (2026, 2025, "-0.5000")
-    # ano sem base carregada é ignorado
-    assert client.get("/api/v1/dashboard/overview?years=2019", headers=admin).json()["selected_years"] == [2025, 2026]
-    # filtro de meses: só janeiro e fevereiro entram nos números (2026: 110 + 210 = 320; 2025: o dobro)
-    jf = client.get("/api/v1/dashboard/overview?years=2025,2026&months=1,2", headers=admin).json()
+    assert both["selected_years"] == [2025, 2026] and both["previous_year"] is None
+    assert both["period"]["years_label"] == "2025 e 2026" and both["kpis"]["ref_ytd"] == "1290.00"
+    assert both["monthly"][0]["ref"] == "330.00" and both["period"]["compare_available"] is False
+    # ano sem base carregada é ignorado; filtro de meses limita todos os números (2026: 110 + 210; 2025: o dobro)
+    assert client.get("/api/v1/dashboard/overview?years=2019", headers=admin).json()["selected_years"] == [2026]
+    jf = client.get("/api/v1/dashboard/overview?years=2026&months=1,2", headers=admin).json()
     assert jf["selected_months"] == [1, 2] and jf["kpis"]["ref_ytd"] == "320.00" and jf["kpis"]["prev_ytd"] == "640.00"
+    assert jf["period"]["same_period_available"] is False
+    # ano-alvo do ciclo (orçamento proposto) é selecionável; sem lançamentos, soma zero
+    target = client.get("/api/v1/dashboard/overview?years=2027", headers=admin).json()
+    assert target["period"]["kind_label"] == "Orçamento 2027" and target["kpis"]["ref_ytd"] == "0.00"
 
     # tabela com drill-down: pacote → conta → centro de custo, base = ano anterior no mesmo período
-    bd = client.get("/api/v1/dashboard/breakdown?years=2025,2026", headers=admin).json()
-    assert bd["base"] == "prev" and bd["base_label"] == "Realizado 2025 até 8"
+    bd = client.get("/api/v1/dashboard/breakdown?years=2026", headers=admin).json()
+    assert bd["base"] == "prev" and bd["base_label"] == "2025 até AGO"
+    assert bd["thresholds"] == {"growth": 0.2, "reduction": 0.3}
     by_name = {r["name"]: r for r in bd["rows"]}
     assert by_name["Viagens"]["ref"] == "350.00" and by_name["Viagens"]["base"] == "700.00"
     assert by_name["Viagens"]["var_pct"] == "-0.5000" and by_name["Viagens"]["has_children"] is True
     assert bd["total"]["ref"] == "430.00" and bd["total"]["base"] == "860.00"
     pkg = by_name["Viagens"]["id"]
     accounts = client.get(
-        f"/api/v1/dashboard/breakdown?years=2025,2026&group_by=account&parent_package_id={pkg}", headers=admin
+        f"/api/v1/dashboard/breakdown?years=2026&group_by=account&parent_package_id={pkg}", headers=admin
     ).json()
     assert [(r["code"], r["ref"]) for r in accounts["rows"]] == [("6010301001", "350.00")]
     ccs = client.get(
-        f"/api/v1/dashboard/breakdown?years=2025,2026&group_by=cost_center&parent_account_id={accounts['rows'][0]['id']}",
+        f"/api/v1/dashboard/breakdown?years=2026&group_by=cost_center&parent_account_id={accounts['rows'][0]['id']}",
         headers=admin,
     ).json()
     assert [(r["code"], r["ref"], r["has_children"]) for r in ccs["rows"]] == [("1050101011", "350.00", False)]
-    # um ano só e sem orçado: sem base de comparação
-    solo = client.get("/api/v1/dashboard/breakdown?years=2026", headers=admin).json()
+    # sem comparação e sem orçado: sem base
+    solo = client.get("/api/v1/dashboard/breakdown?years=2026&compare=false", headers=admin).json()
     assert solo["base"] is None and solo["total"]["ref"] == "430.00" and solo["total"]["var_pct"] is None
+    # "mesmo período" desligado: a base é o ano cheio
+    full = client.get("/api/v1/dashboard/breakdown?years=2026&same_period=false", headers=admin).json()
+    assert full["base_label"] == "2025 (ano cheio)" and full["total"]["base"] == "860.00"
 
     # gestor só enxerga o próprio CC
     client.post(

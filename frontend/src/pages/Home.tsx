@@ -16,7 +16,7 @@ import {
 import { useAuth } from "../auth";
 import { BudgetProgressCard } from "../components/BudgetProgressCard";
 import { FilterBar } from "../components/FilterBar";
-import { CumulativeChart, DivergingBars, Heatmap, Legend, MonthlyChart, PairedBars, SERIES, TopBars, Waterfall } from "../components/charts";
+import { CumulativeChart, DivergingBars, Heatmap, Legend, MonthlyChart, SERIES, TopBars } from "../components/charts";
 import { DrillTable } from "../components/DrillTable";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import {
@@ -73,7 +73,7 @@ const SECTIONS = [
   { key: "table", label: "Tabela por pacote, conta e centro de custo" },
   { key: "cumulative", label: "Total acumulado" },
   { key: "top", label: "Maiores centros de custo e contas" },
-  { key: "packages", label: "Pacotes GMD e ponte entre os anos" },
+  { key: "packages", label: "Pacotes GMD e variação por pacote" },
   { key: "bridge", label: "Maiores aumentos e reduções por conta" },
   { key: "heatmap", label: "Mapa de calor" },
 ];
@@ -100,14 +100,13 @@ function SectionShell({ id, index, count, organizing, onMove, children }: {
   );
 }
 
-/** "janeiro a setembro/26", "janeiro, março e maio/26" ou "todos os meses de 2026". */
-function monthsLabel(months: number[], year: number, closed: number | null): string {
-  const yy = String(year).slice(-2);
-  if (!months.length) return closed && closed < 12 ? `janeiro a ${MONTH_FULL[closed - 1]}/${yy} (meses com realizado)` : `todos os meses de ${year}`;
+/** "janeiro a setembro", "janeiro, março e maio" ou "" (todos os meses). */
+function monthsLabel(months: number[]): string {
+  if (!months.length) return "";
   const contiguous = months.every((m, i) => i === 0 || m === months[i - 1] + 1);
-  if (contiguous && months.length > 1) return `${MONTH_FULL[months[0] - 1]} a ${MONTH_FULL[months[months.length - 1] - 1]}/${yy}`;
+  if (contiguous && months.length > 1) return `${MONTH_FULL[months[0] - 1]} a ${MONTH_FULL[months[months.length - 1] - 1]}`;
   const names = months.map((m) => MONTH_FULL[m - 1]);
-  return `${names.length > 1 ? `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}` : names[0]}/${yy}`;
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}` : names[0];
 }
 
 export default function Home() {
@@ -115,13 +114,16 @@ export default function Home() {
   const isController = can("CONTROLLER");
   const [filters, setFilters] = useState({ company_id: "", cost_center_id: "", package_id: "" });
   const [showTable, setShowTable] = useState(false);
-  // anos exibidos: vazio = padrão do servidor (mais recente com realizado + anterior); um ano = só ele; dois = comparação
+  // anos exibidos (somados): vazio = padrão do servidor (ano mais recente com realizado)
   const [years, setYears] = useState<number[]>([]);
   function toggleYear(y: number, current: number[]) {
     const base = years.length ? years : current;
     const next = base.includes(y) ? base.filter((x) => x !== y) : [...base, y];
-    if (next.length) setYears(next.sort());
+    if (next.length) setYears(next.sort((a, b) => a - b));
   }
+  // opções de comparação: com o ano anterior (só com um ano selecionado) e limitada ao mesmo período (até o mês fechado)
+  const [compare, setCompare] = useState(true);
+  const [samePeriod, setSamePeriod] = useState(true);
 
   const base = useLoad(async () => {
     const [cycles, companies, ccs, packages] = await Promise.all([
@@ -173,7 +175,13 @@ export default function Home() {
   );
 
   const query = new URLSearchParams(
-    Object.entries({ ...filters, years: years.join(","), months: months.join(",") }).filter(([, v]) => v),
+    Object.entries({
+      ...filters,
+      years: years.join(","),
+      months: months.join(","),
+      compare: compare ? "" : "false",
+      same_period: samePeriod ? "" : "false",
+    }).filter(([, v]) => v),
   ).toString();
   const inventory = useLoad(() => api<Inventory>("/dashboard/inventory"));
   const overview = useLoad(() => api<Overview>(`/dashboard/overview${query ? `?${query}` : ""}`), [query]);
@@ -191,9 +199,16 @@ export default function Home() {
   if (!base.data) return <Loading />;
   const { cycle, companies, ccs, packages } = base.data;
   const o = overview.data;
-  const monthName = o?.last_closed_period ? MONTHS[o.last_closed_period - 1] : null;
-  const prevLabel = o?.previous_year ? `${o.previous_year} até ${monthName ?? "—"}` : "";
-  const refLabel = o ? `${o.reference_year} até ${monthName ?? "—"}` : "";
+  const period = o?.period;
+  const yearsLabel = period?.years_label ?? String(o?.reference_year ?? "");
+  const kind = period?.kind_label ?? "Realizado";
+  // "2026 até SET" · "2025 e 2026 (2026 até SET)" · "2026 · janeiro a março"
+  const closedSuffix = period?.closed && period.closed < 12 && !months.length ? ` até ${period.closed_month}` : "";
+  const refLabel = o
+    ? (o.selected_years.length === 1 ? `${yearsLabel}${closedSuffix}` : `${yearsLabel}${closedSuffix ? ` (${o.reference_year}${closedSuffix})` : ""}`) +
+      (months.length ? ` · ${monthsLabel(months)}` : "")
+    : "";
+  const prevLabel = period?.base_label ?? "";
   const hasData = Boolean(o && (o.has_actual || o.has_budget));
   const shownYears = years.length ? years : (o?.selected_years ?? []);
   // cor do ano de comparação: verde-água (como o orçado no Power BI) quando ele é a única base; cinza quando há orçado
@@ -205,8 +220,8 @@ export default function Home() {
       <PageHeader
         title="Painel"
         subtitle={
-          o?.last_closed_period
-            ? `Olá, ${user?.name.split(" ")[0]}. Realizado ${o.reference_year} até ${monthName}${o.has_prev ? ` comparado ao mesmo período de ${o.previous_year}` : ""}.`
+          o && hasData
+            ? `Olá, ${user?.name.split(" ")[0]}. ${kind} ${refLabel}${o.has_prev ? ` comparado com ${prevLabel}` : ""}.`
             : `Olá, ${user?.name.split(" ")[0]}. ${cycle ? cycle.name : ""}`
         }
       />
@@ -235,39 +250,62 @@ export default function Home() {
             ],
           },
         ]}
-        extra={o && o.available_years.length > 1 && (
-          <div className="year-tabs" role="group" aria-label="Anos exibidos (um ano mostra só ele; dois comparam)" aria-busy={overview.loading}>
-            {[...o.available_years].sort().map((y) => {
-              const on = shownYears.includes(y); // estado local: o chip responde ao clique antes da resposta do servidor
-              return (
-                <button key={y} type="button" className={on ? "active" : ""} aria-pressed={on} onClick={() => toggleYear(y, o.selected_years)}>
-                  {y}
-                </button>
-              );
-            })}
-          </div>
-        )}
       />
 
-      {o && hasData && (
-        <div className="section-tools">
-          <div className="month-chips" role="group" aria-label="Meses exibidos">
-            <button type="button" className={months.length === 0 ? "active" : ""} aria-pressed={months.length === 0} onClick={() => setMonths([])}>
-              Todos
-            </button>
-            {MONTHS.map((m, i) => (
-              <button key={m} type="button" className={months.includes(i + 1) ? "active" : ""} aria-pressed={months.includes(i + 1)} onClick={() => toggleMonth(i + 1)}>
-                {m.charAt(0) + m.slice(1).toLowerCase()}
+      {o && (hasData || o.available_years.length > 0) && (
+        <>
+          <div className="chip-groups" aria-busy={overview.loading}>
+            <div className="year-tabs" role="group" aria-label="Anos exibidos (somados)">
+              <button
+                type="button"
+                className={shownYears.length === o.available_years.length ? "active" : ""}
+                aria-pressed={shownYears.length === o.available_years.length}
+                onClick={() => setYears([...o.available_years].sort((a, b) => a - b))}
+              >
+                Todos
               </button>
-            ))}
+              {[...o.available_years].sort((a, b) => a - b).map((y) => {
+                const on = shownYears.includes(y); // estado local: o chip responde ao clique antes da resposta do servidor
+                return (
+                  <button key={y} type="button" className={on ? "active" : ""} aria-pressed={on} onClick={() => toggleYear(y, o.selected_years)}>
+                    {y}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="month-chips" role="group" aria-label="Meses exibidos">
+              <button type="button" className={months.length === 0 ? "active" : ""} aria-pressed={months.length === 0} onClick={() => setMonths([])}>
+                Todos
+              </button>
+              {MONTHS.map((m, i) => (
+                <button key={m} type="button" className={months.includes(i + 1) ? "active" : ""} aria-pressed={months.includes(i + 1)} onClick={() => toggleMonth(i + 1)}>
+                  {m.charAt(0) + m.slice(1).toLowerCase()}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="inline-controls">
-            <span className="selection-note">Selecionado: {monthsLabel(months, o.reference_year, o.last_closed_period)}</span>
-            <button type="button" className="btn btn-ghost btn-sm" aria-pressed={organizing} onClick={() => setOrganizing(!organizing)}>
-              {organizing ? "Concluir" : "Organizar painel"}
-            </button>
+          <div className="section-tools">
+            <div className="toggle-options" role="group" aria-label="Opções de comparação">
+              <label className={period?.compare_available ? "" : "off"} title={period?.compare_available ? "" : "Disponível com um único ano selecionado e o ano anterior carregado"}>
+                <input type="checkbox" checked={compare} disabled={!period?.compare_available} onChange={(e) => setCompare(e.target.checked)} />
+                Comparar com o ano anterior
+              </label>
+              <label className={period?.same_period_available ? "" : "off"} title={period?.same_period_available ? "" : "Disponível na comparação de um ano em andamento, sem filtro de meses"}>
+                <input type="checkbox" checked={samePeriod} disabled={!period?.same_period_available} onChange={(e) => setSamePeriod(e.target.checked)} />
+                Mesmo período{period?.closed_month && (period.closed ?? 12) < 12 ? ` (até ${period.closed_month})` : ""}
+              </label>
+            </div>
+            <div className="inline-controls">
+              <span className="selection-note">
+                Selecionado: {kind} {refLabel}
+                {o.has_prev ? ` · base: ${prevLabel}` : ""}
+              </span>
+              <button type="button" className="btn btn-ghost btn-sm" aria-pressed={organizing} onClick={() => setOrganizing(!organizing)}>
+                {organizing ? "Concluir" : "Organizar painel"}
+              </button>
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {overview.error && <Alert>{overview.error}</Alert>}
@@ -281,39 +319,37 @@ export default function Home() {
       ) : (
         <div className={`panel-body${overview.loading ? " is-loading" : ""}`} aria-busy={overview.loading}>
           <div className="stats">
-            {o.has_prev && (
-              <>
-                <Stat label={`Realizado ${o.previous_year} (ano)`} value={fmtCompact(o.kpis.prev_total)} hint={fmtMoney(o.kpis.prev_total)} />
-                <Stat label={`Realizado ${prevLabel}`} value={fmtCompact(o.kpis.prev_ytd)} hint="base de comparação" />
-              </>
+            {o.has_prev && o.kpis.prev_total !== o.kpis.prev_ytd && (
+              <Stat label={`Realizado ${o.previous_year} (ano cheio)`} value={fmtCompact(o.kpis.prev_total)} hint={fmtMoney(o.kpis.prev_total)} />
             )}
+            {o.has_prev && <Stat label={`Realizado ${prevLabel}`} value={fmtCompact(o.kpis.prev_ytd)} hint="base de comparação" />}
             {o.has_actual && (
-              <Stat label={`Realizado ${refLabel}`} value={fmtCompact(o.kpis.ref_ytd)} hint={fmtMoney(o.kpis.ref_ytd)} />
+              <Stat label={`${kind} ${refLabel}`} value={fmtCompact(o.kpis.ref_ytd)} hint={fmtMoney(o.kpis.ref_ytd)} />
             )}
             {o.has_prev && o.has_actual && (
               <div className="stat stat-inline-delta">
-                <span className="stat-label">Variação no período</span>
+                <span className="stat-label">Variação</span>
                 <span className="stat-value"><Delta pct={o.kpis.ytd_var_pct} /></span>
-                <span className="stat-hint">{o.reference_year} vs {o.previous_year}, mesmos meses</span>
+                <span className="stat-hint">{yearsLabel} vs {prevLabel}</span>
               </div>
             )}
-            {o.has_actual && o.last_closed_period && (
+            {o.has_actual && o.selected_years.length === 1 && o.last_closed_period && !months.length && (
               <Stat
                 label="Média mensal"
                 value={fmtCompact(Number(o.kpis.ref_ytd) / o.last_closed_period)}
                 hint={`${o.last_closed_period} mês(es) com realizado`}
               />
             )}
-            {o.has_actual && o.last_closed_period !== 12 && !months.length && (
+            {o.has_actual && Number(o.kpis.ref_annualized) > 0 && (
               <Stat
-                label={`${o.reference_year} anualizado`}
+                label={`${yearsLabel} anualizado`}
                 value={fmtCompact(o.kpis.ref_annualized)}
                 hint={o.has_prev && o.kpis.annualized_vs_prev_pct !== null ? `${fmtPct(o.kpis.annualized_vs_prev_pct)} vs ${o.previous_year} cheio` : "projeção linear"}
               />
             )}
             {o.has_budget && (
               <Stat
-                label={`Orçado ${o.reference_year}`}
+                label={`Orçado ${yearsLabel}`}
                 value={fmtCompact(o.kpis.budget_total)}
                 hint={o.kpis.budget_consumption_pct !== null ? `realizado ${fmtPct(o.kpis.budget_consumption_pct)} vs orçado no período` : undefined}
               />
@@ -332,9 +368,9 @@ export default function Home() {
           >
             <Legend
               items={[
-                ...(o.has_prev ? [{ label: String(o.previous_year), color: prevColor }] : []),
-                ...(o.has_actual ? [{ label: String(o.reference_year), color: SERIES.ref }] : []),
-                ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget }] : []),
+                ...(o.has_prev ? [{ label: prevLabel, color: prevColor }] : []),
+                ...(o.has_actual ? [{ label: `${kind} ${yearsLabel}`, color: SERIES.ref }] : []),
+                ...(o.has_budget ? [{ label: `Orçado ${yearsLabel}`, color: SERIES.budget }] : []),
               ]}
             />
             {showTable ? (
@@ -343,9 +379,9 @@ export default function Home() {
                   <thead>
                     <tr>
                       <th>Mês</th>
-                      {o.has_prev && <th className="right">{o.previous_year}</th>}
-                      <th className="right">{o.reference_year}</th>
-                      {o.has_budget && <th className="right">Orçado {o.reference_year}</th>}
+                      {o.has_prev && <th className="right">{prevLabel}</th>}
+                      <th className="right">{yearsLabel}</th>
+                      {o.has_budget && <th className="right">Orçado {yearsLabel}</th>}
                       {o.has_prev && <th className="right">Var.</th>}
                     </tr>
                   </thead>
@@ -367,26 +403,26 @@ export default function Home() {
                 </table>
               </div>
             ) : (
-              <MonthlyChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} prevColor={prevColor} />
+              <MonthlyChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} prevColor={prevColor} refLabel={yearsLabel} prevLabel={prevLabel} />
             )}
           </Card>,
           )}
 
           {shell("table",
           <Card title={`Por pacote GMD, conta e centro de custo · ${refLabel}`}>
-            <DrillTable query={query} refLabel={`Realizado ${refLabel}`} />
+            <DrillTable query={query} refLabel={`${kind} ${refLabel}`} />
           </Card>,
           )}
 
           {shell("cumulative",
-          <Card title={`Total acumulado · ${o.reference_year}${o.has_budget ? " vs orçado" : o.has_prev ? ` vs ${o.previous_year}` : ""}`}>
+          <Card title={`Total acumulado · ${yearsLabel}${o.has_budget ? " vs orçado" : o.has_prev ? ` vs ${prevLabel}` : ""}`}>
             <Legend
               items={[
-                { label: `Realizado ${o.reference_year}`, color: SERIES.ref },
-                ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget }] : o.has_prev ? [{ label: `Realizado ${o.previous_year}`, color: prevColor }] : []),
+                { label: `${kind} ${yearsLabel}`, color: SERIES.ref },
+                ...(o.has_budget ? [{ label: `Orçado ${yearsLabel}`, color: SERIES.budget }] : o.has_prev ? [{ label: `Realizado ${prevLabel}`, color: prevColor }] : []),
               ]}
             />
-            <CumulativeChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} prevColor={prevColor} />
+            <CumulativeChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} prevColor={prevColor} refLabel={yearsLabel} prevLabel={prevLabel} />
           </Card>,
           )}
 
@@ -406,37 +442,37 @@ export default function Home() {
 
           {shell("packages",
           <div className="grid-2">
-            <Card title={`Por pacote GMD · acumulado até ${monthName ?? "—"}`}>
-              <Legend
-                items={[
-                  ...(o.has_prev ? [{ label: String(o.previous_year), color: prevColor }] : []),
-                  { label: String(o.reference_year), color: SERIES.ref },
-                ]}
-              />
-              {o.by_package.length ? (
-                <PairedBars
+            <Card title={`Por pacote GMD · ${refLabel}`}>
+              {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
+              {o.by_package.filter((p) => Number(p.ref_ytd) || Number(p.prev_ytd)).length ? (
+                <TopBars
+                  label={`${kind} ${refLabel}`}
                   prevColor={prevColor}
-                  prevLabel={prevLabel}
-                  refLabel={refLabel}
-                  rows={o.by_package.map((p) => ({
-                    label: p.package,
-                    prev: Number(p.prev_ytd),
-                    ref: Number(p.ref_ytd),
-                    note: p.ytd_var_pct !== null ? fmtPct(p.ytd_var_pct) : undefined,
-                  }))}
+                  prevLabel={o.has_prev ? prevLabel : null}
+                  rows={o.by_package
+                    .filter((p) => Number(p.ref_ytd) || Number(p.prev_ytd))
+                    .sort((a, b) => Number(b.ref_ytd) - Number(a.ref_ytd))
+                    .map((p) => ({
+                      label: p.package,
+                      value: Number(p.ref_ytd),
+                      prev: o.has_prev ? Number(p.prev_ytd) : undefined,
+                      note: o.has_prev && p.ytd_var_pct !== null ? fmtPct(p.ytd_var_pct) : undefined,
+                    }))}
                 />
               ) : (
                 <Empty>Sem dados.</Empty>
               )}
             </Card>
             {o.has_prev && o.has_actual && o.by_package.length > 0 && (
-              <Card title={`Ponte ${o.previous_year} → ${o.reference_year} por pacote · até ${monthName ?? "—"}`}>
-                <p className="muted small">De onde vem a variação: cada barra é o aumento (▲) ou redução (▼) do pacote no mesmo período.</p>
-                <Waterfall
-                  start={{ label: prevLabel, value: Number(o.kpis.prev_ytd) }}
-                  end={{ label: refLabel, value: Number(o.kpis.ref_ytd) }}
-                  steps={o.by_package
-                    .map((p) => ({ label: p.package, delta: Number(p.ref_ytd) - Number(p.prev_ytd) }))
+              <Card title={`Variação por pacote · ${yearsLabel} vs ${prevLabel}`}>
+                <p className="muted small">
+                  De {fmtMoney(o.kpis.prev_ytd)} para {fmtMoney(o.kpis.ref_ytd)}: cada barra é o aumento (vermelho) ou a redução (verde) do pacote.
+                </p>
+                <DivergingBars
+                  fromLabel={prevLabel}
+                  toLabel={`${kind} ${refLabel}`}
+                  rows={o.by_package
+                    .map((p) => ({ label: p.package, delta: Number(p.ref_ytd) - Number(p.prev_ytd), from: Number(p.prev_ytd), to: Number(p.ref_ytd) }))
                     .filter((p) => Math.abs(p.delta) > 0.5)
                     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))}
                 />
@@ -446,15 +482,17 @@ export default function Home() {
           )}
 
           {o.has_prev && o.has_actual && o.account_deltas.length > 0 && shell("bridge",
-            <Card title={`Maiores aumentos e reduções por conta · ${o.reference_year} vs ${o.previous_year}, até ${monthName ?? "—"}`}>
+            <Card title={`Maiores aumentos e reduções por conta · ${yearsLabel} vs ${prevLabel}`}>
               <DivergingBars
+                fromLabel={prevLabel}
+                toLabel={`${kind} ${refLabel}`}
                 rows={o.account_deltas.map((d) => ({ label: d.name, sub: d.code, delta: Number(d.delta), from: Number(d.prev_ytd), to: Number(d.ref_ytd) }))}
               />
             </Card>,
           )}
 
           {o.heatmap.rows.length > 0 && shell("heatmap",
-            <Card title={`Mapa de calor · maiores centros de custo × mês (${o.heatmap.year})`}>
+            <Card title={`Mapa de calor · maiores centros de custo × mês (${yearsLabel})`}>
               <Heatmap rows={o.heatmap.rows.map((r) => ({ label: r.name, sub: r.code, values: r.values.map(Number), total: Number(r.total) }))} />
             </Card>,
           )}

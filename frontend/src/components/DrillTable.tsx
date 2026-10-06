@@ -22,11 +22,23 @@ function sortRows(rows: BreakdownRow[], sort: Sort): BreakdownRow[] {
   return [...rows].sort(by);
 }
 
-/** Semáforo da variação: até 10 % verde, até 25 % amarelo, acima vermelho (em módulo). */
-function tone(pct: string | null): "good" | "warn" | "bad" | null {
+/** Semáforo da variação, com os limiares de alerta do ciclo (os mesmos do orçamento OPEX):
+ * vermelho acima do limite de crescimento (`alert.growth_pct`), amarelo abaixo do limite de redução
+ * (`alert.reduction_pct`, queda forte que pede atenção) e verde dentro da faixa. */
+function tone(pct: string | null, t: { growth: number; reduction: number }): "good" | "warn" | "bad" | null {
   if (pct === null) return null;
-  const n = Math.abs(Number(pct));
-  return n <= 0.1 ? "good" : n <= 0.25 ? "warn" : "bad";
+  const n = Number(pct);
+  return n > t.growth ? "bad" : n < -t.reduction ? "warn" : "good";
+}
+
+function VarCell({ pct, t }: { pct: string | null; t: { growth: number; reduction: number } }) {
+  const k = tone(pct, t);
+  return (
+    <span className="var-cell">
+      <span className={`dot ${k ?? "none"}`} aria-hidden="true" />
+      <span className="var-num">{pct !== null ? fmtPct(pct) : "—"}</span>
+    </span>
+  );
 }
 
 function childParams(level: number, row: BreakdownRow): string {
@@ -76,12 +88,13 @@ export function DrillTable({ query, refLabel }: { query: string; refLabel: strin
   if (!root.rows.length) return <Empty>Sem dados para os filtros.</Empty>;
   const hasBase = root.base !== null;
   const expanded = Object.keys(children).length > 0;
+  const th = root.thresholds;
+  const pctLabel = (v: number) => `${Math.round(v * 100)}%`;
 
   function renderRows(rows: BreakdownRow[], level: number, parentKey: string): JSX.Element[] {
     return sortRows(rows, sort).flatMap((r) => {
       const key = `${parentKey}/${r.id ?? "none"}`;
       const kids = children[key];
-      const t = tone(r.var_pct);
       const line = (
         <tr key={key} className={`drill-level-${level}`}>
           <td>
@@ -108,8 +121,7 @@ export function DrillTable({ query, refLabel }: { query: string; refLabel: strin
           {hasBase && <td className="right nowrap">{fmtMoney(r.var)}</td>}
           {hasBase && (
             <td className="right nowrap">
-              {t && <span className={`dot ${t}`} aria-hidden="true" />}
-              {r.var_pct !== null ? fmtPct(r.var_pct) : "—"}
+              <VarCell pct={r.var_pct} t={th} />
             </td>
           )}
         </tr>
@@ -133,6 +145,13 @@ export function DrillTable({ query, refLabel }: { query: string; refLabel: strin
       <div className="section-tools">
         <span className="muted small">
           Clique em + para detalhar (pacote → conta → centro de custo). AV %: participação no total da coluna.
+          {hasBase && (
+            <>
+              {" "}Semáforo: <span className="dot good" aria-hidden="true" />dentro da faixa (de −{pctLabel(th.reduction)} a +{pctLabel(th.growth)}),{" "}
+              <span className="dot bad" aria-hidden="true" />acima de +{pctLabel(th.growth)}, <span className="dot warn" aria-hidden="true" />queda maior que {pctLabel(th.reduction)}
+              {" "}(limites de alerta do ciclo).
+            </>
+          )}
         </span>
         <div className="inline-controls">
           <label className="small muted">
@@ -176,8 +195,7 @@ export function DrillTable({ query, refLabel }: { query: string; refLabel: strin
               {hasBase && <td className="right nowrap">{fmtMoney(root.total.var)}</td>}
               {hasBase && (
                 <td className="right nowrap">
-                  {tone(root.total.var_pct) && <span className={`dot ${tone(root.total.var_pct)}`} aria-hidden="true" />}
-                  {root.total.var_pct !== null ? fmtPct(root.total.var_pct) : "—"}
+                  <VarCell pct={root.total.var_pct} t={th} />
                 </td>
               )}
             </tr>

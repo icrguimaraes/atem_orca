@@ -32,6 +32,8 @@ from app.models import (
     User,
 )
 from app.models.base import Role
+from app.services import consolidation as cons
+from app.services import opex as opex_svc
 
 router = APIRouter(prefix="/dashboard", tags=["painel"])
 ZERO = Decimal("0")
@@ -45,43 +47,16 @@ def _pct(new: Decimal, base: Decimal) -> str | None:
     return None if not base else str(((new - base) / abs(base)).quantize(Decimal("0.0001")))
 
 
-class Facts:
-    """Consultas agregadas sobre os fatos vigentes com os filtros e o escopo do usuário."""
+MONTH_ABBR = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"]
 
-    def __init__(
-        self, db: Session, user: User, company_id, cost_center_id, package_id, months: set[int] | None = None
-    ) -> None:
-        self.db = db
-        self.visible = visible_cost_center_ids(db, user)
-        self.company_id, self.cost_center_id, self.package_id = company_id, cost_center_id, package_id
-        self.months = months  # filtro de meses do painel (vazio = todos)
 
-    def _filtered(self, model, stmt: Select) -> Select:
-        stmt = stmt.join(DatasetVersion, DatasetVersion.id == model.dataset_version_id).where(DatasetVersion.is_current)
-        if self.visible is not None:
-            stmt = stmt.where(model.cost_center_id.in_(self.visible or {-1}))
-        if self.months:
-            stmt = stmt.where(model.period.in_(self.months))
-        if self.company_id:
-            stmt = stmt.where(model.company_id == self.company_id)
-        if self.cost_center_id:
-            stmt = stmt.where(model.cost_center_id == self.cost_center_id)
-        if self.package_id:
-            stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id == self.package_id)))
-        return stmt
+def _ints(csv: str | None) -> set[int]:
+    return {int(x) for x in (csv or "").split(",") if x.strip().isdigit()}
 
-    def sums(self, model, year: int, *group_cols, max_period: int | None = None) -> list:
-        stmt = select(*group_cols, func.sum(model.amount)).select_from(model).where(model.fiscal_year == year)
-        if max_period:
-            stmt = stmt.where(model.period <= max_period)
-        stmt = self._filtered(model, stmt)
-        if group_cols:
-            stmt = stmt.group_by(*group_cols)
-        return list(self.db.execute(stmt))
 
-    def total(self, model, year: int, max_period: int | None = None) -> Decimal:
-        rows = self.sums(model, year, max_period=max_period)
-        return (rows[0][0] if rows else None) or ZERO
+def _years_label(years: list[int]) -> str:
+    ys = [str(y) for y in years]
+    return ys[0] if len(ys) == 1 else f"{', '.join(ys[:-1])} e {ys[-1]}"
 
 
 def _loaded_years(db: Session, dataset_type: str, position: int) -> list[int]:
@@ -102,49 +77,216 @@ def _last_closed(db: Session, year: int) -> int | None:
     )
 
 
-def _ints(csv: str | None) -> set[int]:
-    return {int(x) for x in (csv or "").split(",") if x.strip().isdigit()}
-
-
 @dataclass
-class YearSelection:
-    ref: int
-    prev: int | None
-    selected: list[int]
+class Period:
+    """Período do painel, no modelo de filtros do Power BI: os anos selecionados são **somados** e os meses
+    filtram todos os números. A comparação com o ano anterior é opcional (só com um ano selecionado) e pode
+    ser limitada ao mesmo período (até o último mês fechado do ano em foco)."""
+
+    years: list[int]
+    months: set[int] | None
+    same_period: bool
+    prev_years: list[int]
+    closed: int | None  # último mês fechado do maior ano com realizado selecionado
     actual_years: list[int]
     budget_years: list[int]
+    target_year: int | None  # ano do ciclo: orçamento proposto (consolidação)
     available: list[int]
 
+    @property
+    def compare(self) -> bool:
+        return bool(self.prev_years)
 
-def _select_years(db: Session, years: str | None, year: int | None = None) -> YearSelection:
-    """`years` (ex.: "2025" ou "2025,2026") escolhe os anos exibidos: um ano só mostra esse ano, sem
-    comparação; dois ou mais comparam o maior (referência) com o segundo maior (anterior). Sem o
-    parâmetro, vale o ano mais recente com realizado comparado ao anterior, quando carregado."""
+    @property
+    def compare_available(self) -> bool:
+        return len(self.years) == 1 and (self.years[0] - 1) in self.actual_years
+
+    @property
+    def base_cap(self) -> int | None:
+        """Mês limite da base: o mês fechado do ano em foco quando "mesmo período" está ligado."""
+        return self.closed if (self.same_period and self.compare) else None
+
+    @property
+    def same_period_available(self) -> bool:
+        return self.compare and self.closed is not None and self.closed < 12 and not self.months
+
+    @property
+    def kind_label(self) -> str:
+        has_actual = any(y in self.actual_years for y in self.years)
+        has_target = self.target_year in self.years
+        if has_actual and has_target:
+            return f"Realizado e orçamento {self.target_year}"
+        return f"Orçamento {self.target_year}" if has_target else "Realizado"
+
+    @property
+    def base_label(self) -> str | None:
+        if not self.compare:
+            return None
+        label = _years_label(self.prev_years)
+        if self.months:
+            return label
+        if self.base_cap and self.base_cap < 12:
+            return f"{label} até {MONTH_ABBR[self.base_cap - 1]}"
+        return f"{label} (ano cheio)"
+
+    def summary(self) -> dict:
+        return {
+            "years": self.years,
+            "years_label": _years_label(self.years),
+            "months": sorted(self.months or []),
+            "kind_label": self.kind_label,
+            "closed": self.closed,
+            "closed_month": MONTH_ABBR[self.closed - 1] if self.closed else None,
+            "compare": self.compare,
+            "compare_available": self.compare_available,
+            "same_period": self.same_period,
+            "same_period_available": self.same_period_available,
+            "prev_years": self.prev_years,
+            "base_label": self.base_label,
+            "target_year": self.target_year,
+        }
+
+
+def _period(
+    db: Session, years: str | None, months: str | None, compare: bool, same_period: bool, year: int | None = None
+) -> Period:
     actual_years = _loaded_years(db, "ACTUAL", 1)
     budget_years = _loaded_years(db, "REFERENCE_BUDGET", 2)
-    available = sorted(set(actual_years) | set(budget_years))  # crescente: 2025, 2026, …
-    selected = sorted(_ints(years) & set(available), reverse=True)
-    if selected:
-        ref = selected[0]
-        prev = selected[1] if len(selected) > 1 else None
-    else:
-        cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
-        # ano exibido: o pedido, senão o mais recente com realizado, senão com orçamento, senão o do ciclo
-        ref = year or (
-            max(actual_years)
-            if actual_years
-            else max(budget_years)
-            if budget_years
-            else cycle.actual_reference_year
-            if cycle
-            else datetime.utcnow().year
-        )
-        prev = ref - 1
-        selected = [ref] + ([prev] if prev in available else [])
-    return YearSelection(ref, prev, sorted(selected), actual_years, budget_years, available)
+    cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
+    target_year = cycle.fiscal_year if cycle else None
+    available = sorted(set(actual_years) | set(budget_years) | ({target_year} if target_year else set()))
+    selected = sorted(_ints(years) & set(available))
+    if not selected:
+        # padrão: o ano pedido, senão o mais recente com realizado, senão com orçamento, senão o do ciclo
+        default = year or (max(actual_years) if actual_years else max(budget_years) if budget_years else target_year)
+        selected = [default] if default in available else (available[-1:] or [default or datetime.utcnow().year])
+    month_filter = {m for m in _ints(months) if 1 <= m <= 12} or None
+    actual_selected = [y for y in selected if y in actual_years]
+    closed = _last_closed(db, max(actual_selected)) if actual_selected else None
+    prev_years = [selected[0] - 1] if (compare and len(selected) == 1 and (selected[0] - 1) in actual_years) else []
+    return Period(
+        selected, month_filter, same_period, prev_years, closed, actual_years, budget_years, target_year, available
+    )
 
 
-@router.get("/overview", summary="KPIs, evolução mensal e rankings (realizado vigente × orçamento de referência)")
+class Facts:
+    """Somas sobre os fatos vigentes com os filtros, o escopo do usuário e o período do painel.
+
+    Realizado e orçamento de referência vêm do banco; o ano-alvo do ciclo (orçamento proposto) vem da
+    consolidação (`consolidation.rows_for`) e entra nas mesmas somas — assim o painel soma e compara anos
+    de fontes diferentes por um único caminho."""
+
+    def __init__(
+        self,
+        db: Session,
+        user: User,
+        company_id,
+        cost_center_id,
+        package_id,
+        period: Period,
+        parent: dict | None = None,
+    ) -> None:
+        self.db = db
+        self.visible = visible_cost_center_ids(db, user)
+        self.company_id, self.cost_center_id, self.package_id = company_id, cost_center_id, package_id
+        self.months = period.months
+        self.target_year = period.target_year
+        self.parent = parent or {}  # filtros do drill-down (filhos de um pacote ou de uma conta)
+        self._target: list[tuple] | None = None
+
+    def _filtered(self, model, stmt: Select) -> Select:
+        stmt = stmt.join(DatasetVersion, DatasetVersion.id == model.dataset_version_id).where(DatasetVersion.is_current)
+        if self.visible is not None:
+            stmt = stmt.where(model.cost_center_id.in_(self.visible or {-1}))
+        if self.company_id:
+            stmt = stmt.where(model.company_id == self.company_id)
+        if self.cost_center_id:
+            stmt = stmt.where(model.cost_center_id == self.cost_center_id)
+        if self.package_id:
+            stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id == self.package_id)))
+        if self.months:
+            stmt = stmt.where(model.period.in_(self.months))
+        if self.parent.get("package_id") is not None:
+            stmt = stmt.where(
+                model.account_id.in_(select(Account.id).where(Account.package_id == self.parent["package_id"]))
+            )
+        elif self.parent.get("no_package"):
+            stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id.is_(None))))
+        if self.parent.get("account_id") is not None:
+            stmt = stmt.where(model.account_id == self.parent["account_id"])
+        return stmt
+
+    def _target_rows(self) -> list[tuple]:
+        """Linhas do orçamento proposto (OPEX + CAPEX + Pessoal) no escopo e nos filtros: (linha, conta, pacote)."""
+        if self._target is None:
+            try:
+                ctx = opex_svc.context(self.db)
+                rows = cons.rows_for(self.db, ctx, ctx.version, self.visible)
+            except opex_svc.OpexError:
+                rows = []
+            companies = {c.id: c.code for c in self.db.scalars(select(Company))}
+            accounts = {a.code: a.id for a in self.db.scalars(select(Account))}
+            packages = {p.name.upper(): p.id for p in self.db.scalars(select(BudgetPackage))}
+            company_code = companies.get(self.company_id) if self.company_id else None
+            out = []
+            for r in rows:
+                if r.cost_center_id is None or (company_code and r.company_code != company_code):
+                    continue
+                if self.cost_center_id and r.cost_center_id != self.cost_center_id:
+                    continue
+                account_id = accounts.get(r.account_code)
+                pkg_id = packages.get((r.package or "").upper())
+                if self.package_id and pkg_id != self.package_id:
+                    continue
+                if self.parent.get("package_id") is not None and pkg_id != self.parent["package_id"]:
+                    continue
+                if self.parent.get("no_package") and pkg_id is not None:
+                    continue
+                if self.parent.get("account_id") is not None and account_id != self.parent["account_id"]:
+                    continue
+                out.append((r, account_id, pkg_id))
+            self._target = out
+        return self._target
+
+    def _target_sums(self, keys: tuple[str, ...], max_period: int | None) -> dict[tuple, Decimal]:
+        out: dict[tuple, Decimal] = defaultdict(lambda: ZERO)
+        for r, account_id, pkg_id in self._target_rows():
+            attrs = {"cost_center_id": r.cost_center_id, "account_id": account_id, "package_id": pkg_id}
+            for m, amount in enumerate(r.values, start=1):
+                if not amount or (self.months and m not in self.months) or (max_period and m > max_period):
+                    continue
+                out[tuple(m if k == "period" else attrs[k] for k in keys)] += amount
+        return out
+
+    def sums(self, model, years, *group_cols, max_period: int | None = None) -> list[tuple]:
+        """Soma por grupo nos anos informados (somados). Chaves de grupo: colunas do modelo ou `Account.package_id`."""
+        years = list(years)
+        sql_years = [y for y in years if y != self.target_year]
+        totals: dict[tuple, Decimal] = defaultdict(lambda: ZERO)
+        if sql_years:
+            stmt = (
+                select(*group_cols, func.sum(model.amount)).select_from(model).where(model.fiscal_year.in_(sql_years))
+            )
+            if any(c.key == "package_id" for c in group_cols):
+                stmt = stmt.join(Account, Account.id == model.account_id)
+            if max_period:
+                stmt = stmt.where(model.period <= max_period)
+            stmt = self._filtered(model, stmt)
+            if group_cols:
+                stmt = stmt.group_by(*group_cols)
+            for *key, amount in self.db.execute(stmt):
+                totals[tuple(key)] += amount or ZERO
+        if model is ActualEntry and self.target_year in years:
+            for key, amount in self._target_sums(tuple(c.key for c in group_cols), max_period).items():
+                totals[key] += amount
+        return [(*k, v) for k, v in totals.items()]
+
+    def total(self, model, years, max_period: int | None = None) -> Decimal:
+        rows = self.sums(model, years, max_period=max_period)
+        return rows[0][0] if rows else ZERO
+
+
+@router.get("/overview", summary="KPIs, evolução mensal e rankings do período selecionado (anos somados × meses)")
 def overview(
     company_id: int | None = None,
     cost_center_id: int | None = None,
@@ -152,86 +294,67 @@ def overview(
     year: int | None = None,
     years: str | None = None,
     months: str | None = None,
+    compare: bool = True,
+    same_period: bool = True,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Anos em `years` (ver `_select_years`); `months` (ex.: "1,2,3") restringe todos os números aos meses
-    escolhidos — o mês fechado continua sendo o último com realizado no ano."""
-    ys = _select_years(db, years, year)
-    ref, prev, selected, actual_years, budget_years, available = (
-        ys.ref,
-        ys.prev,
-        ys.selected,
-        ys.actual_years,
-        ys.budget_years,
-        ys.available,
+    """`years` (ex.: "2025,2026") são somados; `months` (ex.: "1,2,3") filtra tudo. `compare` liga a comparação
+    com o ano anterior (só com um ano selecionado); `same_period` limita a base ao último mês fechado do ano em
+    foco. O ano do ciclo (orçamento proposto) é selecionável como qualquer outro."""
+    P = _period(db, years, months, compare, same_period, year)
+    f = Facts(db, user, company_id, cost_center_id, package_id, P)
+    cap = P.base_cap
+    cur_total = f.total(ActualEntry, P.years)
+    prev_full = f.total(ActualEntry, P.prev_years) if P.compare else ZERO
+    prev_base = f.total(ActualEntry, P.prev_years, cap) if P.compare else ZERO
+    budget_total = f.total(ReferenceBudgetEntry, P.years)
+    budget_ytd = f.total(ReferenceBudgetEntry, P.years, P.closed) if P.closed else budget_total
+    annualizable = (
+        len(P.years) == 1 and P.years[0] in P.actual_years and bool(P.closed) and P.closed < 12 and not P.months
     )
-    month_filter = {m for m in _ints(months) if 1 <= m <= 12}
-    f = Facts(db, user, company_id, cost_center_id, package_id, month_filter or None)
-    closed = _last_closed(db, ref)  # último mês com realizado no ano de referência
+    annualized = (cur_total * 12 / P.closed) if annualizable else None
 
-    # ---- KPIs
-    prev_total = f.total(ActualEntry, prev) if prev else ZERO
-    prev_ytd = f.total(ActualEntry, prev, closed) if (prev and closed) else ZERO
-    ref_ytd = f.total(ActualEntry, ref)
-    ref_annualized = (ref_ytd * 12 / closed) if closed else ZERO
-    budget_total = f.total(ReferenceBudgetEntry, ref)
-    budget_ytd = f.total(ReferenceBudgetEntry, ref, closed) if closed else ZERO
-
-    # ---- série mensal
+    # ---- série mensal (anos selecionados somados mês a mês)
     monthly = {m: {"month": m, "prev": ZERO, "ref": ZERO, "budget": ZERO} for m in range(1, 13)}
-    for period, amount in f.sums(ActualEntry, prev, ActualEntry.period) if prev else []:
-        monthly[period]["prev"] = amount
-    for period, amount in f.sums(ActualEntry, ref, ActualEntry.period):
-        monthly[period]["ref"] = amount
-    for period, amount in f.sums(ReferenceBudgetEntry, ref, ReferenceBudgetEntry.period):
-        monthly[period]["budget"] = amount
+    if P.compare:
+        for period, amount in f.sums(ActualEntry, P.prev_years, ActualEntry.period, max_period=cap):
+            monthly[int(period)]["prev"] = amount
+    for period, amount in f.sums(ActualEntry, P.years, ActualEntry.period):
+        monthly[int(period)]["ref"] = amount
+    for period, amount in f.sums(ReferenceBudgetEntry, P.years, ReferenceBudgetEntry.period):
+        monthly[int(period)]["budget"] = amount
 
     # ---- por pacote
-    def by_package(model, year, max_period=None):
-        out: dict = defaultdict(lambda: ZERO)
-        stmt = (
-            select(Account.package_id, func.sum(model.amount))
-            .select_from(model)
-            .join(Account, Account.id == model.account_id)
-            .where(model.fiscal_year == year)
-        )
-        if max_period:
-            stmt = stmt.where(model.period <= max_period)
-        for pkg_id, amount in db.execute(f._filtered(model, stmt).group_by(Account.package_id)):
-            out[pkg_id] += amount
-        return out
-
     packages = {p.id: p for p in db.scalars(select(BudgetPackage))}
-    pkg_prev = by_package(ActualEntry, prev) if prev else {}
-    pkg_prev_ytd = by_package(ActualEntry, prev, closed) if (prev and closed) else {}
-    pkg_ref = by_package(ActualEntry, ref)
-    pkg_budget = by_package(ReferenceBudgetEntry, ref)
+    pkg_cur = dict(f.sums(ActualEntry, P.years, Account.package_id))
+    pkg_prev_full = dict(f.sums(ActualEntry, P.prev_years, Account.package_id)) if P.compare else {}
+    pkg_prev = dict(f.sums(ActualEntry, P.prev_years, Account.package_id, max_period=cap)) if P.compare else {}
+    pkg_budget = dict(f.sums(ReferenceBudgetEntry, P.years, Account.package_id))
     package_rows = []
-    for pkg_id in set(pkg_prev) | set(pkg_ref) | set(pkg_budget):
+    for pkg_id in set(pkg_cur) | set(pkg_prev) | set(pkg_budget):
         p = packages.get(pkg_id)
-        ytd = pkg_ref.get(pkg_id, ZERO)
-        prev_ytd_p = pkg_prev_ytd.get(pkg_id, ZERO)
+        cur, base = pkg_cur.get(pkg_id, ZERO), pkg_prev.get(pkg_id, ZERO)
         package_rows.append(
             {
                 "package_id": pkg_id,
                 "package": p.name if p else "Sem pacote",
                 "package_type": p.package_type if p else None,
-                "prev_total": _money(pkg_prev.get(pkg_id)),
-                "prev_ytd": _money(prev_ytd_p),
-                "ref_ytd": _money(ytd),
-                "ref_annualized": _money(ytd * 12 / closed if closed else ZERO),
+                "prev_total": _money(pkg_prev_full.get(pkg_id)),
+                "prev_ytd": _money(base),
+                "ref_ytd": _money(cur),
+                "ref_annualized": _money(cur * 12 / P.closed if annualizable else ZERO),
                 "budget": _money(pkg_budget.get(pkg_id)),
-                "ytd_var_pct": _pct(ytd, prev_ytd_p),
+                "ytd_var_pct": _pct(cur, base),
             }
         )
-    package_rows.sort(key=lambda r: Decimal(r["ref_ytd"]) + Decimal(r["prev_total"]), reverse=True)
+    package_rows.sort(key=lambda r: Decimal(r["ref_ytd"]) + Decimal(r["prev_ytd"]), reverse=True)
 
-    # ---- rankings (CC e conta) no acumulado do ano de referência vs mesmo período do ano anterior
+    # ---- rankings (CC e conta) no período, com a base de comparação quando ligada
     def ranking(column, label_model, label_attrs):
-        cur = dict(f.sums(ActualEntry, ref, column))
-        base = dict(f.sums(ActualEntry, prev, column, max_period=closed)) if (prev and closed) else {}
-        ids = sorted(cur, key=lambda k: cur[k], reverse=True)[:10]
+        cur = dict(f.sums(ActualEntry, P.years, column))
+        base = dict(f.sums(ActualEntry, P.prev_years, column, max_period=cap)) if P.compare else {}
+        ids = sorted((k for k in cur if k is not None), key=lambda k: cur[k], reverse=True)[:10]
         objs = {o.id: o for o in db.scalars(select(label_model).where(label_model.id.in_(ids)))} if ids else {}
         rows = []
         for i in ids:
@@ -243,42 +366,43 @@ def overview(
                     "name": getattr(o, label_attrs[1], None),
                     "ref_ytd": _money(cur[i]),
                     "prev_ytd": _money(base.get(i)),
-                    "ytd_var_pct": _pct(cur[i], base.get(i, ZERO)),
+                    "ytd_var_pct": _pct(cur[i], base.get(i, ZERO)) if P.compare else None,
                 }
             )
         return rows
 
+    has_series = any(y in P.actual_years for y in P.years) or P.target_year in P.years
     return {
-        "reference_year": ref,
-        "previous_year": prev,
-        "selected_years": selected,
-        "selected_months": sorted(month_filter),
-        "last_closed_period": closed,
-        "years_loaded": actual_years,
-        "budget_years": budget_years,
-        "available_years": available,
-        "has_actual": ref in actual_years,
-        "has_prev": prev is not None and prev in actual_years,
+        "reference_year": max(P.years),
+        "previous_year": P.prev_years[0] if P.compare else None,
+        "selected_years": P.years,
+        "selected_months": sorted(P.months or []),
+        "last_closed_period": P.closed,
+        "years_loaded": P.actual_years,
+        "budget_years": P.budget_years,
+        "available_years": P.available,
+        "target_year": P.target_year,
+        "period": P.summary(),
+        "has_actual": has_series,
+        "has_prev": P.compare,
         "has_budget": budget_total != ZERO,
         "kpis": {
-            "prev_total": _money(prev_total),
-            "prev_ytd": _money(prev_ytd),
-            "ref_ytd": _money(ref_ytd),
-            "ytd_var_pct": _pct(ref_ytd, prev_ytd),
-            "ref_annualized": _money(ref_annualized),
-            "annualized_vs_prev_pct": _pct(ref_annualized, prev_total),
+            "prev_total": _money(prev_full),
+            "prev_ytd": _money(prev_base),
+            "ref_ytd": _money(cur_total),
+            "ytd_var_pct": _pct(cur_total, prev_base) if P.compare else None,
+            "ref_annualized": _money(annualized),
+            "annualized_vs_prev_pct": _pct(annualized, prev_full) if (annualized is not None and P.compare) else None,
             "budget_total": _money(budget_total),
             "budget_ytd": _money(budget_ytd),
-            "budget_consumption_pct": _pct(ref_ytd, budget_ytd) if budget_ytd else None,
+            "budget_consumption_pct": _pct(cur_total, budget_ytd) if budget_ytd else None,
         },
         "monthly": [{k: (_money(v) if k != "month" else v) for k, v in row.items()} for row in monthly.values()],
         "by_package": package_rows,
         "top_cost_centers": ranking(ActualEntry.cost_center_id, CostCenter, ("code", "name")),
         "top_accounts": ranking(ActualEntry.account_id, Account, ("code", "name")),
-        "heatmap": _heatmap(db, f, ref if ref in actual_years else (prev or ref)),
-        "account_deltas": _account_deltas(db, f, ref, prev, closed)
-        if (closed and prev and prev in actual_years)
-        else [],
+        "heatmap": _heatmap(db, f, P.years),
+        "account_deltas": _account_deltas(db, f, P.years, P.prev_years, cap) if P.compare else [],
         "budget_progress": budget_progress(db, user, company_id, cost_center_id, package_id),
     }
 
@@ -294,52 +418,53 @@ def breakdown(
     package_id: int | None = None,
     years: str | None = None,
     months: str | None = None,
+    compare: bool = True,
+    same_period: bool = True,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Uma linha por grupo com realizado do ano em foco, a base de comparação (realizado do ano anterior
-    no mesmo período quando há dois anos; senão o orçado do ano até o mês fechado), participação (AV %),
-    variação e variação %. `parent_*` restringem aos filhos de uma linha expandida (drill-down)."""
-    ys = _select_years(db, years)
-    ref, prev = ys.ref, ys.prev
-    month_filter = {m for m in _ints(months) if 1 <= m <= 12}
-    f = Facts(db, user, company_id, cost_center_id, package_id, month_filter or None)
-    closed = _last_closed(db, ref)
+    """Uma linha por grupo com o valor do período (anos somados × meses), a base de comparação (ano anterior,
+    quando `compare` está ligado e há um só ano; senão o orçado do período até o mês fechado), participação
+    (AV %), variação e variação %. `parent_*` restringem aos filhos de uma linha expandida (drill-down).
+    `thresholds` traz os limiares do ciclo usados no semáforo (alert.growth_pct / alert.reduction_pct)."""
+    P = _period(db, years, months, compare, same_period)
+    parent = {"package_id": parent_package_id, "no_package": parent_no_package, "account_id": parent_account_id}
+    f = Facts(db, user, company_id, cost_center_id, package_id, P, parent)
+    col = {"package": Account.package_id, "account": ActualEntry.account_id, "cost_center": ActualEntry.cost_center_id}
+    bcol = {
+        "package": Account.package_id,
+        "account": ReferenceBudgetEntry.account_id,
+        "cost_center": ReferenceBudgetEntry.cost_center_id,
+    }
 
-    def grouped(model, year: int, max_period: int | None) -> dict:
-        col = {"package": Account.package_id, "account": model.account_id, "cost_center": model.cost_center_id}[
-            group_by
-        ]
-        stmt = select(col, func.sum(model.amount)).select_from(model).where(model.fiscal_year == year)
-        if group_by == "package":
-            stmt = stmt.join(Account, Account.id == model.account_id)
-        if parent_package_id is not None:
-            stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id == parent_package_id)))
-        elif parent_no_package:
-            stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id.is_(None))))
-        if parent_account_id is not None:
-            stmt = stmt.where(model.account_id == parent_account_id)
-        if max_period:
-            stmt = stmt.where(model.period <= max_period)
-        return {k: v or ZERO for k, v in db.execute(f._filtered(model, stmt).group_by(col))}
-
-    cur = grouped(ActualEntry, ref, None)
+    cur = dict(f.sums(ActualEntry, P.years, col[group_by]))
     base_kind: str | None = None
     base: dict = {}
-    if prev is not None and prev in ys.actual_years:
-        base_kind, base = "prev", grouped(ActualEntry, prev, closed)
-    elif ref in ys.budget_years:
-        base_kind, base = "budget", grouped(ReferenceBudgetEntry, ref, closed)
+    base_label: str | None = None
+    if P.compare:
+        base_kind, base, base_label = (
+            "prev",
+            dict(f.sums(ActualEntry, P.prev_years, col[group_by], max_period=P.base_cap)),
+            P.base_label,
+        )
+    elif any(y in P.budget_years for y in P.years):
+        base_kind = "budget"
+        base = dict(f.sums(ReferenceBudgetEntry, P.years, bcol[group_by], max_period=P.closed))
+        suffix = f" até {MONTH_ABBR[P.closed - 1]}" if (P.closed and P.closed < 12 and not P.months) else ""
+        base_label = f"Orçado {_years_label(P.years)}{suffix}"
 
     ids = [k for k in set(cur) | set(base) if k is not None]
     if group_by == "package":
         objs = {
             p.id: (None, p.name) for p in db.scalars(select(BudgetPackage).where(BudgetPackage.id.in_(ids or [-1])))
         }
+        missing = (None, "Sem pacote")
     elif group_by == "account":
         objs = {a.id: (a.code, a.name) for a in db.scalars(select(Account).where(Account.id.in_(ids or [-1])))}
+        missing = (None, "Conta não cadastrada")
     else:
         objs = {c.id: (c.code, c.name) for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(ids or [-1])))}
+        missing = (None, "—")
     total_cur = sum(cur.values(), ZERO)
     total_base = sum(base.values(), ZERO)
     rows = []
@@ -347,7 +472,7 @@ def breakdown(
         c, b = cur.get(key, ZERO), base.get(key, ZERO)
         if c == 0 and b == 0:
             continue
-        code, name = objs.get(key, (None, "Sem pacote" if group_by == "package" else "—"))
+        code, name = objs.get(key, missing)
         rows.append(
             {
                 "id": key,
@@ -358,31 +483,31 @@ def breakdown(
                 "share_ref": _pct(c, total_cur) if total_cur else None,
                 "share_base": _pct(b, total_base) if total_base else None,
                 "var": _money(c - b),
-                "var_pct": _pct(c, b),
-                "has_children": group_by != "cost_center",
+                "var_pct": _pct(c, b) if base_kind else None,
+                "has_children": group_by != "cost_center" and key is not None,
             }
         )
     rows.sort(key=lambda r: Decimal(r["ref"]), reverse=True)
-    base_label = (
-        f"Realizado {prev} até {closed or 12}"
-        if base_kind == "prev"
-        else f"Orçado {ref} até {closed or 12}"
-        if base_kind
-        else None
-    )
+    try:
+        ctx = opex_svc.context(db)
+        growth, reduction = float(ctx.param("alert.growth_pct", 0.2)), float(ctx.param("alert.reduction_pct", 0.3))
+    except opex_svc.OpexError:
+        growth, reduction = 0.2, 0.3
     return {
         "group_by": group_by,
-        "reference_year": ref,
-        "previous_year": prev,
-        "last_closed_period": closed,
+        "reference_year": max(P.years),
+        "previous_year": P.prev_years[0] if P.compare else None,
+        "last_closed_period": P.closed,
+        "period": P.summary(),
         "base": base_kind,
         "base_label": base_label,
+        "thresholds": {"growth": growth, "reduction": reduction},
         "rows": rows,
         "total": {
             "ref": _money(total_cur),
             "base": _money(total_base),
             "var": _money(total_cur - total_base),
-            "var_pct": _pct(total_cur, total_base),
+            "var_pct": _pct(total_cur, total_base) if base_kind else None,
         },
     }
 
@@ -613,15 +738,17 @@ def inventory(db: Session = Depends(get_db), user: User = Depends(get_current_us
     }
 
 
-def _heatmap(db: Session, f: Facts, year: int, limit: int = 12) -> dict:
-    """Centro de custo × mês (maiores CCs do ano), para o mapa de calor."""
+def _heatmap(db: Session, f: Facts, years: list[int], limit: int = 12) -> dict:
+    """Centro de custo × mês (maiores CCs do período, anos somados), para o mapa de calor."""
     rows: dict[int, dict[int, Decimal]] = defaultdict(lambda: defaultdict(lambda: ZERO))
-    for cc_id, period, amount in f.sums(ActualEntry, year, ActualEntry.cost_center_id, ActualEntry.period):
-        rows[cc_id][int(period)] += amount
+    for cc_id, period, amount in f.sums(ActualEntry, years, ActualEntry.cost_center_id, ActualEntry.period):
+        if cc_id is not None:
+            rows[cc_id][int(period)] += amount
     top = sorted(rows, key=lambda k: sum(rows[k].values()), reverse=True)[:limit]
     ccs = {c.id: c for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(top)))} if top else {}
     return {
-        "year": year,
+        "year": max(years),
+        "years": years,
         "rows": [
             {
                 "id": cc_id,
@@ -635,11 +762,13 @@ def _heatmap(db: Session, f: Facts, year: int, limit: int = 12) -> dict:
     }
 
 
-def _account_deltas(db: Session, f: Facts, ref: int, prev: int, closed: int, limit: int = 8) -> list[dict]:
-    """Maiores aumentos e reduções por conta no acumulado do ano (mesmo período nos dois anos)."""
-    cur = dict(f.sums(ActualEntry, ref, ActualEntry.account_id))
-    base = dict(f.sums(ActualEntry, prev, ActualEntry.account_id, max_period=closed))
-    deltas = {k: cur.get(k, ZERO) - base.get(k, ZERO) for k in set(cur) | set(base)}
+def _account_deltas(
+    db: Session, f: Facts, years: list[int], prev_years: list[int], cap: int | None, limit: int = 8
+) -> list[dict]:
+    """Maiores aumentos e reduções por conta: período selecionado × base (ano anterior, até `cap` quando informado)."""
+    cur = dict(f.sums(ActualEntry, years, ActualEntry.account_id))
+    base = dict(f.sums(ActualEntry, prev_years, ActualEntry.account_id, max_period=cap))
+    deltas = {k: cur.get(k, ZERO) - base.get(k, ZERO) for k in (set(cur) | set(base)) if k is not None}
     ups = sorted((k for k in deltas if deltas[k] > 0), key=lambda k: deltas[k], reverse=True)[:limit]
     downs = sorted((k for k in deltas if deltas[k] < 0), key=lambda k: deltas[k])[:limit]
     ids = ups + downs

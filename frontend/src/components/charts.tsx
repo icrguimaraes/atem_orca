@@ -56,17 +56,25 @@ function short(v: number): string {
 
 /** Comparativo mensal em colunas: ano anterior (cinza), ano em foco (azul) e orçado (verde-água), lado a lado.
  * Com espaço, cada barra recebe o próprio valor; senão, só máximo e mínimo de cada série. */
-export function MonthlyChart({ rows, prevYear, refYear, showBudget, prevColor = SERIES.past }: { rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean; prevColor?: string }) {
+export function MonthlyChart({ rows, prevYear, refYear, showBudget, prevColor = SERIES.past, refLabel, prevLabel }: {
+  rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean; prevColor?: string; refLabel?: string; prevLabel?: string;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   const [box, W] = useWidth();
   const H = 290, L = 84, R = 12, T = 26, B = 28;
   const plotW = W - L - R, plotH = H - T - B;
   type Key = "prev" | "ref" | "budget";
   const series: { key: Key; label: string; color: string }[] = [
-    ...(prevYear !== null ? [{ key: "prev" as Key, label: String(prevYear), color: prevColor }] : []),
-    { key: "ref" as Key, label: String(refYear), color: SERIES.ref },
-    ...(showBudget ? [{ key: "budget" as Key, label: `Orçado ${refYear}`, color: SERIES.budget }] : []),
+    ...(prevYear !== null ? [{ key: "prev" as Key, label: prevLabel ?? String(prevYear), color: prevColor }] : []),
+    { key: "ref" as Key, label: refLabel ?? String(refYear), color: SERIES.ref },
+    ...(showBudget ? [{ key: "budget" as Key, label: `Orçado ${refLabel ?? refYear}`, color: SERIES.budget }] : []),
   ];
+  // degradê por série: a maior barra em cor cheia, as menores esmaecendo (mesmo padrão dos rankings)
+  const ranks = series.map((s) => {
+    const sorted = rows.map((r) => Number(r[s.key])).filter((v) => v > 0).sort((a, b) => b - a);
+    return (v: number) => (sorted.length > 1 ? sorted.indexOf(v) / (sorted.length - 1) : 0);
+  });
+  const shade = (color: string, j: number, v: number) => `color-mix(in srgb, ${color} ${Math.round(100 - ranks[j](v) * 55)}%, transparent)`;
   const values = rows.flatMap((r) => series.map((s) => Number(r[s.key])));
   const max = niceMax(Math.max(...values, 0));
   const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
@@ -98,7 +106,7 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget, prevColor = 
               if (v <= 0) return null;
               return (
                 <g key={s.key}>
-                  <path d={roundedTop(xOf(i, j), y(v), barW, T + plotH - y(v))} fill={s.color} />
+                  <path d={roundedTop(xOf(i, j), y(v), barW, T + plotH - y(v))} style={{ fill: shade(s.color, j, v) }} />
                   {labelAll && (
                     <text x={xOf(i, j) + barW / 2} y={y(v) - 6} className="extreme" textAnchor="middle" fill={s.color} pointerEvents="none">
                       {short(v)}
@@ -133,7 +141,9 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget, prevColor = 
 
 /** Total acumulado mês a mês: ano em foco (azul, linha com marcadores) sobre a base (orçado em verde-água
  * ou ano anterior em cinza, área). A série do ano em foco para no último mês com realizado. */
-export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor = SERIES.past }: { rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean; prevColor?: string }) {
+export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor = SERIES.past, refLabel, prevLabel }: {
+  rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean; prevColor?: string; refLabel?: string; prevLabel?: string;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   const [box, W] = useWidth();
   const H = 300, L = 84, R = 24, T = 30, B = 28;
@@ -144,7 +154,8 @@ export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor
   const baseKey = showBudget ? "budget" : prevYear !== null ? "prev" : null;
   const base = baseKey ? cum(baseKey) : null;
   const baseColor = baseKey === "budget" ? SERIES.budget : prevColor;
-  const baseLabel = baseKey === "budget" ? `Orçado ${refYear}` : String(prevYear);
+  const baseLabel = baseKey === "budget" ? `Orçado ${refLabel ?? refYear}` : (prevLabel ?? String(prevYear));
+  const curLabel = refLabel ?? String(refYear);
   const max = niceMax(Math.max(ref[lastRef] ?? 0, ...(base ?? [0]), 0));
   const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
   const slot = plotW / 12;
@@ -157,7 +168,7 @@ export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor
   if (lastRef < 0 && !base) return <div className="chart muted small">Sem dados.</div>;
   return (
     <div className="chart" ref={box}>
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={`Total acumulado ${refYear}${base ? ` e ${baseLabel}` : ""}`} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={`Total acumulado ${curLabel}${base ? ` e ${baseLabel}` : ""}`} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="grid" />
@@ -194,7 +205,7 @@ export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor
       {hover !== null && (
         <div className="tooltip" style={{ left: `${(x(hover) / W) * 100}%` }}>
           <strong>Acumulado até {MONTHS[hover]}</strong>
-          {hover <= lastRef && <span><i style={{ background: SERIES.ref }} />{refYear}: {fmtMoney(ref[hover])}</span>}
+          {hover <= lastRef && <span><i style={{ background: SERIES.ref }} />{curLabel}: {fmtMoney(ref[hover])}</span>}
           {base && <span><i style={{ background: baseColor }} />{baseLabel}: {fmtMoney(base[hover])}</span>}
           {base && hover <= lastRef && base[hover] > 0 && <span className="muted">Diferença: {fmtMoney(ref[hover] - base[hover])} ({fmtPct(String((ref[hover] - base[hover]) / base[hover]))})</span>}
         </div>
@@ -482,7 +493,7 @@ export function Heatmap({ rows }: { rows: { label: string; sub?: string | null; 
 }
 
 /** Barras divergentes a partir de zero: aumentos à direita, reduções à esquerda. */
-export function DivergingBars({ rows }: { rows: { label: string; sub?: string | null; delta: number; from: number; to: number }[] }) {
+export function DivergingBars({ rows, fromLabel = "Antes", toLabel = "Agora" }: { rows: { label: string; sub?: string | null; delta: number; from: number; to: number }[]; fromLabel?: string; toLabel?: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(1, ...rows.map((r) => Math.abs(r.delta)));
   return (
@@ -503,8 +514,8 @@ export function DivergingBars({ rows }: { rows: { label: string; sub?: string | 
           {hover === i && (
             <div className="tooltip tooltip-inline">
               <strong>{r.label}</strong>
-              <span>Antes: {fmtMoney(r.from)}</span>
-              <span>Agora: {fmtMoney(r.to)}</span>
+              <span>{fromLabel}: {fmtMoney(r.from)}</span>
+              <span>{toLabel}: {fmtMoney(r.to)}</span>
               <span>Variação: {fmtMoney(r.delta)}{r.from ? ` (${fmtPct(String(r.delta / r.from))})` : ""}</span>
             </div>
           )}
