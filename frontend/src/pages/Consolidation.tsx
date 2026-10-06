@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { api, download, type AttentionPoint, type Company, type ConsolidationOverview, type VersionCompare, type VersionInfo } from "../api";
 import { useAuth } from "../auth";
 import { DivergingBars, Legend, MonthlyBars, PairedBars, SERIES, StatusBar, Waterfall } from "../components/charts";
+import { FilterBar } from "../components/FilterBar";
 import { Alert, Badge, Card, Empty, Loading, Modal, PageHeader, SearchBox, Stat, useLoad } from "../components/ui";
 import { FLAG_LABELS, SUBMISSION_STATUS, fmtCompact, fmtDateTime, fmtInt, fmtMoney, fmtPct } from "../labels";
 
@@ -167,20 +168,21 @@ export default function Consolidation() {
           </>
         }
       />
-      <div className="filters">
-        <select value={versionId ?? ""} onChange={(e) => setVersionId(e.target.value ? Number(e.target.value) : null)} aria-label="Versão">
-          {data.versions.map((v) => (
-            <option key={v.id} value={v.current ? "" : v.id}>
-              Versão {v.label} · {v.status === "FROZEN" ? "congelada" : "em elaboração"}{v.current ? " (atual)" : ""}
-            </option>
-          ))}
-        </select>
-        <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} aria-label="Empresa">
-          <option value="">Todas as empresas</option>
-          {(companies.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.code} · {c.short_name ?? c.name}</option>)}
-        </select>
-        <Badge tone={frozen ? "info" : "warn"}>{frozen ? `Versão ${data.version.label} congelada` : `Versão ${data.version.label} em elaboração`}</Badge>
-      </div>
+      <FilterBar
+        fields={[
+          {
+            key: "version_id", label: "Versão", value: versionId ? String(versionId) : "",
+            onChange: (v) => setVersionId(v ? Number(v) : null),
+            options: data.versions.map((v) => ({ value: v.current ? "" : String(v.id), label: `Versão ${v.label} · ${v.status === "FROZEN" ? "congelada" : "em elaboração"}${v.current ? " (atual)" : ""}` })),
+          },
+          {
+            key: "company_id", label: "Empresa", value: companyId,
+            onChange: setCompanyId,
+            options: [{ value: "", label: "Todas as empresas" }, ...(companies.data ?? []).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.short_name ?? c.name}` }))],
+          },
+        ]}
+        extra={<Badge tone={frozen ? "info" : "warn"}>{frozen ? `Versão ${data.version.label} congelada` : `Versão ${data.version.label} em elaboração`}</Badge>}
+      />
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       {frozen && viewingCurrent && <Alert tone="info">Esta versão está congelada: os números vêm da fotografia gravada no congelamento e nenhum orçamento aceita alterações. Para ajustar, abra uma revisão.</Alert>}
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type Company, type Package } from "../api";
 import { useAuth } from "../auth";
+import { FilterBar } from "../components/FilterBar";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import { fmtInt } from "../labels";
@@ -58,9 +59,6 @@ export default function Analytics() {
   useEffect(() => { if (data) setShown(data); }, [data]);
 
   const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
-  const ccOptions = (opts.data?.cost_centers ?? []).filter(
-    (c) => (!filters.company_id || String(c.company_id) === filters.company_id) && (!filters.department_id || String(c.department_id) === filters.department_id),
-  );
 
   /** Clique numa barra do comparativo: filtra pela dimensão clicada e desce um nível. */
   const drill = useCallback((customdata: unknown, label: string) => {
@@ -100,39 +98,59 @@ export default function Analytics() {
         subtitle={`Realizado ${y.prev} × Orçado ${y.ref} × Orçamento ${y.target} (versão ${d.version.label}). Os números são os mesmos do processo: OPEX, CAPEX e Pessoal consolidados por centro de custo, conta e mês.`}
         actions={active > 0 && <button className="btn btn-ghost" onClick={clear}>Limpar filtros ({active})</button>}
       />
-      <div className="filters">
-        <select value={filters.company_id} onChange={(e) => { set({ company_id: e.target.value, department_id: "", cost_center_id: "" }); setTrail([]); }} aria-label="Empresa">
-          <option value="">Todas as empresas</option>
-          {(companies.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.code} · {c.short_name ?? c.name}</option>)}
-        </select>
-        <select value={filters.department_id} onChange={(e) => { set({ department_id: e.target.value, cost_center_id: "" }); setTrail([]); }} aria-label="Diretoria">
-          <option value="">Todas as diretorias</option>
-          {(opts.data?.departments ?? []).map((dp) => <option key={dp.id} value={dp.id}>{dp.name}</option>)}
-        </select>
-        <select value={filters.cost_center_id} onChange={(e) => { set({ cost_center_id: e.target.value }); setTrail([]); }} aria-label="Centro de custo">
-          <option value="">{isController ? "Todos os centros de custo" : "Meus centros de custo"}</option>
-          {ccOptions.map((c) => <option key={c.id} value={c.id}>{c.code} · {c.name}</option>)}
-        </select>
-        <select value={filters.module} onChange={(e) => { set({ module: e.target.value, package_id: "" }); }} aria-label="Módulo">
-          <option value="">OPEX + CAPEX + Pessoal</option>
-          {Object.entries(MODULE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
-        {(!filters.module || filters.module === "OPEX") && (
-          <select value={filters.package_id} onChange={(e) => set({ package_id: e.target.value })} aria-label="Pacote">
-            <option value="">Todos os pacotes</option>
-            {(packages.data ?? []).filter((p) => p.nature !== "CAPEX").map((p) => <option key={p.id} value={p.id}>{p.roman ? `${p.roman} · ` : ""}{p.name}</option>)}
-          </select>
-        )}
-        <select value={filters.account} onChange={(e) => { set({ account: e.target.value }); setTrail([]); }} aria-label="Conta contábil">
-          <option value="">Todas as contas</option>
-          {(opts.data?.accounts ?? []).filter((a) => !filters.module || MODULE_OF[a.nature] === filters.module).map((a) => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
-        </select>
-        {(opts.data?.versions.length ?? 0) > 1 && (
-          <select value={filters.version_id} onChange={(e) => set({ version_id: e.target.value })} aria-label="Versão">
-            {opts.data!.versions.map((v) => <option key={v.id} value={v.current ? "" : v.id}>Versão {v.label}{v.status === "FROZEN" ? " · congelada" : ""}{v.current ? " (atual)" : ""}</option>)}
-          </select>
-        )}
-      </div>
+      <FilterBar
+        onApply={(v) => { set({ ...v } as Partial<Filters>); setTrail([]); }}
+        fields={[
+          {
+            key: "company_id", label: "Empresa", value: filters.company_id,
+            onChange: (v) => { set({ company_id: v, department_id: "", cost_center_id: "" }); setTrail([]); },
+            options: [{ value: "", label: "Todas as empresas" }, ...(companies.data ?? []).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.short_name ?? c.name}` }))],
+          },
+          {
+            key: "department_id", label: "Diretoria", value: filters.department_id,
+            onChange: (v) => { set({ department_id: v, cost_center_id: "" }); setTrail([]); },
+            options: [{ value: "", label: "Todas as diretorias" }, ...(opts.data?.departments ?? []).map((dp) => ({ value: String(dp.id), label: dp.name }))],
+          },
+          {
+            key: "cost_center_id", label: "Centro de custo", value: filters.cost_center_id, wide: true,
+            onChange: (v) => { set({ cost_center_id: v }); setTrail([]); },
+            options: (d) => [
+              { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
+              ...(opts.data?.cost_centers ?? [])
+                .filter((c) => (!d.company_id || String(c.company_id) === d.company_id) && (!d.department_id || String(c.department_id) === d.department_id))
+                .map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
+            ],
+          },
+          {
+            key: "module", label: "Módulo", value: filters.module,
+            onChange: (v) => set({ module: v, package_id: "" }),
+            options: [{ value: "", label: "OPEX + CAPEX + Pessoal" }, ...Object.entries(MODULE_LABEL).map(([v, l]) => ({ value: v, label: l }))],
+          },
+          {
+            key: "package_id", label: "Pacote GMD", value: filters.package_id,
+            onChange: (v) => set({ package_id: v }),
+            options: (d) => [
+              { value: "", label: "Todos os pacotes" },
+              ...(d.module && d.module !== "OPEX" ? [] : (packages.data ?? []).filter((p) => p.nature !== "CAPEX").map((p) => ({ value: String(p.id), label: `${p.roman ? `${p.roman} · ` : ""}${p.name}` }))),
+            ],
+          },
+          {
+            key: "account", label: "Conta contábil", value: filters.account, wide: true,
+            onChange: (v) => { set({ account: v }); setTrail([]); },
+            options: (d) => [
+              { value: "", label: "Todas as contas" },
+              ...(opts.data?.accounts ?? []).filter((a) => !d.module || MODULE_OF[a.nature] === d.module).map((a) => ({ value: a.code, label: `${a.code} · ${a.name}` })),
+            ],
+          },
+          ...((opts.data?.versions.length ?? 0) > 1
+            ? [{
+                key: "version_id", label: "Versão", value: filters.version_id,
+                onChange: (v: string) => set({ version_id: v }),
+                options: opts.data!.versions.map((v) => ({ value: v.current ? "" : String(v.id), label: `Versão ${v.label}${v.status === "FROZEN" ? " · congelada" : ""}${v.current ? " (atual)" : ""}` })),
+              }]
+            : []),
+        ]}
+      />
       {trail.length > 0 && (
         <nav className="breadcrumb" aria-label="Drill-down">
           <button className="btn-link link" onClick={clear}>Visão geral</button>

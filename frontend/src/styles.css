@@ -252,8 +252,23 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
   .content { padding: 20px 16px calc(84px + env(safe-area-inset-bottom)); gap: 16px; }
   h1 { font-size: 24px; line-height: 32px; }
   .grid-2 { grid-template-columns: 1fr; }
-  .filters { display: grid; grid-template-columns: 1fr; gap: 8px; }
-  .filters select { max-width: none; width: 100%; }
+  div.desktop-filters { display: none; }
+  /* resumo dos filtros: grade com rótulos; qualquer campo abre a folha com todos os filtros */
+  div.filter-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; background: var(--surface-2); border-radius: 12px; padding: 12px; }
+  .filter-field { display: grid; gap: 4px; width: 100%; min-width: 0; text-align: left; border: 0; background: none; padding: 0; cursor: pointer; font: inherit; color: inherit; }
+  .filter-field.wide { grid-column: 1 / -1; }
+  .filter-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted); }
+  .filter-value { width: 100%; min-width: 0; height: 40px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 14px; }
+  .filter-value > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .filter-value > span:last-child { color: var(--muted); font-size: 11px; }
+  .filter-field.on .filter-value { border-color: var(--text); font-weight: 600; }
+  .filter-extra { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .filter-sheet h3 { margin: 0 0 4px; font: 800 17px/24px var(--font-display); }
+  .filter-sheet-field { display: grid; gap: 6px; margin-top: 12px; font-size: 12px; font-weight: 600; color: var(--muted); }
+  .filter-sheet-field select { width: 100%; max-width: none; height: 44px; font-size: 15px; color: var(--text); font-weight: 400; }
+  .filter-sheet-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .filter-sheet-actions .btn-primary { flex: 1; }
+  .filter-sheet { bottom: 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
   /* cards de indicador: 2 por linha; o último, se sobrar sozinho, ocupa a linha inteira (sem "órfão") */
   .stats, .stats-compact { grid-template-columns: 1fr 1fr; gap: 10px; }
   .stats > .stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
@@ -307,6 +322,7 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .filters select { max-width: 320px; }
+.filter-summary { display: none; }
 .inline-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .clickable { cursor: pointer; }
 .wrap { white-space: normal !important; min-width: 260px; }

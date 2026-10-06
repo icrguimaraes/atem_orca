@@ -15,6 +15,7 @@ import {
 } from "../api";
 import { useAuth } from "../auth";
 import { BudgetProgressCard } from "../components/BudgetProgressCard";
+import { FilterBar } from "../components/FilterBar";
 import { DivergingBars, Heatmap, Legend, MonthlyChart, PairedBars, SERIES, Waterfall } from "../components/charts";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import {
@@ -118,7 +119,6 @@ export default function Home() {
   if (!base.data) return <Loading />;
   const { cycle, companies, ccs, packages } = base.data;
   const o = overview.data;
-  const ccOptions = ccs.filter((c) => !filters.company_id || String(c.company_id) === filters.company_id);
   const monthName = o?.last_closed_period ? MONTHS[o.last_closed_period - 1] : null;
   const prevLabel = o ? `${o.previous_year} até ${monthName ?? "—"}` : "";
   const refLabel = o ? `${o.reference_year} até ${monthName ?? "—"}` : "";
@@ -136,38 +136,36 @@ export default function Home() {
         }
       />
 
-      <div className="filters">
-        <select value={filters.company_id} onChange={(e) => setFilters({ company_id: e.target.value, cost_center_id: "", package_id: filters.package_id })}>
-          <option value="">Todas as empresas</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.code} · {c.short_name ?? c.name}</option>
-          ))}
-        </select>
-        <select value={filters.cost_center_id} onChange={(e) => setFilters({ ...filters, cost_center_id: e.target.value })}>
-          <option value="">{isController ? "Todos os centros de custo" : "Meus centros de custo"}</option>
-          {ccOptions.map((c) => (
-            <option key={c.id} value={c.id}>{c.code} · {c.name}</option>
-          ))}
-        </select>
-        <select value={filters.package_id} onChange={(e) => setFilters({ ...filters, package_id: e.target.value })}>
-          <option value="">Todos os pacotes</option>
-          {packages.filter((p) => p.nature !== "CAPEX").map((p) => (
-            <option key={p.id} value={p.id}>{p.roman ? `${p.roman} · ` : ""}{p.name}</option>
-          ))}
-        </select>
-        {o && o.available_years.length > 1 && (
+      <FilterBar
+        onApply={(v) => setFilters({ company_id: v.company_id, cost_center_id: v.cost_center_id, package_id: v.package_id })}
+        fields={[
+          {
+            key: "company_id", label: "Empresa", value: filters.company_id,
+            onChange: (v) => setFilters({ company_id: v, cost_center_id: "", package_id: filters.package_id }),
+            options: [{ value: "", label: "Todas as empresas" }, ...companies.map((c) => ({ value: String(c.id), label: `${c.code} · ${c.short_name ?? c.name}` }))],
+          },
+          {
+            key: "package_id", label: "Pacote GMD", value: filters.package_id,
+            onChange: (v) => setFilters({ ...filters, package_id: v }),
+            options: [{ value: "", label: "Todos os pacotes" }, ...packages.filter((p) => p.nature !== "CAPEX").map((p) => ({ value: String(p.id), label: `${p.roman ? `${p.roman} · ` : ""}${p.name}` }))],
+          },
+          {
+            key: "cost_center_id", label: "Centro de custo", value: filters.cost_center_id, wide: true,
+            onChange: (v) => setFilters({ ...filters, cost_center_id: v }),
+            options: (d) => [
+              { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
+              ...ccs.filter((c) => !d.company_id || String(c.company_id) === d.company_id).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
+            ],
+          },
+        ]}
+        extra={o && o.available_years.length > 1 && (
           <div className="year-tabs" role="tablist" aria-label="Ano">
             {o.available_years.map((y) => (
               <button key={y} className={y === o.reference_year ? "active" : ""} onClick={() => setYear(y)}>{y}</button>
             ))}
           </div>
         )}
-        {(filters.company_id || filters.cost_center_id || filters.package_id) && (
-          <button className="btn btn-ghost btn-sm" onClick={() => setFilters({ company_id: "", cost_center_id: "", package_id: "" })}>
-            Limpar filtros
-          </button>
-        )}
-      </div>
+      />
 
       {overview.error && <Alert>{overview.error}</Alert>}
       {!o ? (
