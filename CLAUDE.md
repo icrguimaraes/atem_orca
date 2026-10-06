@@ -32,6 +32,9 @@ cd backend && FRONTEND_DIST=../frontend/dist uvicorn app.main:app --port 8077   
   `PARAM_LABELS` no frontend.
 - Frontend: tokens de cor/fonte em `styles.css` (`:root`, claro e escuro); gráficos em `components/charts.tsx` com a paleta
   `SERIES`; coral só em ações primárias. Toda tabela nova vai dentro de `.table-wrap`; conferir celular (390px) sem overflow.
+- Gráficos analíticos: figuras Plotly são montadas **no backend** (`services/analytics.py`, uma base filtrada por request,
+  formatação pt-BR em rótulos/tooltips) e renderizadas por `components/PlotlyChart.tsx` (bundle `plotly.js-basic-dist-min`,
+  carregado só na página Análise). Novos gráficos: nova função `fig_*` + chave em `dashboard()['figures']`.
 - Testes usam planilhas sintéticas de `tests/builders.py`. **Nunca** commitar `.xlsx` reais (dados pessoais) — já no `.gitignore`.
 - Branch de trabalho: `claude/atem-budget-planning-2027-1ril6s`; o Railway publica a cada push. Não abrir PR sem pedido.
 

@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.api.v1 import (
+    analytics,
     audit_logs,
     auth,
     capex,
@@ -75,9 +76,9 @@ for module in (
     datasets,
     opex,
     capex,
-    consolidation,
     personnel,
     consolidation,
+    analytics,
 ):
     api.include_router(module.router)
 app.include_router(api)

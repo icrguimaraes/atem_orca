@@ -17,9 +17,10 @@ com importação versionada, workflow de aprovação, auditoria e comparação 2
 | 2 — OPEX | Orçamento por centro de custo e pacote GMD (viagens, eventos, grade mensal), histórico por conta com alertas e justificativas, workflow (envio → análise → aprovação → consolidação) e validação dos pacotes Tipo 1; importação do template OPEX preenchido (todas as abas, linha a linha) | ✅ |
 | 3 — CAPEX | Solicitações (projeto ou aquisição) com itens, valor unitário × quantidade e cronograma; pendências críticas bloqueiam envio/aprovação; catálogo de ativos sugere a conta; importação do template CAPEX | ✅ |
 | 4 — Pessoal | Quadro por CC com uma ação por colaborador (promover, reajuste, desligar, transferir, admissão), vagas, custo = salário × reajuste × multiplicador do contrato (CLT 1,8; PJ sem), validação GMD do pacote Pessoas, cenários e simulação (what-if) | ✅ |
+| 6 — Análise (Plotly) | Dashboard FP&A interativo: KPIs (realizado 2025, orçado 2026, orçamento 2027, variações, módulos, % preenchido/aprovado), evolução mensal, comparativo por dimensão com drill-down (empresa → diretoria → CC → conta → mês), variação R$/%, ranking, composição, análise por CC e andamento; figuras geradas em Python (plotly) a partir da mesma base da consolidação | ✅ |
 | 5 — Consolidação | Painel OPEX + CAPEX + Pessoal × realizado, pontos de atenção, congelamento de versão (fotografia imutável), revisão (1.1 / 2.0) e exportação Excel (resumo, carga SAP chave × mês, consolidado, variações, detalhes por módulo, status) | ✅ |
 
-Também: bases carregadas com exclusão por escopo, por módulo ou total; design system Coral Stay (`docs/design-system.md`); 51 testes automatizados (regras, importação ponta a ponta, workflow, RBAC, consolidação).
+Também: bases carregadas com exclusão por escopo, por módulo ou total; design system Coral Stay (`docs/design-system.md`); 56 testes automatizados (regras, importação ponta a ponta, workflow, RBAC, consolidação, análise).
 A interface fica na raiz do domínio; a API está documentada em `/api/docs` (Swagger).
 
 ### Próximos passos sugeridos (fora do roadmap original)

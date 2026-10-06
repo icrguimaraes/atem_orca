@@ -1,8 +1,10 @@
-import type { ReactNode } from "react";
+import { Suspense, lazy, type ReactNode } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import Layout from "./components/Layout";
 import { Loading } from "./components/ui";
+// Plotly (~1 MB) só é baixado quando a Análise é aberta
+const Analytics = lazy(() => import("./pages/Analytics"));
 import Audit from "./pages/Audit";
 import CapexCostCenter from "./pages/CapexCostCenter";
 import CapexList from "./pages/CapexList";
@@ -42,6 +44,7 @@ export default function App() {
             }
           >
             <Route index element={<Home />} />
+            <Route path="analise" element={<Suspense fallback={<Loading />}><Analytics /></Suspense>} />
             <Route path="importacoes" element={<Protected roles={["CONTROLLER"]}><Imports /></Protected>} />
             <Route path="importacoes/:id" element={<Protected roles={["CONTROLLER"]}><ImportDetail /></Protected>} />
             <Route path="orcamento" element={<OpexList />} />

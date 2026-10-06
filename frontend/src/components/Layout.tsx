@@ -4,6 +4,7 @@ import { ROLE_LABELS } from "../labels";
 
 const NAV = [
   { to: "/", label: "Painel", end: true },
+  { to: "/analise", label: "Análise orçamentária" },
   { to: "/orcamento", label: "Orçamento OPEX" },
   { to: "/capex", label: "Orçamento CAPEX" },
   { to: "/pessoal", label: "Orçamento de Pessoal" },

@@ -435,3 +435,14 @@ tr.saving { opacity: 0.6; }
 .capex-total strong { font-family: var(--font-display); font-weight: 800; }
 .chart .axis { font-family: var(--font-body); }
 ::selection { background: color-mix(in srgb, var(--brand) 25%, transparent); }
+
+/* ---------- Análise (Plotly) */
+.plotly-chart { width: 100%; min-width: 0; }
+.plotly-chart .modebar { opacity: 0.35; transition: opacity 150ms ease; }
+.plotly-chart:hover .modebar { opacity: 1; }
+.plotly-chart .modebar-btn path { fill: var(--muted) !important; }
+.breadcrumb { font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.breadcrumb .btn-link:disabled { text-decoration: none; color: var(--text); font-weight: 600; cursor: default; }
+.stats-compact { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); margin-bottom: 12px; }
+.stats-compact .stat { padding: 10px 12px; }
+.stats-compact .stat-value { font-size: 20px; line-height: 26px; }

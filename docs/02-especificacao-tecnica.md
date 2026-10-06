@@ -375,3 +375,29 @@ Itens fora do roadmap original, em ordem sugerida. Cada um cabe numa fase curta 
 
 Pré-requisitos já prontos para esses itens: `CLAUDE.md` com comandos e convenções, `scripts/dev-db.sh` para o banco local,
 migrações numeradas com verificação de drift, seed idempotente que acrescenta parâmetros novos a ciclos existentes.
+
+## 17. Camada analítica (Fase 6 — Plotly)
+
+**Objetivo:** dashboard de Controladoria/FP&A com os mesmos números do processo, sem duplicar regras.
+
+- **Base única por requisição** (`services/analytics.build`): 3 consultas agregadas no banco (realizado do ano anterior,
+  orçado do ano de referência — ambos só das versões vigentes — e status das submissões) + o orçamento alvo via
+  `consolidation.rows_for` (OPEX + CAPEX + Pessoal; versão congelada lê a fotografia). Granularidade: CC × conta × mês,
+  com empresa, diretoria (`departments`), módulo (natureza da conta via `consolidation.module_of_nature`) e pacote.
+- **Filtros globais** (server-side): versão, empresa, diretoria, centro de custo, conta, módulo, pacote; sempre
+  intersectados com a visibilidade do usuário (`visible_cost_center_ids`). Dimensão do comparativo, modo da variação
+  (R$ / %), ranking (10/20/todas) também são parâmetros do mesmo endpoint.
+- **Endpoint único** `GET /analytics/dashboard` → KPIs + 7 figuras Plotly (JSON `data`/`layout`) + status;
+  `GET /analytics/options` → opções dos filtros no escopo do usuário. Cache em memória por 30 s, chave inclui
+  `max(audit_logs.id)` (toda mutação grava auditoria), então o dashboard nunca mostra número anterior a um lançamento.
+- **Conceitos:** Realizado {prev} = `actual_entries`; Orçado {ref} = `reference_budget_entries`; Orçamento {alvo} =
+  consolidação; Variação = alvo − base e % sobre a base; quando não há orçado de referência, a variação por conta/CC usa
+  o realizado anterior e o título do gráfico diz qual base está em uso. Limite de relevância = `alert.min_relevant_amount`.
+- **% preenchido** = CCs do escopo com algum valor no alvo ÷ CCs ativos do escopo; **% aprovado** = CCs com OPEX
+  aprovado/consolidado ÷ CCs do escopo (o fluxo OPEX é o principal; o gráfico de status mostra os três módulos).
+- **Formatação pt-BR** feita no backend (`fmt_compact`, `fmt_money`, `fmt_pct`): eixos com ticks calculados
+  (`tickvals/ticktext`), rótulos compactos nas barras e valores completos no hover (`customdata`).
+- **Frontend:** `pages/Analytics.tsx` (filtros, KPIs, cards, drill-down com trilha) e `components/PlotlyChart.tsx`
+  (tema claro/escuro lido dos tokens CSS, clique → drill-down). Plotly entra num chunk separado (lazy) de ~1,2 MB.
+- **Drill-down:** Empresa → Diretoria → Centro de custo → Conta → Mês, clicando nas barras do comparativo (e nos CCs
+  do gráfico de centros de custo); cada passo vira filtro e a trilha permite voltar.
