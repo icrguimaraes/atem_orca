@@ -56,14 +56,14 @@ function short(v: number): string {
 
 /** Comparativo mensal em colunas: ano anterior (cinza), ano em foco (azul) e orçado (verde-água), lado a lado.
  * Com espaço, cada barra recebe o próprio valor; senão, só máximo e mínimo de cada série. */
-export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean }) {
+export function MonthlyChart({ rows, prevYear, refYear, showBudget, prevColor = SERIES.past }: { rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean; prevColor?: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const [box, W] = useWidth();
   const H = 290, L = 84, R = 12, T = 26, B = 28;
   const plotW = W - L - R, plotH = H - T - B;
   type Key = "prev" | "ref" | "budget";
   const series: { key: Key; label: string; color: string }[] = [
-    ...(prevYear !== null ? [{ key: "prev" as Key, label: String(prevYear), color: SERIES.past }] : []),
+    ...(prevYear !== null ? [{ key: "prev" as Key, label: String(prevYear), color: prevColor }] : []),
     { key: "ref" as Key, label: String(refYear), color: SERIES.ref },
     ...(showBudget ? [{ key: "budget" as Key, label: `Orçado ${refYear}`, color: SERIES.budget }] : []),
   ];
@@ -72,11 +72,12 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
   const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
   const slot = plotW / 12;
   const n = series.length;
-  const gap = 3;
-  const barW = Math.max(6, Math.min(n === 1 ? 44 : n === 2 ? 24 : 18, (slot - 12 - gap * (n - 1)) / n));
+  const barW = Math.max(6, Math.min(n === 1 ? 44 : n === 2 ? 24 : 18, (slot - 12 - 3 * (n - 1)) / n));
+  const labelAll = slot - 6 >= n * 40; // um rótulo de ~40 px por barra
+  // com rótulo em todas as barras, os centros das barras vizinhas ficam a 40 px para os textos não encostarem
+  const gap = labelAll && n > 1 ? Math.min(Math.max(3, 40 - barW), (slot - 8 - barW * n) / (n - 1)) : 3;
   const groupW = barW * n + gap * (n - 1);
   const xOf = (i: number, j: number) => L + slot * i + slot / 2 - groupW / 2 + j * (barW + gap);
-  const labelAll = slot - 6 >= n * 36; // um rótulo de ~36 px por barra
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * max);
   const h = hover !== null ? rows[hover] : null;
 
@@ -132,7 +133,7 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
 
 /** Total acumulado mês a mês: ano em foco (azul, linha com marcadores) sobre a base (orçado em verde-água
  * ou ano anterior em cinza, área). A série do ano em foco para no último mês com realizado. */
-export function CumulativeChart({ rows, prevYear, refYear, showBudget }: { rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean }) {
+export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor = SERIES.past }: { rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean; prevColor?: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const [box, W] = useWidth();
   const H = 300, L = 84, R = 24, T = 30, B = 28;
@@ -142,7 +143,7 @@ export function CumulativeChart({ rows, prevYear, refYear, showBudget }: { rows:
   const lastRef = rows.reduce((last, r, i) => (Number(r.ref) > 0 ? i : last), -1);
   const baseKey = showBudget ? "budget" : prevYear !== null ? "prev" : null;
   const base = baseKey ? cum(baseKey) : null;
-  const baseColor = baseKey === "budget" ? SERIES.budget : SERIES.past;
+  const baseColor = baseKey === "budget" ? SERIES.budget : prevColor;
   const baseLabel = baseKey === "budget" ? `Orçado ${refYear}` : String(prevYear);
   const max = niceMax(Math.max(ref[lastRef] ?? 0, ...(base ?? [0]), 0));
   const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
@@ -169,15 +170,16 @@ export function CumulativeChart({ rows, prevYear, refYear, showBudget }: { rows:
         {refPts.length > 0 && <polyline points={refPts.map((v, i) => `${x(i)},${y(v)}`).join(" ")} fill="none" stroke={SERIES.ref} strokeWidth={2.5} strokeDasharray="5 4" pointerEvents="none" />}
         {base && base.map((v, i) => <circle key={`b${i}`} cx={x(i)} cy={y(v)} r={3.5} fill={baseColor} className="ring" pointerEvents="none" />)}
         {refPts.map((v, i) => <circle key={`r${i}`} cx={x(i)} cy={y(v)} r={4} fill={SERIES.ref} className="ring" pointerEvents="none" />)}
+        {/* rótulos: a série mais alta no mês recebe o valor acima do ponto e a mais baixa abaixo, sem sobreposição */}
         {base &&
           base.map((v, i) =>
             labelAll || i === base.length - 1 || i === 0 ? (
-              <text key={`bl${i}`} x={x(i)} y={y(v) - 9} className="extreme" textAnchor="middle" fill={baseColor} pointerEvents="none">{short(v)}</text>
+              <text key={`bl${i}`} x={x(i)} y={i <= lastRef && ref[i] > v ? y(v) + 17 : y(v) - 9} className="extreme" textAnchor="middle" fill={baseColor} pointerEvents="none">{short(v)}</text>
             ) : null,
           )}
         {refPts.map((v, i) =>
           labelAll || i === refPts.length - 1 || i === 0 ? (
-            <text key={`rl${i}`} x={x(i)} y={y(v) + 16} className="extreme" textAnchor="middle" fill={SERIES.ref} pointerEvents="none">{short(v)}</text>
+            <text key={`rl${i}`} x={x(i)} y={base && base[i] > v ? y(v) + 17 : y(v) - 9} className="extreme" textAnchor="middle" fill={SERIES.ref} pointerEvents="none">{short(v)}</text>
           ) : null,
         )}
         {rows.map((r, i) => (
@@ -236,9 +238,10 @@ export interface RankRow { label: string; sub?: string | null; value: number; pr
 
 /** Ranking em barras horizontais, do maior para o menor, com degradê no tom da série
  * (a maior barra em cor cheia, as menores esmaecendo em direção ao fundo). */
-export function TopBars({ rows, label, prevLabel }: { rows: RankRow[]; label: string; prevLabel?: string | null }) {
+export function TopBars({ rows, label, prevLabel, prevColor = SERIES.past }: { rows: RankRow[]; label: string; prevLabel?: string | null; prevColor?: string }) {
   const [hover, setHover] = useState<number | null>(null);
-  const max = niceMax(Math.max(...rows.flatMap((r) => [r.value, r.prev ?? 0]), 0));
+  // sem eixo, a maior barra ocupa a trilha inteira (niceMax deixaria todas curtas)
+  const max = Math.max(...rows.flatMap((r) => [r.value, r.prev ?? 0]), 0) || 1;
   const tone = (i: number) => `color-mix(in srgb, ${SERIES.ref} ${Math.round(100 - (i / Math.max(rows.length - 1, 1)) * 60)}%, transparent)`;
   return (
     <div className="paired" role="list" aria-label={label}>
@@ -250,7 +253,7 @@ export function TopBars({ rows, label, prevLabel }: { rows: RankRow[]; label: st
           </div>
           <div className="paired-bars">
             <div className="top-bar" style={{ width: `${(Math.max(r.value, 0) / max) * 100}%`, background: tone(i) }} />
-            {prevLabel && r.prev !== undefined && <div className="top-bar-prev" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%` }} />}
+            {prevLabel && r.prev !== undefined && <div className="top-bar-prev" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%`, background: prevColor }} />}
           </div>
           <div className="paired-value">
             <strong>{fmtCompact(r.value)}</strong>
@@ -260,7 +263,7 @@ export function TopBars({ rows, label, prevLabel }: { rows: RankRow[]; label: st
             <div className="tooltip tooltip-inline">
               <strong>{r.label}</strong>
               <span><i style={{ background: SERIES.ref }} />{label}: {fmtMoney(r.value)}</span>
-              {prevLabel && r.prev !== undefined && <span><i style={{ background: SERIES.past }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
+              {prevLabel && r.prev !== undefined && <span><i style={{ background: prevColor }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
             </div>
           )}
         </div>
@@ -269,16 +272,16 @@ export function TopBars({ rows, label, prevLabel }: { rows: RankRow[]; label: st
   );
 }
 
-export function PairedBars({ rows, prevLabel, refLabel }: { rows: CompareRow[]; prevLabel: string; refLabel: string }) {
+export function PairedBars({ rows, prevLabel, refLabel, prevColor = SERIES.past }: { rows: CompareRow[]; prevLabel: string; refLabel: string; prevColor?: string }) {
   const [hover, setHover] = useState<number | null>(null);
-  const max = niceMax(Math.max(...rows.flatMap((r) => [r.prev, r.ref]), 0));
+  const max = Math.max(...rows.flatMap((r) => [r.prev, r.ref]), 0) || 1; // a maior barra ocupa a trilha inteira
   return (
     <div className="paired">
       {rows.map((r, i) => (
         <div key={r.label} className={`paired-row ${hover === i ? "hover" : ""}`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
           <div className="paired-label" title={r.label}>{r.label}</div>
           <div className="paired-bars">
-            {prevLabel && <div className="paired-bar" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%`, background: SERIES.past }} />}
+            {prevLabel && <div className="paired-bar" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%`, background: prevColor }} />}
             <div className="paired-bar" style={{ width: `${(Math.max(r.ref, 0) / max) * 100}%`, background: SERIES.ref }} />
           </div>
           <div className="paired-value">
@@ -288,7 +291,7 @@ export function PairedBars({ rows, prevLabel, refLabel }: { rows: CompareRow[]; 
           {hover === i && (
             <div className="tooltip tooltip-inline">
               <strong>{r.label}</strong>
-              {prevLabel && <span><i style={{ background: SERIES.past }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
+              {prevLabel && <span><i style={{ background: prevColor }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
               <span><i style={{ background: SERIES.ref }} />{refLabel}: {fmtMoney(r.ref)}</span>
             </div>
           )}

@@ -20,7 +20,6 @@ import { CumulativeChart, DivergingBars, Heatmap, Legend, MonthlyChart, PairedBa
 import { DrillTable } from "../components/DrillTable";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import {
-  CYCLE_STATUS,
   DATASET_LABELS,
   IMPORT_STATUS,
   MONTHS,
@@ -40,12 +39,6 @@ const SEVERITY = {
   OK: { tone: "good", label: "OK" },
 } as const;
 
-function daysUntil(iso: string | null): string | undefined {
-  if (!iso) return undefined;
-  const diff = Math.ceil((new Date(`${iso}T23:59:59`).getTime() - Date.now()) / 86_400_000);
-  return diff >= 0 ? `faltam ${diff} dia(s)` : `encerrado há ${-diff} dia(s)`;
-}
-
 function Delta({ pct, invert = false }: { pct: string | null; invert?: boolean }) {
   if (pct === null) return null;
   const n = Number(pct);
@@ -54,11 +47,12 @@ function Delta({ pct, invert = false }: { pct: string | null; invert?: boolean }
   return <span className={`delta ${cls}`}>{n > 0 ? "▲" : n < 0 ? "▼" : "•"} {fmtPct(pct)}</span>;
 }
 
-function RankChart({ rows, refLabel, prevLabel, empty, showPrev }: { rows: Overview["top_accounts"]; refLabel: string; prevLabel: string; empty: string; showPrev: boolean }) {
+function RankChart({ rows, refLabel, prevLabel, empty, showPrev, prevColor }: { rows: Overview["top_accounts"]; refLabel: string; prevLabel: string; empty: string; showPrev: boolean; prevColor: string }) {
   if (!rows.length) return <Empty>{empty}</Empty>;
   return (
     <TopBars
       label={refLabel}
+      prevColor={prevColor}
       prevLabel={showPrev ? prevLabel : null}
       rows={rows.map((r) => ({
         label: r.name ?? r.code ?? "—",
@@ -79,8 +73,8 @@ const SECTIONS = [
   { key: "table", label: "Tabela por pacote, conta e centro de custo" },
   { key: "cumulative", label: "Total acumulado" },
   { key: "top", label: "Maiores centros de custo e contas" },
-  { key: "packages", label: "Pacotes GMD e prazos" },
-  { key: "bridge", label: "Ponte e variações por conta" },
+  { key: "packages", label: "Pacotes GMD e ponte entre os anos" },
+  { key: "bridge", label: "Maiores aumentos e reduções por conta" },
   { key: "heatmap", label: "Mapa de calor" },
 ];
 
@@ -202,6 +196,8 @@ export default function Home() {
   const refLabel = o ? `${o.reference_year} até ${monthName ?? "—"}` : "";
   const hasData = Boolean(o && (o.has_actual || o.has_budget));
   const shownYears = years.length ? years : (o?.selected_years ?? []);
+  // cor do ano de comparação: verde-água (como o orçado no Power BI) quando ele é a única base; cinza quando há orçado
+  const prevColor = o?.has_budget ? SERIES.past : SERIES.budget;
   const inv = inventory.data;
 
   return (
@@ -283,7 +279,7 @@ export default function Home() {
           {isController && <> <Link className="link" to="/importacoes">Importar</Link> no layout da aba “Realizado”.</>} Abaixo, o que já existe na base.
         </Alert>
       ) : (
-        <div className={overview.loading ? "is-loading" : undefined} aria-busy={overview.loading}>
+        <div className={`panel-body${overview.loading ? " is-loading" : ""}`} aria-busy={overview.loading}>
           <div className="stats">
             {o.has_prev && (
               <>
@@ -292,7 +288,7 @@ export default function Home() {
               </>
             )}
             {o.has_actual && (
-              <Stat label={`Realizado ${refLabel}`} value={fmtCompact(o.kpis.ref_ytd)} tone="warn" hint={fmtMoney(o.kpis.ref_ytd)} />
+              <Stat label={`Realizado ${refLabel}`} value={fmtCompact(o.kpis.ref_ytd)} hint={fmtMoney(o.kpis.ref_ytd)} />
             )}
             {o.has_prev && o.has_actual && (
               <div className="stat stat-inline-delta">
@@ -336,7 +332,7 @@ export default function Home() {
           >
             <Legend
               items={[
-                ...(o.has_prev ? [{ label: String(o.previous_year), color: SERIES.past }] : []),
+                ...(o.has_prev ? [{ label: String(o.previous_year), color: prevColor }] : []),
                 ...(o.has_actual ? [{ label: String(o.reference_year), color: SERIES.ref }] : []),
                 ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget }] : []),
               ]}
@@ -371,7 +367,7 @@ export default function Home() {
                 </table>
               </div>
             ) : (
-              <MonthlyChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} />
+              <MonthlyChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} prevColor={prevColor} />
             )}
           </Card>,
           )}
@@ -387,10 +383,10 @@ export default function Home() {
             <Legend
               items={[
                 { label: `Realizado ${o.reference_year}`, color: SERIES.ref },
-                ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget }] : o.has_prev ? [{ label: `Realizado ${o.previous_year}`, color: SERIES.past }] : []),
+                ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget }] : o.has_prev ? [{ label: `Realizado ${o.previous_year}`, color: prevColor }] : []),
               ]}
             />
-            <CumulativeChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} />
+            <CumulativeChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} prevColor={prevColor} />
           </Card>,
           )}
 
@@ -399,11 +395,11 @@ export default function Home() {
           <div className="grid-2">
             <Card title={`Maiores centros de custo · ${refLabel}`}>
               {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
-              <RankChart rows={o.top_cost_centers} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
+              <RankChart rows={o.top_cost_centers} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} prevColor={prevColor} />
             </Card>
             <Card title={`Maiores contas · ${refLabel}`}>
               {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
-              <RankChart rows={o.top_accounts} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
+              <RankChart rows={o.top_accounts} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} prevColor={prevColor} />
             </Card>
           </div>,
           )}
@@ -413,12 +409,13 @@ export default function Home() {
             <Card title={`Por pacote GMD · acumulado até ${monthName ?? "—"}`}>
               <Legend
                 items={[
-                  ...(o.has_prev ? [{ label: String(o.previous_year), color: SERIES.past }] : []),
+                  ...(o.has_prev ? [{ label: String(o.previous_year), color: prevColor }] : []),
                   { label: String(o.reference_year), color: SERIES.ref },
                 ]}
               />
               {o.by_package.length ? (
                 <PairedBars
+                  prevColor={prevColor}
                   prevLabel={prevLabel}
                   refLabel={refLabel}
                   rows={o.by_package.map((p) => ({
@@ -432,21 +429,7 @@ export default function Home() {
                 <Empty>Sem dados.</Empty>
               )}
             </Card>
-            <Card title={`Prazos · ${cycle?.name ?? ""}`}>
-              <dl className="kv">
-                <dt>Status</dt>
-                <dd>{cycle ? <Badge tone={CYCLE_STATUS[cycle.status]?.tone ?? "neutral"}>{CYCLE_STATUS[cycle.status]?.label}</Badge> : "—"}</dd>
-                <dt>OPEX</dt>
-                <dd>{fmtDate(cycle?.opex_deadline ?? null)} <span className="muted small">{daysUntil(cycle?.opex_deadline ?? null)}</span></dd>
-                <dt>CAPEX</dt>
-                <dd>{fmtDate(cycle?.capex_deadline ?? null)} <span className="muted small">{daysUntil(cycle?.capex_deadline ?? null)}</span></dd>
-              </dl>
-            </Card>
-          </div>,
-          )}
-
-          {o.has_prev && o.has_actual && o.by_package.length > 0 && shell("bridge",
-            <div className="grid-2">
+            {o.has_prev && o.has_actual && o.by_package.length > 0 && (
               <Card title={`Ponte ${o.previous_year} → ${o.reference_year} por pacote · até ${monthName ?? "—"}`}>
                 <p className="muted small">De onde vem a variação: cada barra é o aumento (▲) ou redução (▼) do pacote no mesmo período.</p>
                 <Waterfall
@@ -458,16 +441,16 @@ export default function Home() {
                     .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))}
                 />
               </Card>
-              <Card title={`Maiores aumentos e reduções por conta · até ${monthName ?? "—"}`}>
-                {o.account_deltas.length ? (
-                  <DivergingBars
-                    rows={o.account_deltas.map((d) => ({ label: d.name, sub: d.code, delta: Number(d.delta), from: Number(d.prev_ytd), to: Number(d.ref_ytd) }))}
-                  />
-                ) : (
-                  <Empty>Sem variações.</Empty>
-                )}
-              </Card>
-            </div>,
+            )}
+          </div>,
+          )}
+
+          {o.has_prev && o.has_actual && o.account_deltas.length > 0 && shell("bridge",
+            <Card title={`Maiores aumentos e reduções por conta · ${o.reference_year} vs ${o.previous_year}, até ${monthName ?? "—"}`}>
+              <DivergingBars
+                rows={o.account_deltas.map((d) => ({ label: d.name, sub: d.code, delta: Number(d.delta), from: Number(d.prev_ytd), to: Number(d.ref_ytd) }))}
+              />
+            </Card>,
           )}
 
           {o.heatmap.rows.length > 0 && shell("heatmap",
