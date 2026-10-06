@@ -71,6 +71,7 @@ DIMENSIONS = {
 DRILL_ORDER = ("company", "department", "cost_center", "account", "month")
 # Paleta validada do app (styles.css): ano anterior laranja, referência azul, orçamento verde-água
 COLOR_PREV, COLOR_REF, COLOR_TARGET = "#eb6834", "#2a78d6", "#1baf7a"
+COLOR_PAST = "#8b95a7"  # realizado do ano anterior: neutro, igual ao token --series-past do frontend
 COLOR_UP, COLOR_DOWN, COLOR_FLAT = "#e34948", "#2a78d6", "#9aa1ad"
 MODULE_COLORS = {"OPEX": COLOR_REF, "CAPEX": COLOR_PREV, "PERSONNEL": COLOR_TARGET}
 STATUS_COLORS = {
@@ -412,7 +413,7 @@ def fig_monthly(base: Base) -> dict:
     y = base.ctx
     rows = {r["id"]: r for r in group(base, "month")}
     series = [
-        ("prev", f"Realizado {y.prev_year}", COLOR_PREV, "dot"),
+        ("prev", f"Realizado {y.prev_year}", COLOR_PAST, "dot"),
         ("ref", f"Orçado {y.ref_year}", COLOR_REF, "dash"),
         ("target", f"Orçamento {y.target_year}", COLOR_TARGET, "solid"),
     ]
@@ -458,7 +459,7 @@ def fig_annual(base: Base, dim: str, limit: int = 12) -> dict:
     data = []
     all_values = []
     for attr, name, color in (
-        ("prev", f"Realizado {y.prev_year}", COLOR_PREV),
+        ("prev", f"Realizado {y.prev_year}", COLOR_PAST),
         ("ref", f"Orçado {y.ref_year}", COLOR_REF),
         ("target", f"Orçamento {y.target_year}", COLOR_TARGET),
     ):

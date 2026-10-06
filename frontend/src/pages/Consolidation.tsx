@@ -213,7 +213,7 @@ export default function Consolidation() {
           </div>
           <div className="grid-2">
             <Card title={`Por pacote · ${y.ref} anualizado × ${y.target}`}>
-              <Legend items={[{ label: `${y.ref} anualizado`, color: SERIES.prev }, { label: `${y.target} orçado`, color: SERIES.ref }]} />
+              <Legend items={[{ label: `${y.ref} anualizado`, color: SERIES.past }, { label: `${y.target} orçado`, color: SERIES.ref }]} />
               <PairedBars
                 prevLabel={`${y.ref} anualizado`}
                 refLabel={`${y.target} orçado`}

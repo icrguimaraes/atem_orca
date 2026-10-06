@@ -306,7 +306,7 @@ export default function CapexCostCenter() {
             <Card title={hasHistory ? `Por conta · ${y.ref} realizado × ${y.target} solicitado` : "Por conta de ativo"}>
               {hasHistory ? (
                 <>
-                  <Legend items={[{ label: `${y.ref} realizado`, color: SERIES.prev }, { label: `${y.target} solicitado`, color: SERIES.ref }]} />
+                  <Legend items={[{ label: `${y.ref} realizado`, color: SERIES.past }, { label: `${y.target} solicitado`, color: SERIES.ref }]} />
                   <PairedBars
                     prevLabel={`${y.ref} realizado`}
                     refLabel={`${y.target} solicitado`}

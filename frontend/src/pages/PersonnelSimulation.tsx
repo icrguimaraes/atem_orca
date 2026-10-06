@@ -162,11 +162,11 @@ export default function PersonnelSimulation() {
             <Stat label="Sem multiplicador" value={result.simulated.ignored_multiplier_for.join(", ") || "—"} hint="contratos fora da simulação de encargos" />
           </div>
           <Card title="Custo mensal · base × simulado">
-            <Legend items={[{ label: "Base", color: SERIES.prev }, { label: "Simulado", color: SERIES.ref }]} />
+            <Legend items={[{ label: "Base", color: SERIES.past }, { label: "Simulado", color: SERIES.ref }]} />
             <MonthlyBars
               height={220}
               series={[
-                { label: "Base", color: SERIES.prev, values: result.base.monthly.map(Number) },
+                { label: "Base", color: SERIES.past, values: result.base.monthly.map(Number) },
                 { label: "Simulado", color: SERIES.ref, values: result.simulation.monthly.map(Number) },
               ]}
             />

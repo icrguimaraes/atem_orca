@@ -6,6 +6,7 @@ export const SERIES = {
   ref: "var(--series-1)",
   prev: "var(--series-2)",
   budget: "var(--series-3)",
+  past: "var(--series-past)", // ano anterior, base ou anualizado: neutro, para a série atual (azul) se destacar
 };
 
 function niceMax(v: number): number {
@@ -79,7 +80,7 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
             <g key={r.month}>
               {hover === i && <rect x={L + slot * i} y={T} width={slot} height={plotH} className="hover-band" />}
               {(paired
-                ? [{ v: Number(r.prev), c: SERIES.prev, dx: -barW - 1 }, { v: Number(r.ref), c: SERIES.ref, dx: 1 }]
+                ? [{ v: Number(r.prev), c: SERIES.past, dx: -barW - 1 }, { v: Number(r.ref), c: SERIES.ref, dx: 1 }]
                 : [{ v: Number(r.ref), c: SERIES.ref, dx: -barW / 2 }]
               ).map(
                 (b, j) =>
@@ -96,7 +97,7 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
             </g>
           );
         })}
-        <ExtremeLabels values={rows.map((r) => Number(r.prev))} x={(i) => L + slot * i + slot / 2} y={y} color={SERIES.prev} dx={-barW / 2 - 1} />
+        <ExtremeLabels values={rows.map((r) => Number(r.prev))} x={(i) => L + slot * i + slot / 2} y={y} color={SERIES.past} dx={-barW / 2 - 1} />
         <ExtremeLabels values={rows.map((r) => Number(r.ref))} x={(i) => L + slot * i + slot / 2} y={y} color={SERIES.ref} dx={barW / 2 + 1} />
         {showBudget && <polyline points={budgetPts} fill="none" stroke={SERIES.budget} strokeWidth={2} pointerEvents="none" />}
         {showBudget && <ExtremeLabels values={rows.map((r) => Number(r.budget))} x={(i) => L + slot * i + slot / 2} y={y} color={SERIES.budget} />}
@@ -109,7 +110,7 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
       {h && hover !== null && (
         <div className="tooltip" style={{ left: `${((L + slot * hover + slot / 2) / W) * 100}%` }}>
           <strong>{MONTHS[h.month - 1]}</strong>
-          <span><i style={{ background: SERIES.prev }} />{prevYear}: {fmtMoney(h.prev)}</span>
+          <span><i style={{ background: SERIES.past }} />{prevYear}: {fmtMoney(h.prev)}</span>
           <span><i style={{ background: SERIES.ref }} />{refYear}: {fmtMoney(h.ref)}</span>
           {showBudget && <span><i style={{ background: SERIES.budget }} />Orçado {refYear}: {fmtMoney(h.budget)}</span>}
           {Number(h.prev) > 0 && Number(h.ref) > 0 && <span className="muted">Variação: {fmtPct(String((Number(h.ref) - Number(h.prev)) / Number(h.prev)))}</span>}
@@ -178,7 +179,7 @@ export function TopBars({ rows, label, prevLabel }: { rows: RankRow[]; label: st
             <div className="tooltip tooltip-inline">
               <strong>{r.label}</strong>
               <span><i style={{ background: SERIES.ref }} />{label}: {fmtMoney(r.value)}</span>
-              {prevLabel && r.prev !== undefined && <span><i style={{ background: SERIES.prev }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
+              {prevLabel && r.prev !== undefined && <span><i style={{ background: SERIES.past }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
             </div>
           )}
         </div>
@@ -196,7 +197,7 @@ export function PairedBars({ rows, prevLabel, refLabel }: { rows: CompareRow[]; 
         <div key={r.label} className={`paired-row ${hover === i ? "hover" : ""}`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
           <div className="paired-label" title={r.label}>{r.label}</div>
           <div className="paired-bars">
-            {prevLabel && <div className="paired-bar" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%`, background: SERIES.prev }} />}
+            {prevLabel && <div className="paired-bar" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%`, background: SERIES.past }} />}
             <div className="paired-bar" style={{ width: `${(Math.max(r.ref, 0) / max) * 100}%`, background: SERIES.ref }} />
           </div>
           <div className="paired-value">
@@ -206,7 +207,7 @@ export function PairedBars({ rows, prevLabel, refLabel }: { rows: CompareRow[]; 
           {hover === i && (
             <div className="tooltip tooltip-inline">
               <strong>{r.label}</strong>
-              {prevLabel && <span><i style={{ background: SERIES.prev }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
+              {prevLabel && <span><i style={{ background: SERIES.past }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
               <span><i style={{ background: SERIES.ref }} />{refLabel}: {fmtMoney(r.ref)}</span>
             </div>
           )}
@@ -322,7 +323,7 @@ export function Waterfall({
   ];
   const max = niceMax(Math.max(...rows.map((r) => Math.max(r.from, r.to))));
   const pct = (v: number) => `${(Math.max(v, 0) / max) * 100}%`;
-  const color = { "total-prev": SERIES.prev, "total-ref": SERIES.ref, up: "var(--div-up)", down: "var(--div-down)" };
+  const color = { "total-prev": SERIES.past, "total-ref": SERIES.ref, up: "var(--div-up)", down: "var(--div-down)" };
   return (
     <div className="waterfall">
       {rows.map((r, i) => (

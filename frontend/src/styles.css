@@ -366,11 +366,11 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 }
 
 /* ---------- séries de gráfico (validadas: light e dark) */
-:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --grid: #eceef1; }
+:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-past: #8b95a7; --grid: #eceef1; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --grid: #262b34; }
+  :root:not([data-theme="light"]) { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-past: #7b8596; --grid: #262b34; }
 }
-  :root[data-theme="dark"] { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --grid: #262b34; }
+  :root[data-theme="dark"] { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-past: #7b8596; --grid: #262b34; }
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .filters select { max-width: 320px; }
@@ -414,12 +414,13 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 .tooltip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
 .tooltip-inline { left: 50%; top: -6px; transform: translate(-50%, -100%); }
 
-.paired { display: grid; gap: 4px; }
-.paired-row { position: relative; display: grid; grid-template-columns: minmax(110px, 34%) 1fr auto; gap: 10px; align-items: center; padding: 4px 6px; border-radius: 6px; }
+/* barras horizontais: linhas com respiro (10 px) e barras legíveis */
+.paired { display: grid; gap: 10px; }
+.paired-row { position: relative; display: grid; grid-template-columns: minmax(140px, 36%) 1fr auto; gap: 12px; align-items: center; padding: 4px 6px; border-radius: 6px; }
 .paired-row.hover { background: var(--surface-2); }
 .paired-label { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .paired-bars { display: grid; gap: 2px; }
-.paired-bar { height: 8px; border-radius: 0 4px 4px 0; min-width: 0; }
+.paired-bar { height: 10px; border-radius: 0 5px 5px 0; min-width: 0; }
 .paired-value { font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 
 .checks-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
@@ -446,8 +447,8 @@ input:disabled, select:disabled { opacity: 0.6; }
 .year-tabs[aria-busy="true"] button { opacity: 0.7; cursor: progress; }
 .is-loading { opacity: 0.55; transition: opacity 150ms ease; }
 /* ranking em barras horizontais (maiores CCs e contas) */
-.top-bar { height: 14px; border-radius: 0 6px 6px 0; }
-.top-bar-prev { height: 5px; border-radius: 0 3px 3px 0; background: var(--series-2); opacity: 0.55; }
+.top-bar { height: 22px; border-radius: 0 6px 6px 0; }
+.top-bar-prev { height: 6px; border-radius: 0 3px 3px 0; background: var(--series-past); opacity: 0.8; }
 .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 6px 0 -6px; }
 .indent { padding-left: 26px !important; color: var(--muted); }
 

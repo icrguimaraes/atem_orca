@@ -215,7 +215,7 @@ export default function OpexCostCenter() {
           <Card title={`Evolução mensal · ${y.prev}, ${y.ref} e ${y.target} proposto`}>
             <Legend
               items={[
-                { label: `${y.prev} realizado`, color: SERIES.prev },
+                { label: `${y.prev} realizado`, color: SERIES.past },
                 { label: `${y.ref} realizado`, color: SERIES.ref },
                 { label: `${y.target} proposto`, color: SERIES.budget },
                 ...(Number(accounts.totals.ref_budget) ? [{ label: `${y.ref} orçado`, color: "var(--muted)", line: true }] : []),
@@ -224,7 +224,7 @@ export default function OpexCostCenter() {
             <MonthlyBars
               height={240}
               series={[
-                { label: `${y.prev} realizado`, color: SERIES.prev, values: accounts.monthly.prev.map(Number) },
+                { label: `${y.prev} realizado`, color: SERIES.past, values: accounts.monthly.prev.map(Number) },
                 { label: `${y.ref} realizado`, color: SERIES.ref, values: accounts.monthly.ref.map(Number) },
                 { label: `${y.target} proposto`, color: SERIES.budget, values: accounts.monthly.proposed.map(Number) },
               ]}
@@ -232,7 +232,7 @@ export default function OpexCostCenter() {
             />
           </Card>
           <Card title={`Por pacote · ${y.ref} anualizado × ${y.target} proposto`}>
-            <Legend items={[{ label: `${y.ref} anualizado`, color: SERIES.prev }, { label: `${y.target} proposto`, color: SERIES.ref }]} />
+            <Legend items={[{ label: `${y.ref} anualizado`, color: SERIES.past }, { label: `${y.target} proposto`, color: SERIES.ref }]} />
             <PairedBars
               prevLabel={`${y.ref} anualizado`}
               refLabel={`${y.target} proposto`}

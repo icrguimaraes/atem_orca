@@ -26,7 +26,7 @@ export function BudgetProgressCard({ progress }: { progress: BudgetProgress }) {
       <div style={{ marginTop: 16 }}>
         {progress.by_package.length ? (
           <>
-            <Legend items={[{ label: `${progress.ref_year} anualizado`, color: SERIES.prev }, { label: `${progress.target_year} proposto`, color: SERIES.ref }]} />
+            <Legend items={[{ label: `${progress.ref_year} anualizado`, color: SERIES.past }, { label: `${progress.target_year} proposto`, color: SERIES.ref }]} />
             <PairedBars
               prevLabel={`${progress.ref_year} anualizado`}
               refLabel={`${progress.target_year} proposto`}

@@ -228,7 +228,7 @@ export default function Home() {
           >
             <Legend
               items={[
-                ...(o.has_prev ? [{ label: String(o.previous_year), color: SERIES.prev }] : []),
+                ...(o.has_prev ? [{ label: String(o.previous_year), color: SERIES.past }] : []),
                 ...(o.has_actual ? [{ label: String(o.reference_year), color: SERIES.ref }] : []),
                 ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget, line: true }] : []),
               ]}
@@ -267,6 +267,53 @@ export default function Home() {
             )}
           </Card>
 
+          {/* ordem por relevância: onde está o dinheiro (CCs e contas) → pacotes → de onde vem a variação → detalhe mês a mês */}
+          <div className="grid-2">
+            <Card title={`Maiores centros de custo · ${refLabel}`}>
+              {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
+              <RankChart rows={o.top_cost_centers} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
+            </Card>
+            <Card title={`Maiores contas · ${refLabel}`}>
+              {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
+              <RankChart rows={o.top_accounts} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
+            </Card>
+          </div>
+
+          <div className="grid-2">
+            <Card title={`Por pacote GMD · acumulado até ${monthName ?? "—"}`}>
+              <Legend
+                items={[
+                  ...(o.has_prev ? [{ label: String(o.previous_year), color: SERIES.past }] : []),
+                  { label: String(o.reference_year), color: SERIES.ref },
+                ]}
+              />
+              {o.by_package.length ? (
+                <PairedBars
+                  prevLabel={prevLabel}
+                  refLabel={refLabel}
+                  rows={o.by_package.map((p) => ({
+                    label: p.package,
+                    prev: Number(p.prev_ytd),
+                    ref: Number(p.ref_ytd),
+                    note: p.ytd_var_pct !== null ? fmtPct(p.ytd_var_pct) : undefined,
+                  }))}
+                />
+              ) : (
+                <Empty>Sem dados.</Empty>
+              )}
+            </Card>
+            <Card title={`Prazos · ${cycle?.name ?? ""}`}>
+              <dl className="kv">
+                <dt>Status</dt>
+                <dd>{cycle ? <Badge tone={CYCLE_STATUS[cycle.status]?.tone ?? "neutral"}>{CYCLE_STATUS[cycle.status]?.label}</Badge> : "—"}</dd>
+                <dt>OPEX</dt>
+                <dd>{fmtDate(cycle?.opex_deadline ?? null)} <span className="muted small">{daysUntil(cycle?.opex_deadline ?? null)}</span></dd>
+                <dt>CAPEX</dt>
+                <dd>{fmtDate(cycle?.capex_deadline ?? null)} <span className="muted small">{daysUntil(cycle?.capex_deadline ?? null)}</span></dd>
+              </dl>
+            </Card>
+          </div>
+
           {o.has_prev && o.has_actual && o.by_package.length > 0 && (
             <div className="grid-2">
               <Card title={`Ponte ${o.previous_year} → ${o.reference_year} por pacote · até ${monthName ?? "—"}`}>
@@ -298,76 +345,6 @@ export default function Home() {
             </Card>
           )}
 
-          <div className="grid-2">
-            <Card title={`Por pacote GMD · acumulado até ${monthName ?? "—"}`}>
-              <Legend
-                items={[
-                  ...(o.has_prev ? [{ label: String(o.previous_year), color: SERIES.prev }] : []),
-                  { label: String(o.reference_year), color: SERIES.ref },
-                ]}
-              />
-              {o.by_package.length ? (
-                <PairedBars
-                  prevLabel={prevLabel}
-                  refLabel={refLabel}
-                  rows={o.by_package.map((p) => ({
-                    label: p.package,
-                    prev: Number(p.prev_ytd),
-                    ref: Number(p.ref_ytd),
-                    note: p.ytd_var_pct !== null ? fmtPct(p.ytd_var_pct) : undefined,
-                  }))}
-                />
-              ) : (
-                <Empty>Sem dados.</Empty>
-              )}
-            </Card>
-            {isController && admin.data ? (
-              <Card
-                title="Qualidade da base"
-                actions={admin.data.quality.issues ? <Badge tone="warn">{admin.data.quality.issues} ponto(s)</Badge> : <Badge tone="good">Tudo certo</Badge>}
-              >
-                <ul className="checks-list">
-                  {admin.data.quality.checks.map((c) => (
-                    <li key={c.code}>
-                      <Badge tone={SEVERITY[c.severity].tone}>{SEVERITY[c.severity].label}</Badge>
-                      <div>
-                        <div>
-                          {c.title}
-                          {c.count > 1 && c.severity !== "OK" && <strong> · {fmtInt(c.count)}</strong>}
-                        </div>
-                        {c.severity !== "OK" && c.detail && <div className="muted small">{c.detail}</div>}
-                        {c.severity !== "OK" && c.samples.length > 0 && (
-                          <div className="muted small mono">{c.samples.slice(0, 6).join(" · ")}{c.samples.length > 6 ? " …" : ""}</div>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </Card>
-            ) : (
-              <Card title={`Prazos · ${cycle?.name ?? ""}`}>
-                <dl className="kv">
-                  <dt>Status</dt>
-                  <dd>{cycle ? <Badge tone={CYCLE_STATUS[cycle.status]?.tone ?? "neutral"}>{CYCLE_STATUS[cycle.status]?.label}</Badge> : "—"}</dd>
-                  <dt>OPEX</dt>
-                  <dd>{fmtDate(cycle?.opex_deadline ?? null)} <span className="muted small">{daysUntil(cycle?.opex_deadline ?? null)}</span></dd>
-                  <dt>CAPEX</dt>
-                  <dd>{fmtDate(cycle?.capex_deadline ?? null)} <span className="muted small">{daysUntil(cycle?.capex_deadline ?? null)}</span></dd>
-                </dl>
-              </Card>
-            )}
-          </div>
-
-          <div className="grid-2">
-            <Card title={`Maiores centros de custo · ${refLabel}`}>
-              {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
-              <RankChart rows={o.top_cost_centers} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
-            </Card>
-            <Card title={`Maiores contas · ${refLabel}`}>
-              {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
-              <RankChart rows={o.top_accounts} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
-            </Card>
-          </div>
         </div>
       )}
 
@@ -468,15 +445,25 @@ export default function Home() {
         </Card>
       )}
 
-      {!hasData && isController && admin.data && admin.data.quality.issues > 0 && (
-        <Card title="Qualidade da base">
+      {/* manutenção da base (Controladoria): depois dos números, junto das importações e versões */}
+      {isController && admin.data && (
+        <Card
+          title="Qualidade da base"
+          actions={admin.data.quality.issues ? <Badge tone="warn">{admin.data.quality.issues} ponto(s)</Badge> : <Badge tone="good">Tudo certo</Badge>}
+        >
           <ul className="checks-list">
-            {admin.data.quality.checks.filter((c) => c.severity !== "OK").map((c) => (
+            {admin.data.quality.checks.map((c) => (
               <li key={c.code}>
                 <Badge tone={SEVERITY[c.severity].tone}>{SEVERITY[c.severity].label}</Badge>
                 <div>
-                  <div>{c.title}{c.count > 0 && <strong> · {fmtInt(c.count)}</strong>}</div>
-                  {c.detail && <div className="muted small">{c.detail}</div>}
+                  <div>
+                    {c.title}
+                    {c.count > 1 && c.severity !== "OK" && <strong> · {fmtInt(c.count)}</strong>}
+                  </div>
+                  {c.severity !== "OK" && c.detail && <div className="muted small">{c.detail}</div>}
+                  {c.severity !== "OK" && c.samples.length > 0 && (
+                    <div className="muted small mono">{c.samples.slice(0, 6).join(" · ")}{c.samples.length > 6 ? " …" : ""}</div>
+                  )}
                 </div>
               </li>
             ))}

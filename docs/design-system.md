@@ -105,6 +105,7 @@ Shadow strategy is subtle and warm, using slightly tinted shadows to feel less c
 - **Coral:** só em botões primários (Enviar, Salvar, Confirmar), marca e seleção de texto. Abas, foco de campos e filtros usam #222222.
 - **Warning:** #E07912 em bordas e barras; em texto pequeno usa-se #B4600E (contraste ≥ 4,5:1 no branco).
 - **Densidade:** campos de formulário com 48px; campos dentro de tabelas e grades mensais ficam com 34px para caber 12 meses na tela. Botões padrão com 44px e botões pequenos (ações de linha) com 32px.
-- **Gráficos:** a paleta categórica validada (azul, laranja, verde-água) foi mantida para não confundir séries com o coral de ação.
+- **Gráficos:** a paleta categórica validada (azul, laranja, verde-água) foi mantida para não confundir séries com o coral de ação. Série "ano anterior / base / anualizado" usa o cinza neutro `--series-past` (`SERIES.past`; `COLOR_PAST` no Plotly), para a série do ano em foco (azul) se destacar; o laranja fica para categorias (CAPEX, encargos, desligamentos). Rankings horizontais (`TopBars`) em degradê do azul, do maior (cor cheia) ao menor; barras de 22 px e 10 px de respiro entre linhas.
+- **Painel:** ordem por relevância: KPIs → evolução mensal → maiores centros de custo e contas → pacotes GMD e prazos → ponte e variações (só com dois anos) → mapa de calor; a manutenção da base (qualidade, importações, versões) fica no fim. Anos em chips de seleção múltipla, crescentes, no formato dos selects.
 - **Modo escuro:** derivado dos mesmos papéis (fundo #121212, superfície #1C1C1C, coral #FF6B70).
 - **Fotografia:** não se aplica (sistema de dados); a "foto" de cada tela é o gráfico principal.
