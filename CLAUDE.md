@@ -1,0 +1,40 @@
+# ATEM · Orçamento 2027 — guia para sessões de desenvolvimento
+
+Sistema web (FastAPI + SQLAlchemy 2 + PostgreSQL 16 | React 18 + Vite) que substitui os templates Excel do ciclo
+orçamentário da ATEM. Leia `README.md` (estado e deploy), `docs/02-especificacao-tecnica.md` (regras por fase,
+seções 12–15) e `docs/design-system.md` (visual) antes de alterar algo.
+
+## Comandos
+
+```bash
+scripts/dev-db.sh                                   # PostgreSQL local (/tmp:5433; bancos atem e atem_test)
+cd backend && pip install -r requirements-dev.txt
+cd backend && alembic upgrade head && python -m app.seed   # DATABASE_URL, SECRET_KEY, ADMIN_EMAIL, ADMIN_PASSWORD no ambiente
+cd backend && pytest -q                              # suíte completa (~1 min); conftest usa atem_test por padrão
+cd backend && ruff check . && ruff format --check .  # obrigatório antes de commitar
+cd frontend && npm ci && npm run build               # tsc -b + vite; o Docker copia dist para backend/frontend_dist
+cd backend && FRONTEND_DIST=../frontend/dist uvicorn app.main:app --port 8077   # app completo local
+```
+
+## Convenções
+
+- Idioma: código em inglês, textos de interface, mensagens de erro, commits e docs em pt-BR.
+- Dinheiro é `Decimal` (`domain/rules/common.money`), nunca float; a API devolve valores como string decimal.
+- Regras de negócio puras ficam em `app/domain/rules/` (sem banco); orquestração em `app/services/`; rotas finas em `app/api/v1/`.
+- Toda mutação relevante grava em `audit_logs` via `services.audit.record` (before/after).
+- Versão do orçamento: `services.opex.context()`; `ctx.frozen` = só leitura (verificar em qualquer nova mutação).
+- Importação: parser (`imports/parsers`) → `resolver.validate` → `compare` → `loaders` (chamados pelo worker). Novos tipos
+  entram em `DatasetType`, `detector.PARSERS/AUTO_ORDER`, `resolver.validate`, `compare.compare`, `loaders.LOADERS` e nos
+  rótulos do frontend (`labels.ts`).
+- Esquema: alterar o modelo **e** criar migração Alembic numerada (`alembic/versions/000N_*.py`); conferir drift com
+  `alembic.autogenerate.compare_metadata` (ver testes anteriores) — up e down devem funcionar.
+- Novos parâmetros do ciclo entram em `seed_data.CYCLE_PARAMETERS` (o seed acrescenta aos ciclos existentes) e em
+  `PARAM_LABELS` no frontend.
+- Frontend: tokens de cor/fonte em `styles.css` (`:root`, claro e escuro); gráficos em `components/charts.tsx` com a paleta
+  `SERIES`; coral só em ações primárias. Toda tabela nova vai dentro de `.table-wrap`; conferir celular (390px) sem overflow.
+- Testes usam planilhas sintéticas de `tests/builders.py`. **Nunca** commitar `.xlsx` reais (dados pessoais) — já no `.gitignore`.
+- Branch de trabalho: `claude/atem-budget-planning-2027-1ril6s`; o Railway publica a cada push. Não abrir PR sem pedido.
+
+## Dados sensíveis
+
+Não pedir nem registrar `SECRET_KEY`/`ADMIN_PASSWORD`; os templates reais ficam fora do repositório.

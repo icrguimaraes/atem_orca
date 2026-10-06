@@ -9,6 +9,7 @@ const ACTIVE = new Set(["UPLOADED", "VALIDATING", "CONFIRMED", "PROCESSING"]);
 
 const HELP: Record<string, string> = {
   "": "O sistema identifica o tipo pelo conteúdo (abas e cabeçalhos). O template OPEX preenchido é reconhecido automaticamente.",
+  CAPEX_TEMPLATE: "Template CAPEX 2027 preenchido: carrega cadastros (BD-Novo), o catálogo de ativos (LISTA ATIVOS) e cada linha da aba Template_Orç como item de CAPEX do centro de custo. Linhas de projeto com o mesmo tipo e justificativa viram uma solicitação; reimportar substitui só o que veio do template.",
   OPEX_TEMPLATE: "Template OPEX 2027 como volta do gestor: carrega cadastros (BD-Novo), o realizado da aba Realizado e os valores das abas I a XII como orçamento 2027 do centro de custo. Reimportar substitui só as linhas que vieram do template.",
   MASTER_DATA: "Aba BD-Novo dos templates ou planilha com Filiais / Centro de Custo / Conta do Razão.",
   ACTUAL: "Layout da aba Realizado (Empresa, Filial, Centro de Custos, Conta Razão e uma coluna por mês) ou KSB1.",

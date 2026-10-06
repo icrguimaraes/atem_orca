@@ -9,25 +9,25 @@ com importação versionada, workflow de aprovação, auditoria e comparação 2
 | [`docs/02-especificacao-tecnica.md`](docs/02-especificacao-tecnica.md) | Arquitetura, modelo de dados, regras (fórmula → backend), workflow, importação, UX, roadmap |
 | [`docs/design-system.md`](docs/design-system.md) | Design system Coral Stay (cores, tipografia, componentes) e como foi aplicado |
 
-## Estado atual — Fase 1 (Fundação) ✅
+## Estado atual — 5 fases do roadmap concluídas ✅
 
-| Item | Situação |
-|---|---|
-| Modelo de dados completo (46 tabelas: org, contas/pacotes GMD, ciclo/versões, fatos, OPEX, CAPEX, pessoal, importação, auditoria) | ✅ migração Alembic `0001` |
-| Autenticação JWT + perfis (ADMIN, CONTROLLER, MANAGER, PACKAGE_MANAGER, HR, VIEWER) + escopo por CC | ✅ |
-| Cadastros com CRUD auditado (empresas, filiais, CCs, contas, pacotes, detalhamentos, listas, contratos, gestores de pacote) | ✅ |
-| Ciclo 2027, parâmetros (limites de alerta, fatores de cálculo), versões | ✅ |
-| Importação: upload → detecção de layout → validação → prévia → relatório de erros `.xlsx` → confirmação → nova versão | ✅ |
-| Layouts: BD-Novo dos templates, Realizado (largo), SAP KSB1 (`.csv`/`.xlsx`), Orçamento de referência, Quadro de funcionários, Premissas macro | ✅ |
-| Regras de cálculo puras (viagem, evento, CAPEX, projeção de pessoal, what-if CLT×PJ, desligamentos) + endpoints de simulação | ✅ |
-| Seed com domínios extraídos dos templates (90 contas, 15 pacotes, 107 valores de listas, tarifas de viagem, gestores de pacote) | ✅ |
-| 38 testes automatizados (regras, importação ponta a ponta, RBAC, auditoria) | ✅ |
-| Interface web (React): login, painel, importação com prévia/erros/confirmação, cadastros, ciclo e parâmetros, usuários, auditoria | ✅ |
-| Proteção contra reimportação, comparação com a base vigente, modos Atualizar/Substituir, lista de erros na tela | ✅ |
-| Painel: realizado ano anterior × ano de referência (mesmo período), anualizado, pacotes, rankings, qualidade da base | ✅ |
-| **Fase 2 — OPEX:** histórico por conta, preenchimento por pacote (viagens, eventos, grade mensal), justificativas, workflow e validação GMD | ✅ |
+| Fase | O que entrega | Situação |
+|---|---|---|
+| 1 — Fundação | Modelo de dados (47 tabelas, migrações `0001`–`0004`), JWT + perfis (ADMIN, CONTROLLER, MANAGER, PACKAGE_MANAGER, HR, VIEWER) com escopo por CC, cadastros com CRUD auditado, ciclo/parâmetros/versões, importação versionada (upload → detecção → validação → prévia → confirmação), painel do realizado | ✅ |
+| 2 — OPEX | Orçamento por centro de custo e pacote GMD (viagens, eventos, grade mensal), histórico por conta com alertas e justificativas, workflow (envio → análise → aprovação → consolidação) e validação dos pacotes Tipo 1; importação do template OPEX preenchido (todas as abas, linha a linha) | ✅ |
+| 3 — CAPEX | Solicitações (projeto ou aquisição) com itens, valor unitário × quantidade e cronograma; pendências críticas bloqueiam envio/aprovação; catálogo de ativos sugere a conta; importação do template CAPEX | ✅ |
+| 4 — Pessoal | Quadro por CC com uma ação por colaborador (promover, reajuste, desligar, transferir, admissão), vagas, custo = salário × reajuste × multiplicador do contrato (CLT 1,8; PJ sem), validação GMD do pacote Pessoas, cenários e simulação (what-if) | ✅ |
+| 5 — Consolidação | Painel OPEX + CAPEX + Pessoal × realizado, pontos de atenção, congelamento de versão (fotografia imutável), revisão (1.1 / 2.0) e exportação Excel (resumo, carga SAP chave × mês, consolidado, variações, detalhes por módulo, status) | ✅ |
 
+Também: bases carregadas com exclusão por escopo, por módulo ou total; design system Coral Stay (`docs/design-system.md`); 51 testes automatizados (regras, importação ponta a ponta, workflow, RBAC, consolidação).
 A interface fica na raiz do domínio; a API está documentada em `/api/docs` (Swagger).
+
+### Próximos passos sugeridos (fora do roadmap original)
+
+- Carga no SAP a partir da aba **Carga SAP** (hoje via Excel; integração direta quando houver acesso).
+- Rateio de CSC/BackOffice entre empresas (matriz de rateio da contabilidade) — ver decisão 6 em `docs/02`.
+- Notificações por e-mail (prazos, ajuste solicitado, envio recebido).
+- Confirmar com a contabilidade as contas de pessoal da consolidação (parâmetros `personnel.*_account`).
 
 ## Rodando localmente
 
@@ -47,10 +47,11 @@ Frontend (outro terminal; faz proxy de `/api` para `localhost:8000`):
 cd frontend && npm install && npm run dev   # http://localhost:5173
 ```
 
-Testes (requerem um PostgreSQL de teste):
+Testes (requerem um PostgreSQL de teste; `scripts/dev-db.sh` sobe um local em `/tmp:5433` com os bancos `atem` e `atem_test`):
 
 ```bash
-DATABASE_URL="postgresql+psycopg://postgres@localhost:5432/atem_test" pytest
+scripts/dev-db.sh
+cd backend && pytest                      # usa postgresql+psycopg://postgres@/atem_test?host=/tmp&port=5433 por padrão
 ruff check . && ruff format --check .
 ```
 
@@ -96,5 +97,6 @@ backend/
   alembic/           migrações
   tests/
 frontend/            React + Vite (build copiado para backend/frontend_dist no Docker)
-docs/                análise e especificação
+docs/                análise, especificação (regras por fase nas seções 12–15) e design system
+scripts/             dev-db.sh (PostgreSQL local para desenvolvimento e testes)
 ```

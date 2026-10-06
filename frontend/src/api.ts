@@ -58,11 +58,17 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 export async function download(path: string, fileName: string) {
   const resp = await fetch(`/api/v1${path}`, { headers: { Authorization: `Bearer ${getToken()}` } });
-  if (!resp.ok) throw new ApiError(resp.status, `Erro ${resp.status}`);
+  if (!resp.ok) {
+    // o servidor devolve JSON com `detail` mesmo em rotas de arquivo
+    const body = await resp.json().catch(() => null);
+    throw new ApiError(resp.status, errorMessage(body, resp.status));
+  }
   const url = URL.createObjectURL(await resp.blob());
   const a = Object.assign(document.createElement("a"), { href: url, download: fileName });
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 // ---------------------------------------------------------------- tipos

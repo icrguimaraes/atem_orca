@@ -355,3 +355,23 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 - **Revisão**: cria `1.1` (ou `2.0` em revisão geral) a partir da congelada, copiando orçamentos, linhas, justificativas, validações GMD, solicitações/itens CAPEX e movimentações de pessoal; consolidados voltam para "Aprovado" (reabrir só os CCs que mudam). Motivo obrigatório; a anterior continua consultável.
 - **Exportação Excel** (`/consolidation/export.xlsx`, filtros de versão/empresa/CC): Resumo (módulo × anos, mês × módulo), **Carga SAP** (chave × JAN..DEZ), Consolidado, Variações por conta (com alertas), OPEX (linhas), CAPEX (itens com pendências), Pessoal (quadro com ações e custo mensal) e Status por CC. Valores numéricos com formato contábil, filtros, painéis congelados e totais com `SUBTOTAL`.
 - Migração `0004`: tabela `budget_snapshot_lines`.
+
+## 16. Backlog para as próximas fases
+
+Itens fora do roadmap original, em ordem sugerida. Cada um cabe numa fase curta e não exige refazer o que existe.
+
+| # | Item | Depende de | Onde encaixar |
+|---|---|---|---|
+| 1 | **Contas de pessoal da consolidação** confirmadas pela contabilidade (hoje parâmetros `personnel.salary_account`, `personnel.charges_account`, `personnel.severance_account` com códigos sugeridos) | Contabilidade | Ciclo e parâmetros; se o SAP exigir detalhamento por rubrica, trocar o multiplicador único por tabela de encargos em `domain/rules/personnel.py` |
+| 2 | **Filial no quadro de pessoal**: a Carga SAP sai sem filial para Pessoal porque o template não a traz | RH informar a coluna | `parsers/people.py` já lê `Divisão/Filial`; basta o arquivo trazer o dado |
+| 3 | **Carga no SAP**: hoje via aba Carga SAP do Excel. Integração direta (RFC/arquivo em layout SAP) quando houver acesso | TI/SAP | Novo serviço `services/sap_export.py` lendo `consolidation.rows_for` (já na granularidade chave × mês) |
+| 4 | **Rateio de CSC/BackOffice** entre empresas (decisão 6) | Matriz de rateio da contabilidade | Tabela `allocation_rules` (CC origem → % por empresa/CC destino) aplicada sobre `consolidation.live_rows` ao congelar; nova aba no Excel |
+| 5 | **Notificações por e-mail**: prazo próximo/vencido, ajuste solicitado, envio recebido, validação GMD pendente | SMTP/serviço de e-mail | `attention_points` já calcula os eventos; falta despacho (worker diário) e preferências por usuário |
+| 6 | **Comparação entre versões** (1.0 × 1.1 por conta/CC) | — | `consolidation.rows_for` para duas versões; tela em Consolidação |
+| 7 | **Sazonalidade** do anualizado (decisão 2): usar perfil mensal de 2025 em vez de linear | Controladoria | `services/opex.account_view` e `consolidation.reference` (um ponto cada) |
+| 8 | **Exportação dos templates preenchidos** de volta ao layout Excel original (para quem ainda trabalha no arquivo) | — | `services/exports.py` com openpyxl sobre os templates como modelo |
+| 9 | **Separar o worker de importação** em serviço próprio no Railway (já suportado por `RUN_IMPORT_WORKER=false` + `python -m app.worker`) | — | Infra |
+| 10 | **Testes de interface** automatizados (Playwright) no CI, a partir dos roteiros usados na validação manual | — | `frontend/e2e/` |
+
+Pré-requisitos já prontos para esses itens: `CLAUDE.md` com comandos e convenções, `scripts/dev-db.sh` para o banco local,
+migrações numeradas com verificação de drift, seed idempotente que acrescenta parâmetros novos a ciclos existentes.
