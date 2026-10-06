@@ -6,8 +6,16 @@ export const SERIES = {
   ref: "var(--series-1)",
   prev: "var(--series-2)",
   budget: "var(--series-3)",
-  past: "var(--series-past)", // ano anterior, base ou anualizado: neutro, para a série atual (azul) se destacar
+  past: "var(--series-past)", // ano anterior: roxo, fora do azul (realizado) e do verde (orçamento)
 };
+
+/** Cor dos rótulos de cada série: tom mais escuro da cor da barra (no escuro, mais claro), legível em 11 px. */
+const INK: Record<string, string> = {
+  [SERIES.ref]: "var(--series-1-ink)",
+  [SERIES.budget]: "var(--series-3-ink)",
+  [SERIES.past]: "var(--series-past-ink)",
+};
+export const inkOf = (color: string) => INK[color] ?? color;
 
 function niceMax(v: number): number {
   if (v <= 0) return 1;
@@ -109,7 +117,7 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget, showRef = tr
                 <g key={s.key}>
                   <path d={roundedTop(xOf(i, j), y(v), barW, T + plotH - y(v))} style={{ fill: shade(s.color, j, v) }} />
                   {labelAll && (
-                    <text x={xOf(i, j) + barW / 2} y={y(v) - 6} className="extreme" textAnchor="middle" fill={s.color} pointerEvents="none">
+                    <text x={xOf(i, j) + barW / 2} y={y(v) - 6} className="extreme" textAnchor="middle" fill={inkOf(s.color)} pointerEvents="none">
                       {short(v)}
                     </text>
                   )}
@@ -187,12 +195,12 @@ export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor
         {base &&
           base.map((v, i) =>
             labelAll || i === base.length - 1 || i === 0 ? (
-              <text key={`bl${i}`} x={x(i)} y={i <= lastRef && ref[i] > v ? y(v) + 17 : y(v) - 9} className="extreme" textAnchor="middle" fill={baseColor} pointerEvents="none">{short(v)}</text>
+              <text key={`bl${i}`} x={x(i)} y={i <= lastRef && ref[i] > v ? y(v) + 17 : y(v) - 9} className="extreme" textAnchor="middle" fill={inkOf(baseColor)} pointerEvents="none">{short(v)}</text>
             ) : null,
           )}
         {refPts.map((v, i) =>
           labelAll || i === refPts.length - 1 || i === 0 ? (
-            <text key={`rl${i}`} x={x(i)} y={base && base[i] > v ? y(v) + 17 : y(v) - 9} className="extreme" textAnchor="middle" fill={SERIES.ref} pointerEvents="none">{short(v)}</text>
+            <text key={`rl${i}`} x={x(i)} y={base && base[i] > v ? y(v) + 17 : y(v) - 9} className="extreme" textAnchor="middle" fill={inkOf(SERIES.ref)} pointerEvents="none">{short(v)}</text>
           ) : null,
         )}
         {rows.map((r, i) => (
@@ -231,7 +239,7 @@ function ExtremeLabels({ values, x, y, color, format = fmtCompact, dx = 0 }: {
   return (
     <>
       {extremes(values).map((e) => (
-        <text key={e.kind} x={x(e.i) + dx} y={y(e.v) - 7} className="extreme" textAnchor="middle" fill={color} pointerEvents="none">
+        <text key={e.kind} x={x(e.i) + dx} y={y(e.v) - 7} className="extreme" textAnchor="middle" fill={inkOf(color)} pointerEvents="none">
           {format(e.v)}
         </text>
       ))}

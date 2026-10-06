@@ -71,7 +71,7 @@ DIMENSIONS = {
 DRILL_ORDER = ("company", "department", "cost_center", "account", "month")
 # Paleta validada do app (styles.css): ano anterior laranja, referência azul, orçamento verde-água
 COLOR_PREV, COLOR_REF, COLOR_TARGET = "#eb6834", "#2a78d6", "#1baf7a"
-COLOR_PAST = "#8b95a7"  # realizado do ano anterior: neutro, igual ao token --series-past do frontend
+COLOR_PAST = "#8a6bbf"  # realizado do ano anterior: roxo, igual ao token --series-past do frontend
 COLOR_UP, COLOR_DOWN, COLOR_FLAT = "#e34948", "#2a78d6", "#9aa1ad"
 MODULE_COLORS = {"OPEX": COLOR_REF, "CAPEX": COLOR_PREV, "PERSONNEL": COLOR_TARGET}
 STATUS_COLORS = {

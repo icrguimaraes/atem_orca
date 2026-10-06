@@ -367,11 +367,16 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 
 /* ---------- séries de gráfico (validadas: light e dark) */
 /* paleta dos gráficos: azul (ano em foco) e verde-água (orçado) como no painel de Custeio em Power BI; laranja só para categorias */
-:root { --series-1: #4472c4; --series-2: #eb6834; --series-3: #4fa894; --series-past: #8b95a7; --grid: #eceef1; }
+/* ano anterior em roxo (fora do azul do realizado e do verde do orçamento); *-ink = tom escuro para rótulos;
+   --axis = eixos e legendas, mais forte que --muted sem chegar ao texto */
+:root { --series-1: #4472c4; --series-2: #eb6834; --series-3: #4fa894; --series-past: #8a6bbf; --grid: #eceef1;
+  --series-1-ink: #3a64b4; --series-3-ink: #2b7a68; --series-past-ink: #6a4c9c; --axis: #4a4a4a; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --series-1: #5b8ad6; --series-2: #d95926; --series-3: #6fbfb0; --series-past: #7b8596; --grid: #262b34; }
+  :root:not([data-theme="light"]) { --series-1: #5b8ad6; --series-2: #d95926; --series-3: #6fbfb0; --series-past: #a08ad4; --grid: #262b34;
+    --series-1-ink: #8fb0ea; --series-3-ink: #7fd0bd; --series-past-ink: #c3b0ea; --axis: #cfcfcf; }
 }
-  :root[data-theme="dark"] { --series-1: #5b8ad6; --series-2: #d95926; --series-3: #6fbfb0; --series-past: #7b8596; --grid: #262b34; }
+  :root[data-theme="dark"] { --series-1: #5b8ad6; --series-2: #d95926; --series-3: #6fbfb0; --series-past: #a08ad4; --grid: #262b34;
+    --series-1-ink: #8fb0ea; --series-3-ink: #7fd0bd; --series-past-ink: #c3b0ea; --axis: #cfcfcf; }
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .filters select { max-width: 320px; }
@@ -394,7 +399,7 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 .delta.down { color: var(--good); }
 .stat-inline-delta .delta { margin-left: 0; font-size: 22px; }
 
-.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--muted); margin-bottom: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--axis); margin-bottom: 8px; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend-swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
 .legend-line { width: 16px; height: 2px; display: inline-block; }
@@ -403,7 +408,7 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 .chart svg { width: 100%; height: auto; display: block; }
 .chart .grid { stroke: var(--grid); stroke-width: 1; }
 .chart .baseline { stroke: var(--border); stroke-width: 1; }
-.chart .axis { fill: var(--muted); font-size: 11px; }
+.chart .axis { fill: var(--axis); font-size: 11px; }
 .chart .extreme { font-size: 11px; font-weight: 700; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
 .chart .hover-band { fill: var(--surface-2); }
 .chart .ring { stroke: var(--surface); stroke-width: 2; }

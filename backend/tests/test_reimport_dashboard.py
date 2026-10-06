@@ -220,9 +220,9 @@ def test_painel2_figures(client, admin, run_worker):
     real = monthly["Realizado 2026 até AGO"]
     assert real["y"][0] == float(data["monthly"][0]["ref"]) == 110.0 and real["customdata"][0] == ["R$ 110,00", 1]
     assert real["marker"]["color"][0].startswith("rgba(68,114,196")  # azul do realizado
-    assert monthly["Realizado 2025 até AGO"]["marker"]["color"][0].startswith(
-        "rgba(139,149,167"
-    )  # cinza do ano anterior
+    prev_colors = monthly["Realizado 2025 até AGO"]["marker"]["color"]
+    assert prev_colors[0].startswith("rgba(138,107,191")  # roxo do ano anterior
+    assert real["textfont"]["color"] == "#3a64b4"  # rótulo no tom escuro do azul
     ccs = figs["top_cost_centers"]["data"]
     assert ccs[0]["customdata"][0][3] == data["top_cost_centers"][0]["id"]  # id do CC para o clique filtrar o painel
     assert len(ccs) == 2 and ccs[1]["name"] == "Realizado 2025 até AGO"  # barra fina da base

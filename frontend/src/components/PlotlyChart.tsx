@@ -8,7 +8,7 @@ export interface Figure { data: Data[]; layout: Partial<Layout>; meta?: Record<s
 function themeLayout(): Partial<Layout> {
   const css = getComputedStyle(document.documentElement);
   const text = css.getPropertyValue("--text").trim() || "#222";
-  const muted = css.getPropertyValue("--muted").trim() || "#717171";
+  const muted = css.getPropertyValue("--axis").trim() || css.getPropertyValue("--muted").trim() || "#4a4a4a";
   const surface = css.getPropertyValue("--surface").trim() || "#fff";
   const border = css.getPropertyValue("--border").trim() || "#ddd";
   return {
@@ -27,6 +27,23 @@ function isTouchOrNarrow(): boolean {
 }
 
 type Trace = Record<string, unknown> & { type?: string; orientation?: string; x?: unknown[]; y?: unknown[]; text?: unknown };
+
+/** O backend escreve os rótulos com o tom escuro de cada série (tema claro); aqui eles viram o token do tema
+ *  atual, para continuarem legíveis no escuro. */
+const INK_TOKENS: Record<string, string> = { "#3a64b4": "--series-1-ink", "#2b7a68": "--series-3-ink", "#6a4c9c": "--series-past-ink" };
+
+function themeInks(data: Data[]): Data[] {
+  const css = getComputedStyle(document.documentElement);
+  const map = (c: unknown) => {
+    const token = typeof c === "string" ? INK_TOKENS[c.toLowerCase()] : undefined;
+    return token ? css.getPropertyValue(token).trim() || c : c;
+  };
+  return (data as Trace[]).map((t) => {
+    const font = t.textfont as { color?: unknown } | undefined;
+    if (!font?.color) return t;
+    return { ...t, textfont: { ...font, color: Array.isArray(font.color) ? font.color.map(map) : map(font.color) } };
+  }) as Data[];
+}
 
 function isBar(t: Trace) {
   return t.type === "bar";
@@ -110,21 +127,25 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
     if (!el) return;
     const touch = isTouchOrNarrow();
     const { data, horizontal, swapped } = touch ? adaptTraces(figure.data) : { data: figure.data, horizontal: false, swapped: false };
-    let layout = merge({ ...figure.layout, height: height ?? (figure.layout.height as number | undefined) ?? 300 }, themeLayout());
-    if (touch) {
-      const m = mobileLayout(figure.layout, data, horizontal, swapped);
-      layout = merge(layout, m);
-      if (m.height) layout.height = m.height as number;
-    }
-    void Plotly.react(el, data, layout, {
-      responsive: true,
-      displaylogo: false,
-      displayModeBar: touch ? false : "hover",
-      scrollZoom: false,
-      locale: "pt-BR",
-      modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d", "toggleSpikelines", "zoom2d", "pan2d", "zoomIn2d", "zoomOut2d"],
-      toImageButtonOptions: { format: "png", filename: "grafico-orcamento", scale: 2 },
-    });
+    // desenha com as cores do tema atual; roda de novo quando o tema muda (claro/escuro)
+    const render = () => {
+      let layout = merge({ ...figure.layout, height: height ?? (figure.layout.height as number | undefined) ?? 300 }, themeLayout());
+      if (touch) {
+        const m = mobileLayout(figure.layout, data, horizontal, swapped);
+        layout = merge(layout, m);
+        if (m.height) layout.height = m.height as number;
+      }
+      void Plotly.react(el, themeInks(data), layout, {
+        responsive: true,
+        displaylogo: false,
+        displayModeBar: touch ? false : "hover",
+        scrollZoom: false,
+        locale: "pt-BR",
+        modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d", "toggleSpikelines", "zoom2d", "pan2d", "zoomIn2d", "zoomOut2d"],
+        toImageButtonOptions: { format: "png", filename: "grafico-orcamento", scale: 2 },
+      });
+    };
+    render();
     const node = el as unknown as PlotlyHTMLElement;
     const handler = (ev: { points?: { customdata?: unknown; x?: unknown; y?: unknown }[] }) => {
       const p = ev.points?.[0];
@@ -133,22 +154,8 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
     };
     if (onClick) node.on("plotly_click", handler);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    // relayout com chaves pontilhadas: substituir `xaxis` inteiro apagaria tickvals/ticktext/grade do backend
-    const onTheme = () => {
-      const t = themeLayout() as Record<string, Record<string, unknown>>;
-      const flat: Record<string, unknown> = {
-        "font.color": t.font.color,
-        "hoverlabel.bgcolor": t.hoverlabel.bgcolor,
-        "hoverlabel.bordercolor": t.hoverlabel.bordercolor,
-        "hoverlabel.font.color": (t.hoverlabel.font as Record<string, unknown>).color,
-        "xaxis.tickfont.color": (t.xaxis.tickfont as Record<string, unknown>).color,
-        "xaxis.linecolor": t.xaxis.linecolor,
-        "yaxis.tickfont.color": (t.yaxis.tickfont as Record<string, unknown>).color,
-        "yaxis.linecolor": t.yaxis.linecolor,
-        "legend.font.color": (t.legend.font as Record<string, unknown>).color,
-      };
-      void Plotly.relayout(el, flat);
-    };
+    // o merge preserva tickvals/ticktext/grade do backend: só as cores do tema mudam
+    const onTheme = () => render();
     media.addEventListener("change", onTheme);
     const observer = new MutationObserver(onTheme); // troca de tema pelo app (atributo data-theme)
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });

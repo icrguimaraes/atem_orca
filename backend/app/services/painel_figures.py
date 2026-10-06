@@ -13,7 +13,9 @@ import plotly.graph_objects as go
 from app.services.analytics import _fig, _layout, _money_axis, fmt_compact, fmt_money, fmt_pct, short
 
 MONTHS = ("JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ")
-REALIZADO, ORCADO, ANTERIOR = "#4472c4", "#4fa894", "#8b95a7"
+REALIZADO, ORCADO, ANTERIOR = "#4472c4", "#4fa894", "#8a6bbf"  # azul, verde-água (orçamento), roxo
+# rótulos no tom escuro de cada série (legíveis em 10–11 px); o frontend troca pelo token do tema escuro
+INK = {REALIZADO: "#3a64b4", ORCADO: "#2b7a68", ANTERIOR: "#6a4c9c"}
 TXT_UP, TXT_DOWN, TXT_FLAT = "#c13515", "#008a05", "#767676"  # percentual no texto, como no Painel
 
 
@@ -84,7 +86,7 @@ def fig_monthly(o: dict) -> dict:
                 text=[_short(v) if v > 0 else "" for v in values],
                 textposition="outside",
                 cliponaxis=False,
-                textfont={"size": 11, "color": color},
+                textfont={"size": 11, "color": INK[color]},
                 customdata=[[fmt_money(v), m] for m, v in enumerate(values, start=1)],
                 hovertemplate=name + ": <b>%{customdata[0]}</b><extra></extra>",
             )
@@ -137,7 +139,7 @@ def fig_cumulative(o: dict) -> dict:
                 fillcolor=_rgba(base_color, 0.14),
                 text=[_short(v) for v in base],
                 textposition=pos,
-                textfont={"size": 10, "color": base_color},
+                textfont={"size": 10, "color": INK[base_color]},
                 cliponaxis=False,
                 customdata=[fmt_money(v) for v in base],
                 hovertemplate=base_name + ": <b>%{customdata}</b><extra></extra>",
@@ -157,7 +159,7 @@ def fig_cumulative(o: dict) -> dict:
                 fillcolor=_rgba(REALIZADO, 0.12),
                 text=[_short(v) for v in ref],
                 textposition=pos,
-                textfont={"size": 10, "color": REALIZADO},
+                textfont={"size": 10, "color": INK[REALIZADO]},
                 cliponaxis=False,
                 customdata=[fmt_money(v) for v in ref],
                 hovertemplate=lb["actual"] + ": <b>%{customdata}</b><extra></extra>",

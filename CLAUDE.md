@@ -42,7 +42,7 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.
 - Painel (`pages/Home.tsx`) é o único painel: período = anos somados × meses × tipos de orçamento (`api/v1/dashboard._period` e `Facts`);
-  verde = orçado/orçamento (inclui o orçamento proposto do ano do ciclo, via consolidação), azul = realizado, cinza = ano anterior.
+  verde = orçado/orçamento (inclui o orçamento proposto do ano do ciclo, via consolidação), azul = realizado, roxo = ano anterior.
 - Filtros de página sempre via `components/FilterBar` (desktop: selects; celular: grade + folha "Aplicar"); opções podem depender do rascunho (`options: (draft) => …`).
 - Celular: navegação na barra de abas inferior (`Layout.MobileTabs`, lista `TABS`) + folha "Mais"; nova página entra em `NAV` e aparece em "Mais".
 - Testes usam planilhas sintéticas de `tests/builders.py`. **Nunca** commitar `.xlsx` reais (dados pessoais) — já no `.gitignore`.
