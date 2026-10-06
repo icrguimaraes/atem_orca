@@ -228,6 +228,33 @@ def _delete_budget(db: Session, module: str) -> dict:
     return {"module": module, "cost_centers": len(ids), "imports_reverted": reverted}
 
 
+def _reset_versions(db: Session) -> dict:
+    """Base do zero: apaga fotografias e revisões; o ciclo volta à versão 1.0 em elaboração."""
+    from app.models import BudgetSnapshotLine, BudgetSubmission, BudgetVersion
+
+    cycle, _ = _working_version(db)
+    if cycle is None:
+        return {"versions_removed": 0}
+    versions = list(
+        db.scalars(
+            select(BudgetVersion)
+            .where(BudgetVersion.cycle_id == cycle.id)
+            .order_by(BudgetVersion.major, BudgetVersion.minor)
+        )
+    )
+    if not versions:
+        return {"versions_removed": 0}
+    first, others = versions[0], versions[1:]
+    ids = [v.id for v in versions]
+    db.execute(delete(BudgetSnapshotLine).where(BudgetSnapshotLine.version_id.in_(ids)))
+    db.execute(delete(BudgetSubmission).where(BudgetSubmission.version_id.in_(ids)))
+    for v in reversed(others):
+        db.delete(v)
+    db.flush()
+    first.status, first.frozen_at = "WORKING", None
+    return {"versions_removed": len(others), "version": first.label}
+
+
 @router.delete("/budget", summary="Excluir o orçamento lançado de um módulo (volta todos os CCs para 'Não iniciado')")
 def delete_budget(
     request: Request,
@@ -267,6 +294,7 @@ def delete_all(
     if confirm.strip().upper() != CONFIRM_WORD:
         raise HTTPException(422, f"Para excluir, digite {CONFIRM_WORD}")
     budgets = [_delete_budget(db, m) for m in BUDGET_MODULES]
+    budgets.append(_reset_versions(db))
     types = sorted(
         set(db.scalars(select(DatasetVersion.dataset_type).where(DatasetVersion.dataset_type.in_(DELETABLE))))
     )

@@ -142,3 +142,14 @@ def test_manager_sees_only_own_cost_centers(client, admin, run_worker):
     assert ov["total"] == "0.00" and ov["matrix"] == []
     wb = load_workbook(io.BytesIO(client.get("/api/v1/consolidation/export.xlsx", headers=other).content))
     assert wb["Carga SAP"].max_row == 1
+
+
+def test_delete_all_resets_versions(client, admin, run_worker):
+    _setup(client, admin, run_worker)
+    client.post("/api/v1/consolidation/freeze", headers=admin, json={})
+    client.post("/api/v1/consolidation/revise", headers=admin, json={"reason": "teste"})
+    r = client.delete("/api/v1/datasets/all", headers=admin, params={"confirm": "EXCLUIR"})
+    assert r.status_code == 200, r.text
+    ov = client.get("/api/v1/consolidation/overview", headers=admin).json()
+    assert [(v["label"], v["status"]) for v in ov["versions"]] == [("1.0", "WORKING")]
+    assert ov["total"] == "0.00"
