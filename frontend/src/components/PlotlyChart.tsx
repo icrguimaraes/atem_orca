@@ -133,7 +133,22 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
     };
     if (onClick) node.on("plotly_click", handler);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onTheme = () => void Plotly.relayout(el, themeLayout() as Record<string, unknown>);
+    // relayout com chaves pontilhadas: substituir `xaxis` inteiro apagaria tickvals/ticktext/grade do backend
+    const onTheme = () => {
+      const t = themeLayout() as Record<string, Record<string, unknown>>;
+      const flat: Record<string, unknown> = {
+        "font.color": t.font.color,
+        "hoverlabel.bgcolor": t.hoverlabel.bgcolor,
+        "hoverlabel.bordercolor": t.hoverlabel.bordercolor,
+        "hoverlabel.font.color": (t.hoverlabel.font as Record<string, unknown>).color,
+        "xaxis.tickfont.color": (t.xaxis.tickfont as Record<string, unknown>).color,
+        "xaxis.linecolor": t.xaxis.linecolor,
+        "yaxis.tickfont.color": (t.yaxis.tickfont as Record<string, unknown>).color,
+        "yaxis.linecolor": t.yaxis.linecolor,
+        "legend.font.color": (t.legend.font as Record<string, unknown>).color,
+      };
+      void Plotly.relayout(el, flat);
+    };
     media.addEventListener("change", onTheme);
     const observer = new MutationObserver(onTheme); // troca de tema pelo app (atributo data-theme)
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });

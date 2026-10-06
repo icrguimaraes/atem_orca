@@ -79,6 +79,11 @@ Shadow strategy is subtle and warm, using slightly tinted shadows to feel less c
 
 ## Aplicação no ATEM
 
+### Tema claro/escuro
+
+- Três opções no rodapé da barra lateral e na folha "Mais" do celular: **Auto** (segue o sistema), **Claro**, **Escuro** (`theme.tsx`, preferência em `localStorage["atem.theme"]`, aplicada em `index.html` antes do React para não piscar).
+- CSS: os tokens escuros existem em dois seletores — `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) }` (automático) e `:root[data-theme="dark"]` (forçado). Todo token novo precisa entrar nos dois. O Plotly acompanha pela observação de `data-theme`.
+
 ### Largura e rótulos de extremos
 
 - Conteúdo em até **1600 px** (`.content`), com 40 px de margem; em monitores largos o espaço vazio fica à direita, não dentro dos cards.

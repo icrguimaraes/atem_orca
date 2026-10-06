@@ -70,3 +70,13 @@ test("orçamento OPEX: baixar o template preenchido do CC", async ({ page }) => 
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("button:has-text('Baixar template (Excel)')")]);
   expect(download.suggestedFilename()).toMatch(/^Template_OPEX_\d{4}_\d+\.xlsx$/);
 });
+
+test("tema: escolha persiste e volta ao automático", async ({ page }) => {
+  await login(page);
+  await page.locator(".theme-switch button", { hasText: "Escuro" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.locator(".theme-switch button", { hasText: "Auto" }).click();
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
+});

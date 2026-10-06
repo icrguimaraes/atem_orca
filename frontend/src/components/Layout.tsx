@@ -5,6 +5,7 @@ import { BrandMark } from "./Brand";
 import { Alert, Modal } from "./ui";
 import { useAuth } from "../auth";
 import { ROLE_LABELS } from "../labels";
+import { ThemeSwitch, useTheme, type Theme } from "../theme";
 
 const NAV = [
   { to: "/", label: "Painel", end: true },
@@ -65,6 +66,7 @@ export default function Layout() {
   const { user, logout, can } = useAuth();
   const [pwd, setPwd] = useState(false);
   const [more, setMore] = useState(false); // folha "Mais" da barra inferior (celular)
+  const [theme, setTheme] = useTheme();
   const location = useLocation();
   useEffect(() => setMore(false), [location.pathname]);
   return (
@@ -97,13 +99,14 @@ export default function Layout() {
             <button className="btn btn-ghost btn-sm" onClick={() => setPwd(true)}>Alterar senha</button>
             <button className="btn btn-ghost btn-sm" onClick={logout}>Sair</button>
           </div>
+          <div className="theme-row"><span className="lab">Tema</span><ThemeSwitch theme={theme} onChange={setTheme} /></div>
           {pwd && <PasswordModal onClose={() => setPwd(false)} />}
         </div>
       </aside>
       <main className="content">
         <Outlet />
       </main>
-      <MobileTabs can={can} more={more} setMore={setMore} onPassword={() => setPwd(true)} onLogout={logout} userName={user?.name} />
+      <MobileTabs can={can} more={more} setMore={setMore} onPassword={() => setPwd(true)} onLogout={logout} userName={user?.name} theme={theme} setTheme={setTheme} />
     </div>
   );
 }
@@ -124,9 +127,9 @@ function Icon({ d }: { d: string }) {
   );
 }
 
-function MobileTabs({ can, more, setMore, onPassword, onLogout, userName }: {
+function MobileTabs({ can, more, setMore, onPassword, onLogout, userName, theme, setTheme }: {
   can: (...roles: string[]) => boolean; more: boolean; setMore: (v: boolean) => void;
-  onPassword: () => void; onLogout: () => void; userName?: string;
+  onPassword: () => void; onLogout: () => void; userName?: string; theme: Theme; setTheme: (t: Theme) => void;
 }) {
   const rest = NAV.filter((n) => !TABS.some((t) => t.to === n.to) && (!n.roles || can(...n.roles)));
   return (
@@ -147,6 +150,7 @@ function MobileTabs({ can, more, setMore, onPassword, onLogout, userName }: {
               <button className="btn btn-ghost btn-sm" onClick={() => { setMore(false); onPassword(); }}>Alterar senha</button>
               <button className="btn btn-ghost btn-sm" onClick={onLogout}>Sair</button>
             </div>
+            <div className="theme-row"><span className="lab">Tema</span><ThemeSwitch theme={theme} onChange={setTheme} /></div>
           </div>
         </div>
       )}
