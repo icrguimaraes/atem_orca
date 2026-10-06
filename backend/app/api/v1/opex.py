@@ -287,7 +287,10 @@ def open_cost_center(cost_center_id: int, db: Session = Depends(get_db), user: U
     cc = db.get(CostCenter, cost_center_id)
     if cc is None:
         raise HTTPException(404, "Centro de custo não encontrado")
-    sub = svc.get_submission(db, ctx, cc.id)
+    # versão congelada é só leitura: não cria orçamento fora da fotografia
+    sub = svc.get_submission(db, ctx, cc.id, create=not ctx.frozen)
+    if sub is None:
+        raise HTTPException(404, f"Este centro de custo não tem orçamento na versão congelada {ctx.version.label}")
     access = Access(db, ctx, user, sub)
     if not access.view:
         db.rollback()

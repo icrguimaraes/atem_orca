@@ -497,6 +497,8 @@ def load_personnel_actions(db: Session, batch: ImportBatch, user_id: int | None)
         ctx = opex_svc.context(db)
     except opex_svc.OpexError:
         return {"skipped": "sem ciclo orçamentário"}
+    if ctx.frozen:
+        return {"skipped": f"versão {ctx.version.label} congelada"}
     stats: dict = defaultdict(int)
     by_cc: dict[int, list[ImportRow]] = defaultdict(list)
     for row in rows + vacancies:
@@ -604,6 +606,8 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
     if not rows:
         return {}
     ctx = opex_svc.context(db)
+    if ctx.frozen:
+        return {"skipped": f"versão {ctx.version.label} congelada"}
     companies = {c.code: c.id for c in db.scalars(select(Company))}
     groups: dict[tuple, list[ImportRow]] = defaultdict(list)
     for row in rows:
@@ -720,6 +724,8 @@ def load_capex_items(db: Session, batch: ImportBatch, user_id: int | None) -> di
     if not rows:
         return {}
     ctx = opex_svc.context(db)
+    if ctx.frozen:
+        return {"skipped": f"versão {ctx.version.label} congelada"}
     companies = {c.code: c.id for c in db.scalars(select(Company))}
     accounts = {a.code: a.id for a in db.scalars(select(Account))}
     assets = {i.name.upper(): i.id for i in db.scalars(select(AssetItem))}

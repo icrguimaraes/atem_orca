@@ -207,7 +207,7 @@ def _delete_budget(db: Session, module: str) -> dict:
 
     _, version = _working_version(db)
     if version is None:
-        return {"module": module, "cost_centers": 0}
+        raise HTTPException(409, "Não há versão em elaboração: a versão atual está congelada. Abra uma revisão antes.")
     ids = list(
         db.scalars(
             select(BudgetSubmission.id).where(
@@ -293,8 +293,7 @@ def delete_all(
 ):
     if confirm.strip().upper() != CONFIRM_WORD:
         raise HTTPException(422, f"Para excluir, digite {CONFIRM_WORD}")
-    budgets = [_delete_budget(db, m) for m in BUDGET_MODULES]
-    budgets.append(_reset_versions(db))
+    budgets = [_reset_versions(db)]
     types = sorted(
         set(db.scalars(select(DatasetVersion.dataset_type).where(DatasetVersion.dataset_type.in_(DELETABLE))))
     )

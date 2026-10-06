@@ -153,3 +153,20 @@ def test_delete_all_resets_versions(client, admin, run_worker):
     ov = client.get("/api/v1/consolidation/overview", headers=admin).json()
     assert [(v["label"], v["status"]) for v in ov["versions"]] == [("1.0", "WORKING")]
     assert ov["total"] == "0.00"
+
+
+def test_frozen_version_does_not_create_submissions(client, admin, run_worker):
+    _setup(client, admin, run_worker)
+    client.post("/api/v1/consolidation/freeze", headers=admin, json={})
+    other = next(c for c in client.get("/api/v1/cost-centers", headers=admin).json() if c["code"] == "1050101012")
+    for module in ("opex", "capex", "personnel"):
+        resp = client.get(f"/api/v1/{module}/cost-centers/{other['id']}", headers=admin)
+        assert resp.status_code == 404 and "congelada" in resp.json()["detail"], module
+    # nenhum orçamento novo apareceu na versão congelada
+    ov = client.get("/api/v1/consolidation/overview", headers=admin).json()
+    row = next(r for r in ov["matrix"] if r["code"] == "1050101012")
+    assert row["status"] == {"OPEX": "DRAFT", "CAPEX": "DRAFT", "PERSONNEL": "DRAFT"}
+    # excluir orçamento por módulo é recusado com a versão congelada; excluir tudo zera e volta à 1.0
+    r = client.delete("/api/v1/datasets/budget", headers=admin, params={"module": "OPEX", "confirm": "EXCLUIR"})
+    assert r.status_code == 409
+    assert client.delete("/api/v1/datasets/all", headers=admin, params={"confirm": "EXCLUIR"}).status_code == 200
