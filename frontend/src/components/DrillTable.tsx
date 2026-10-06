@@ -48,7 +48,9 @@ function childParams(level: number, row: BreakdownRow): string {
 
 /** Tabela do painel com drill-down (pacote GMD → conta → centro de custo) e drill-up (recolher).
  * `query` traz os filtros da página (empresa, CC, pacote, anos, meses); cada nível é buscado ao expandir. */
-export function DrillTable({ query, refLabel }: { query: string; refLabel: string }) {
+export function DrillTable({ query, refLabel, onSelect }: {
+  query: string; refLabel: string; onSelect?: (level: number, row: BreakdownRow) => void;
+}) {
   const [root, setRoot] = useState<Breakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [children, setChildren] = useState<Record<string, BreakdownRow[] | "loading">>({});
@@ -111,7 +113,13 @@ export function DrillTable({ query, refLabel }: { query: string; refLabel: strin
             ) : (
               <span className="drill-toggle drill-leaf" aria-hidden="true" />
             )}
-            {r.name}
+            {onSelect && r.id !== null ? (
+              <button type="button" className="row-filter" title="Filtrar o painel por esta linha" onClick={() => onSelect(level, r)}>
+                {r.name}
+              </button>
+            ) : (
+              r.name
+            )}
             {r.code && <span className="muted small mono"> {r.code}</span>}
           </td>
           <td className="right nowrap">{fmtMoney(r.ref)}</td>
@@ -144,7 +152,7 @@ export function DrillTable({ query, refLabel }: { query: string; refLabel: strin
     <>
       <div className="section-tools">
         <span className="muted small">
-          Clique em + para detalhar (pacote → conta → centro de custo). AV %: participação no total da coluna.
+          {onSelect ? "Clique no nome para filtrar o painel e no + para detalhar" : "Clique em + para detalhar"} (pacote → conta → centro de custo). AV %: participação no total da coluna.
           {hasBase && (
             <>
               {" "}Semáforo: <span className="dot good" aria-hidden="true" />dentro da faixa (de −{pctLabel(th.reduction)} a +{pctLabel(th.growth)}),{" "}

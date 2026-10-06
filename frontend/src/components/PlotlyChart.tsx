@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Plotly from "plotly.js-basic-dist-min";
 import type { Data, Layout, PlotlyHTMLElement } from "plotly.js";
 
@@ -114,19 +114,68 @@ function merge(base: Partial<Layout>, theme: Partial<Layout>): Partial<Layout> {
   return out as Partial<Layout>;
 }
 
+interface HoverPoint { customdata?: unknown; x?: unknown; y?: unknown }
+interface Tip { left: number; top: number; title: string; lines: [string, string][] }
+
+/** Linhas do tooltip próprio: o backend põe, no último item do customdata de cada ponto, a lista
+ *  [[texto, cor], …] (cor vazia = linha derivada, como a variação, que vai para o fim). */
+function tipLines(points: HoverPoint[]): [string, string][] {
+  const seen = new Set<string>();
+  const lines: [string, string][] = [];
+  for (const p of points) {
+    const cd = p.customdata;
+    const last = Array.isArray(cd) ? cd[cd.length - 1] : null;
+    if (!Array.isArray(last)) continue;
+    for (const l of last as unknown[]) {
+      if (Array.isArray(l) && !seen.has(String(l[0]))) {
+        seen.add(String(l[0]));
+        lines.push([String(l[0]), String(l[1] ?? "")]);
+      }
+    }
+  }
+  return lines.sort((a, b) => Number(!a[1]) - Number(!b[1]));
+}
+
 /**
  * Renderiza uma figura Plotly gerada no backend (dados já agregados, rótulos pt-BR).
- * `onClick` recebe o customdata do ponto clicado (usado no drill-down).
+ * `onClick` recebe o customdata do ponto clicado (drill-down ou filtro). Figuras com `meta.tooltip`
+ * ("unified": todas as séries do mês; "point": a barra sob o mouse) usam o tooltip do design system no lugar
+ * do balão do Plotly.
  */
 export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
   figure: Figure; height?: number; onClick?: (customdata: unknown, label: string) => void; ariaLabel?: string;
 }) {
+  const wrap = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const [tip, setTip] = useState<Tip | null>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const [tipPos, setTipPos] = useState<{ left: number; top: number } | null>(null);
+  // posição final medida antes de pintar: à direita do mouse; perto da borda, à esquerda; sempre dentro do gráfico
+  useLayoutEffect(() => {
+    const box = wrap.current;
+    const el = tipRef.current;
+    if (!tip || !box || !el) {
+      setTipPos(null);
+      return;
+    }
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const width = box.clientWidth;
+    let left = tip.left + 14;
+    if (left + w > width) left = tip.left - 14 - w;
+    left = Math.max(0, Math.min(left, width - w));
+    setTipPos({ left, top: Math.max(-4, tip.top - h / 2) });
+  }, [tip]);
+  const mode = figure.meta?.tooltip as "unified" | "point" | undefined;
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     const touch = isTouchOrNarrow();
-    const { data, horizontal, swapped } = touch ? adaptTraces(figure.data) : { data: figure.data, horizontal: false, swapped: false };
+    const adapted = touch ? adaptTraces(figure.data) : { data: figure.data, horizontal: false, swapped: false };
+    const { horizontal, swapped } = adapted;
+    // tooltip próprio: o Plotly só emite os eventos de hover, sem desenhar o balão
+    const data = mode ? ((adapted.data as Trace[]).map((t) => ({ ...t, hoverinfo: "none", hovertemplate: undefined })) as Data[]) : adapted.data;
+    const barsH = (data[0] as { orientation?: string } | undefined)?.orientation === "h";
     // desenha com as cores do tema atual; roda de novo quando o tema muda (claro/escuro)
     const render = () => {
       let layout = merge({ ...figure.layout, height: height ?? (figure.layout.height as number | undefined) ?? 300 }, themeLayout());
@@ -134,6 +183,13 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
         const m = mobileLayout(figure.layout, data, horizontal, swapped);
         layout = merge(layout, m);
         if (m.height) layout.height = m.height as number;
+      }
+      if (mode) layout = { ...layout, hovermode: mode === "unified" ? (barsH ? "y" : "x") : "closest" };
+      // rankings horizontais: em gráfico largo o valor vai na margem direita e as barras usam a largura toda;
+      // em gráfico estreito (card ao lado de outro) o valor vem logo depois da barra
+      if (mode === "point" && barsH && !touch && el.clientWidth < 520) {
+        const top = Math.max(0, ...(data as Trace[]).flatMap((t) => ((t.x as unknown[]) ?? []).map(Number)));
+        layout = merge(layout, { margin: { r: 12 } as Layout["margin"], xaxis: { range: [0, (top || 1) * 1.8] } });
       }
       void Plotly.react(el, themeInks(data), layout, {
         responsive: true,
@@ -147,12 +203,30 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
     };
     render();
     const node = el as unknown as PlotlyHTMLElement;
-    const handler = (ev: { points?: { customdata?: unknown; x?: unknown; y?: unknown }[] }) => {
+    const handler = (ev: { points?: HoverPoint[] }) => {
       const p = ev.points?.[0];
-      const horizontal = (data[0] as { orientation?: string } | undefined)?.orientation === "h";
-      if (p && onClick) onClick(p.customdata, String(horizontal ? p.y : p.x));
+      if (p && onClick) onClick(p.customdata, String(barsH ? p.y : p.x));
     };
     if (onClick) node.on("plotly_click", handler);
+    const onHover = (ev: { points?: HoverPoint[]; event?: MouseEvent }) => {
+      const points = ev.points ?? [];
+      const box = wrap.current?.getBoundingClientRect();
+      if (!points.length || !box) return;
+      const first = points[0];
+      const lines = tipLines(mode === "point" ? [first] : points);
+      if (!lines.length) {
+        setTip(null);
+        return;
+      }
+      const left = (ev.event?.clientX ?? box.left + box.width / 2) - box.left;
+      const top = (ev.event?.clientY ?? box.top + 24) - box.top;
+      setTip({ left, top, title: String(barsH ? first.y : first.x), lines });
+    };
+    const onUnhover = () => setTip(null);
+    if (mode) {
+      node.on("plotly_hover", onHover);
+      node.on("plotly_unhover", onUnhover);
+    }
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     // o merge preserva tickvals/ticktext/grade do backend: só as cores do tema mudam
     const onTheme = () => render();
@@ -163,8 +237,32 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
       media.removeEventListener("change", onTheme);
       observer.disconnect();
       if (onClick) node.removeAllListeners?.("plotly_click");
+      if (mode) {
+        node.removeAllListeners?.("plotly_hover");
+        node.removeAllListeners?.("plotly_unhover");
+      }
+      setTip(null);
     };
-  }, [figure, height, onClick]);
+  }, [figure, height, onClick, mode]);
   useEffect(() => () => { if (ref.current) Plotly.purge(ref.current); }, []);
-  return <div ref={ref} className="plotly-chart" role="img" aria-label={ariaLabel} style={{ cursor: onClick ? "pointer" : undefined }} />;
+  return (
+    <div className="plotly-wrap" ref={wrap} onMouseLeave={() => setTip(null)}>
+      <div ref={ref} className="plotly-chart" role="img" aria-label={ariaLabel} style={{ cursor: onClick ? "pointer" : undefined }} />
+      {tip && (
+        <div
+          ref={tipRef}
+          className="tooltip"
+          style={{ left: tipPos?.left ?? tip.left, top: tipPos?.top ?? tip.top, transform: "none", visibility: tipPos ? "visible" : "hidden" }}
+        >
+          <strong>{tip.title}</strong>
+          {tip.lines.map(([text, color]) => (
+            <span key={text}>
+              {color && <i style={{ background: color }} />}
+              {text}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }

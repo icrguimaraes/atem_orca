@@ -559,6 +559,18 @@ tr.saving { opacity: 0.6; }
 .heatmap td { text-align: center; padding: 6px 2px; border-radius: 4px; min-width: 44px; }
 .heatmap .hm-label { text-align: left; display: grid; max-width: 220px; min-width: 150px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-legend { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.heatmap.selectable td:not(.right), .heatmap.selectable .hm-label { cursor: pointer; }
+.heatmap.selectable td:not(.right):hover { outline: 2px solid var(--text); outline-offset: -2px; }
+/* filtros vindos de clique nos visuais (Painel 2) */
+.active-filters { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
+.filter-chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--text); border-radius: var(--radius-sm); padding: 4px 6px 4px 10px; font-size: 13px; background: var(--surface); color: var(--text); }
+.filter-chip button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+.filter-chip button:hover { color: var(--text); }
+.row-filter { border: 0; background: transparent; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.row-filter:hover { text-decoration: underline; }
+/* tooltip próprio dos gráficos Plotly (mesmo desenho do tooltip dos gráficos em SVG) */
+.plotly-wrap { position: relative; }
+.plotly-wrap .tooltip { top: 0; left: 0; transform: none; }
 .hm-ramp { width: 140px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--seq-lo), var(--seq-hi)); }
 .sparkline { display: block; }
 .statusbar-wrap { display: grid; gap: 8px; }

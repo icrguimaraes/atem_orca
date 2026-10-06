@@ -277,8 +277,10 @@ class Facts:
         package_id,
         period: Period,
         parent: dict | None = None,
+        account_id: int | None = None,
     ) -> None:
         self.db = db
+        self.account_id = account_id  # filtro por conta (clique nos visuais do Painel 2)
         self.visible = visible_cost_center_ids(db, user)
         self.company_id, self.cost_center_id, self.package_id = company_id, cost_center_id, package_id
         self.months = period.months
@@ -297,6 +299,8 @@ class Facts:
             stmt = stmt.where(model.cost_center_id == self.cost_center_id)
         if self.package_id:
             stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id == self.package_id)))
+        if self.account_id:
+            stmt = stmt.where(model.account_id == self.account_id)
         if self.modules:
             natures = [n for m in self.modules for n in cons.MODULE_NATURES[m]]
             stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.nature.in_(natures))))
@@ -335,6 +339,8 @@ class Facts:
                 account_id = accounts.get(r.account_code)
                 pkg_id = packages.get((r.package or "").upper())
                 if self.package_id and pkg_id != self.package_id:
+                    continue
+                if self.account_id and account_id != self.account_id:
                     continue
                 if self.parent.get("package_id") is not None and pkg_id != self.parent["package_id"]:
                     continue
@@ -414,6 +420,7 @@ def overview(
     company_id: int | None = None,
     cost_center_id: int | None = None,
     package_id: int | None = None,
+    account_id: int | None = None,
     year: int | None = None,
     years: str | None = None,
     months: str | None = None,
@@ -429,7 +436,7 @@ def overview(
     tudo. `compare` liga a comparação com o ano anterior (só com um ano escolhido); `same_period` limita a base
     ao último mês fechado do realizado em foco. O ano do ciclo traz o orçamento proposto como orçado."""
     P = _period(db, years, months, modules, compare, same_period, year)
-    f = Facts(db, user, company_id, cost_center_id, package_id, P)
+    f = Facts(db, user, company_id, cost_center_id, package_id, P, account_id=account_id)
     main_model = _main_model(P)
     actual_total = f.total(ActualEntry, P.years)
     budget_total = f.total(ReferenceBudgetEntry, P.years)
@@ -518,6 +525,7 @@ def breakdown(
     company_id: int | None = None,
     cost_center_id: int | None = None,
     package_id: int | None = None,
+    account_id: int | None = None,
     years: str | None = None,
     months: str | None = None,
     modules: str | None = None,
@@ -531,7 +539,7 @@ def breakdown(
     (drill-down). `thresholds` traz os limiares do ciclo usados no semáforo (alert.growth_pct / reduction_pct)."""
     P = _period(db, years, months, modules, compare, same_period)
     parent = {"package_id": parent_package_id, "no_package": parent_no_package, "account_id": parent_account_id}
-    f = Facts(db, user, company_id, cost_center_id, package_id, P, parent)
+    f = Facts(db, user, company_id, cost_center_id, package_id, P, parent, account_id=account_id)
     key = {"package": "package_id", "account": "account_id", "cost_center": "cost_center_id"}[group_by]
     cur = dict(f.sums(_main_model(P), P.years, key))
     base = _base_sums(f, P, key)

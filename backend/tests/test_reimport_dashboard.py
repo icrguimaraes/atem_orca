@@ -172,6 +172,11 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
         f"/api/v1/dashboard/breakdown?years=2026&group_by=account&parent_package_id={pkg}", headers=admin
     ).json()
     assert [(r["code"], r["ref"]) for r in accounts["rows"]] == [("6010301001", "350.00")]
+    # filtro por conta (clique nos visuais do Painel 2): só a conta entra nos números
+    by_account = client.get(
+        f"/api/v1/dashboard/overview?years=2026&account_id={accounts['rows'][0]['id']}", headers=admin
+    ).json()
+    assert by_account["kpis"]["ref_ytd"] == "350.00" and by_account["kpis"]["prev_ytd"] == "700.00"
     ccs = client.get(
         f"/api/v1/dashboard/breakdown?years=2026&group_by=cost_center&parent_account_id={accounts['rows'][0]['id']}",
         headers=admin,
@@ -218,10 +223,14 @@ def test_painel2_figures(client, admin, run_worker):
     monthly = {t["name"]: t for t in figs["monthly"]["data"]}
     assert set(monthly) == {"Realizado 2025 até AGO", "Realizado 2026 até AGO"}
     real = monthly["Realizado 2026 até AGO"]
-    assert real["y"][0] == float(data["monthly"][0]["ref"]) == 110.0 and real["customdata"][0] == ["R$ 110,00", 1]
-    assert real["marker"]["color"][0].startswith("rgba(68,114,196")  # azul do realizado
-    prev_colors = monthly["Realizado 2025 até AGO"]["marker"]["color"]
-    assert prev_colors[0].startswith("rgba(138,107,191")  # roxo do ano anterior
+    assert real["y"][0] == float(data["monthly"][0]["ref"]) == 110.0 and real["customdata"][0][:2] == ["R$ 110,00", 1]
+    assert real["marker"]["color"] == "#4472c4"  # azul do realizado, sem degradê
+    assert monthly["Realizado 2025 até AGO"]["marker"]["color"] == "#8a6bbf"  # roxo do ano anterior
+    # tooltip próprio: linhas por mês (série e variação) e o modo vão na figura
+    assert figs["monthly"]["meta"] == {"tooltip": "unified"} and figs["top_cost_centers"]["meta"] == {
+        "tooltip": "point"
+    }
+    assert real["customdata"][0][2] == [["Realizado 2026: R$ 110,00", "#4472c4"], ["Variação: -50,0%", ""]]
     assert real["textfont"]["color"] == "#3a64b4"  # rótulo no tom escuro do azul
     ccs = figs["top_cost_centers"]["data"]
     assert ccs[0]["customdata"][0][3] == data["top_cost_centers"][0]["id"]  # id do CC para o clique filtrar o painel

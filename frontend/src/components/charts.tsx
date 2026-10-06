@@ -78,12 +78,6 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget, showRef = tr
     ...(showRef ? [{ key: "ref" as Key, label: refLabel ?? String(refYear), color: SERIES.ref }] : []),
     ...(showBudget ? [{ key: "budget" as Key, label: budgetLabel ?? `Orçado ${refLabel ?? refYear}`, color: SERIES.budget }] : []),
   ];
-  // degradê por série: a maior barra em cor cheia, as menores esmaecendo (mesmo padrão dos rankings)
-  const ranks = series.map((s) => {
-    const sorted = rows.map((r) => Number(r[s.key])).filter((v) => v > 0).sort((a, b) => b - a);
-    return (v: number) => (sorted.length > 1 ? sorted.indexOf(v) / (sorted.length - 1) : 0);
-  });
-  const shade = (color: string, j: number, v: number) => `color-mix(in srgb, ${color} ${Math.round(100 - ranks[j](v) * 55)}%, transparent)`;
   const values = rows.flatMap((r) => series.map((s) => Number(r[s.key])));
   const max = niceMax(Math.max(...values, 0));
   const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
@@ -115,7 +109,7 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget, showRef = tr
               if (v <= 0) return null;
               return (
                 <g key={s.key}>
-                  <path d={roundedTop(xOf(i, j), y(v), barW, T + plotH - y(v))} style={{ fill: shade(s.color, j, v) }} />
+                  <path d={roundedTop(xOf(i, j), y(v), barW, T + plotH - y(v))} fill={s.color} />
                   {labelAll && (
                     <text x={xOf(i, j) + barW / 2} y={y(v) - 6} className="extreme" textAnchor="middle" fill={inkOf(s.color)} pointerEvents="none">
                       {short(v)}
@@ -265,7 +259,6 @@ export function TopBars({ rows, label, prevLabel, prevColor = SERIES.past, color
   const [hover, setHover] = useState<number | null>(null);
   // sem eixo, a maior barra ocupa a trilha inteira (niceMax deixaria todas curtas)
   const max = Math.max(...rows.flatMap((r) => [r.value, r.prev ?? 0]), 0) || 1;
-  const tone = (i: number) => `color-mix(in srgb, ${color} ${Math.round(100 - (i / Math.max(rows.length - 1, 1)) * 60)}%, transparent)`;
   return (
     <div className="paired" role="list" aria-label={label}>
       {rows.map((r, i) => (
@@ -275,7 +268,7 @@ export function TopBars({ rows, label, prevLabel, prevColor = SERIES.past, color
             {r.sub && <span className="muted small mono"> {r.sub}</span>}
           </div>
           <div className="paired-bars">
-            <div className="top-bar" style={{ width: `${(Math.max(r.value, 0) / max) * 100}%`, background: tone(i) }} />
+            <div className="top-bar" style={{ width: `${(Math.max(r.value, 0) / max) * 100}%`, background: color }} />
             {prevLabel && r.prev !== undefined && <div className="top-bar-prev" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%`, background: prevColor }} />}
           </div>
           <div className="paired-value">
@@ -463,14 +456,17 @@ export function Waterfall({
 }
 
 /** Mapa de calor (linhas × 12 meses), escala sequencial de um só tom. */
-export function Heatmap({ rows, budget = false }: { rows: { label: string; sub?: string | null; values: number[]; total: number }[]; budget?: boolean }) {
+export function Heatmap({ rows, budget = false, onSelect }: {
+  rows: { label: string; sub?: string | null; values: number[]; total: number }[]; budget?: boolean;
+  onSelect?: (row: number, month: number | null) => void;
+}) {
   const max = Math.max(1, ...rows.flatMap((r) => r.values));
   const [lo, hi] = budget ? ["var(--seqg-lo)", "var(--seqg-hi)"] : ["var(--seq-lo)", "var(--seq-hi)"]; // verde = orçamento
   const shade = (v: number) =>
     v <= 0 ? "var(--surface-2)" : `color-mix(in oklab, ${hi} ${Math.round(12 + (v / max) * 88)}%, ${lo})`;
   return (
     <div className="table-wrap">
-      <table className="heatmap">
+      <table className={`heatmap${onSelect ? " selectable" : ""}`}>
         <thead>
           <tr>
             <th />
@@ -479,15 +475,15 @@ export function Heatmap({ rows, budget = false }: { rows: { label: string; sub?:
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
+          {rows.map((r, ri) => (
             <tr key={r.label + (r.sub ?? "")}>
-              <th className="hm-label" title={r.label}>
+              <th className="hm-label" title={onSelect ? `Filtrar por ${r.label}` : r.label} onClick={onSelect ? () => onSelect(ri, null) : undefined}>
                 <span>{r.label}</span>
                 {r.sub && <span className="muted small mono">{r.sub}</span>}
               </th>
               {r.values.map((v, i) => (
                 <td key={i} style={{ background: shade(v), color: v / max > 0.55 ? "var(--seq-ink-strong)" : "var(--text)" }}
-                    title={`${r.label} · ${MONTHS[i]}: ${fmtMoney(v)}`}>
+                    title={`${r.label} · ${MONTHS[i]}: ${fmtMoney(v)}`} onClick={onSelect ? () => onSelect(ri, i + 1) : undefined}>
                   {v > 0 ? fmtCompact(v).replace("R$ ", "") : ""}
                 </td>
               ))}
@@ -498,7 +494,7 @@ export function Heatmap({ rows, budget = false }: { rows: { label: string; sub?:
       </table>
       <div className="hm-legend">
         <span className="muted small">menor</span>
-        <span className="hm-ramp" />
+        <span className="hm-ramp" style={{ background: `linear-gradient(90deg, ${lo}, ${hi})` }} />
         <span className="muted small">maior gasto no mês</span>
       </div>
     </div>

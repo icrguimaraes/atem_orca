@@ -1,6 +1,6 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type Company, type CostCenter, type Cycle, type Overview, type Package } from "../api";
+import { api, type BreakdownRow, type Company, type CostCenter, type Cycle, type Overview, type Package } from "../api";
 import { useAuth } from "../auth";
 import { FilterBar } from "../components/FilterBar";
 import { Heatmap } from "../components/charts";
@@ -12,7 +12,7 @@ import { MONTHS, fmtCompact, fmtMoney, fmtPct } from "../labels";
 /**
  * Painel 2: o mesmo Painel (filtros, números, blocos e tabela), com os gráficos em Plotly montados no backend
  * (`services/painel_figures.py`, a partir de `/dashboard/overview?figures=true`). Existe para comparação com o
- * Painel em SVG; depois da escolha, uma das duas versões sai. Clique em mês ou centro de custo filtra.
+ * Painel em SVG; depois da escolha, uma das duas versões sai. Clique nos gráficos e na tabela filtra; "Limpar filtros" volta ao início.
  */
 type OverviewWithFigures = Overview & { figures: Record<string, Figure> };
 
@@ -132,7 +132,10 @@ export default function Painel2() {
     </SectionShell>
   );
 
-  // cliques nos gráficos filtram o painel, como no Power BI
+  // filtro por conta: só existe por clique (nos rankings ou na tabela); aparece como etiqueta removível
+  const [account, setAccount] = useState<{ id: number; label: string } | null>(null);
+
+  // cliques nos visuais filtram o painel, como no Power BI
   const onMonth = useCallback((cd: unknown) => {
     const m = pick(cd, 1);
     if (m && m >= 1 && m <= 12) toggleMonth(m);
@@ -141,6 +144,26 @@ export default function Painel2() {
     const id = pick(cd, 3);
     if (id) setFilters((f) => ({ ...f, cost_center_id: String(id) }));
   }, []);
+  const onAccount = useCallback((cd: unknown, label: string) => {
+    const id = pick(cd, 3);
+    if (id) setAccount({ id, label });
+  }, []);
+  function onTableRow(level: number, row: BreakdownRow) {
+    if (row.id === null) return;
+    if (level === 0) setFilters((f) => ({ ...f, package_id: String(row.id) }));
+    else if (level === 1) setAccount({ id: row.id, label: row.code ? `${row.name} · ${row.code}` : row.name });
+    else setFilters((f) => ({ ...f, cost_center_id: String(row.id) }));
+  }
+  function clearAll() {
+    setFilters({ company_id: "", cost_center_id: "", package_id: "" });
+    setAccount(null);
+    setYears([]);
+    setMonths([]);
+    setModules([]);
+  }
+  const activeFilters =
+    [filters.company_id, filters.cost_center_id, filters.package_id].filter(Boolean).length +
+    (account ? 1 : 0) + (years.length ? 1 : 0) + (months.length ? 1 : 0) + (modules.length ? 1 : 0);
 
   const base = useLoad(async () => {
     const [cycles, companies, ccs, packages] = await Promise.all([
@@ -154,6 +177,7 @@ export default function Painel2() {
   const query = new URLSearchParams(
     Object.entries({
       ...filters,
+      account_id: account ? String(account.id) : "",
       years: years.join(","),
       months: months.join(","),
       modules: modules.join(","),
@@ -177,7 +201,11 @@ export default function Painel2() {
   const hasBase = Boolean(period?.base_kind);
   const hasData = Boolean(o && (o.has_actual || o.has_budget));
   const shownYears = years.length ? years : (o?.selected_years ?? []);
-  const filtered = Boolean(filters.company_id || filters.cost_center_id || filters.package_id || modules.length);
+  const filtered = Boolean(filters.company_id || filters.cost_center_id || filters.package_id || account || modules.length);
+  // os dois rankings lado a lado com a mesma altura: o de menos linhas usa o card inteiro
+  const rankHeight = f
+    ? Math.max(Number(f.top_cost_centers?.layout.height ?? 0), Number(f.top_accounts?.layout.height ?? 0)) || undefined
+    : undefined;
 
   return (
     <>
@@ -188,7 +216,16 @@ export default function Painel2() {
             ? `Versão em Plotly, para comparar com o Painel. ${mainLabel}${typesTxt}${hasBase ? ` comparado com ${baseLabel}` : ""}.`
             : `Versão em Plotly, para comparar com o Painel. ${cycle ? cycle.name : ""}`
         }
-        actions={<Link to="/" className="btn btn-ghost">Abrir o Painel</Link>}
+        actions={
+          <>
+            {activeFilters > 0 && (
+              <button type="button" className="btn btn-ghost" onClick={clearAll}>
+                Limpar filtros ({activeFilters})
+              </button>
+            )}
+            <Link to="/" className="btn btn-ghost">Abrir o Painel</Link>
+          </>
+        }
       />
 
       <FilterBar
@@ -266,6 +303,14 @@ export default function Painel2() {
               </div>
             </div>
           </div>
+          {account && (
+            <div className="active-filters" aria-label="Filtros aplicados por clique">
+              <span className="filter-chip">
+                Conta: {account.label}
+                <button type="button" aria-label="Remover o filtro de conta" title="Remover o filtro de conta" onClick={() => setAccount(null)}>×</button>
+              </span>
+            </div>
+          )}
           <div className="section-tools">
             <div className="toggle-options" role="group" aria-label="Opções de comparação">
               <label className={period?.compare_available ? "" : "off"} title={period?.compare_available ? "" : "Disponível com um único ano selecionado e o ano anterior carregado"}>
@@ -280,7 +325,7 @@ export default function Painel2() {
             <div className="inline-controls">
               <span className="selection-note">
                 Selecionado: {mainLabel}{typesTxt}
-                {hasBase ? ` · base: ${baseLabel}` : ""} · clique num mês ou centro de custo para filtrar
+                {hasBase ? ` · base: ${baseLabel}` : ""} · clique nos gráficos e na tabela para filtrar
               </span>
               <button type="button" className="btn btn-ghost btn-sm" aria-pressed={organizing} onClick={() => setOrganizing(!organizing)}>
                 {organizing ? "Concluir" : "Organizar painel"}
@@ -342,32 +387,49 @@ export default function Painel2() {
 
             {shell("table",
               <Card title={`Por pacote GMD, conta e centro de custo · ${mainLabel}${typesTxt}`}>
-                <DrillTable query={query} refLabel={mainLabel} />
+                <DrillTable query={query} refLabel={mainLabel} onSelect={onTableRow} />
               </Card>,
             )}
 
             {shell("cumulative",
               <Card title={`Total acumulado · ${mainLabel}`}>
-                <PlotlyChart figure={f.cumulative} height={340} ariaLabel="Total acumulado" />
+                <PlotlyChart figure={f.cumulative} height={340} onClick={onMonth} ariaLabel="Total acumulado" />
               </Card>,
             )}
 
             {shell("top",
               <div className="grid-2">
                 <Card title={`Maiores centros de custo · ${mainLabel}`}>
-                  {hasBase && <p className="muted small">Barra fina: {baseLabel}. Clique num centro de custo para filtrar.</p>}
-                  {o.top_cost_centers.length ? <PlotlyChart figure={f.top_cost_centers} onClick={onCostCenter} ariaLabel="Maiores centros de custo" /> : <Empty>Sem dados.</Empty>}
+                  <p className="muted small">{hasBase ? `Barra fina: ${baseLabel}. ` : ""}Clique num centro de custo para filtrar.</p>
+                  {o.top_cost_centers.length ? (
+                    <PlotlyChart figure={f.top_cost_centers} height={rankHeight} onClick={onCostCenter} ariaLabel="Maiores centros de custo" />
+                  ) : (
+                    <Empty>Sem dados.</Empty>
+                  )}
                 </Card>
                 <Card title={`Maiores contas · ${mainLabel}`}>
-                  {hasBase && <p className="muted small">Barra fina: {baseLabel}.</p>}
-                  {o.top_accounts.length ? <PlotlyChart figure={f.top_accounts} ariaLabel="Maiores contas" /> : <Empty>Sem dados.</Empty>}
+                  <p className="muted small">{hasBase ? `Barra fina: ${baseLabel}. ` : ""}Clique numa conta para filtrar.</p>
+                  {o.top_accounts.length ? (
+                    <PlotlyChart figure={f.top_accounts} height={rankHeight} onClick={onAccount} ariaLabel="Maiores contas" />
+                  ) : (
+                    <Empty>Sem dados.</Empty>
+                  )}
                 </Card>
               </div>,
             )}
 
             {o.heatmap.rows.length > 0 && shell("heatmap",
               <Card title={`Mapa de calor · maiores centros de custo × mês (${mainLabel})`}>
-                <Heatmap budget={isBudgetMain} rows={o.heatmap.rows.map((r) => ({ label: r.name, sub: r.code, values: r.values.map(Number), total: Number(r.total) }))} />
+                <p className="muted small">Clique numa célula para filtrar por centro de custo e mês; no nome, só pelo centro de custo.</p>
+                <Heatmap
+                  budget={isBudgetMain}
+                  rows={o.heatmap.rows.map((r) => ({ label: r.name, sub: r.code, values: r.values.map(Number), total: Number(r.total) }))}
+                  onSelect={(ri, m) => {
+                    const row = o.heatmap.rows[ri];
+                    if (row) setFilters((cur) => ({ ...cur, cost_center_id: String(row.id) }));
+                    if (m) toggleMonth(m);
+                  }}
+                />
               </Card>,
             )}
           </div>
