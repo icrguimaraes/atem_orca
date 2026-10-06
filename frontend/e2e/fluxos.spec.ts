@@ -35,9 +35,10 @@ test("consolidação: exportar Excel e abrir o CC a partir da matriz", async ({ 
   await expect(page.getByText("Pontos de atenção")).toBeVisible();
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("text=Exportar Excel")]);
   expect(download.suggestedFilename()).toMatch(/^Orcamento_\d{4}_v.+\.xlsx$/);
+  await expect(page.getByText("Carregando…")).toHaveCount(0);
   const first = page.locator(".table a .badge").first(); // matriz CC × módulos (links para o CC)
-  test.skip(!(await first.isVisible()), "matriz CC × módulos vazia (sem centros de custo)");
-  if (await first.isVisible()) {
+  test.skip((await first.count()) === 0, "matriz CC × módulos vazia (sem centros de custo)");
+  {
     await first.scrollIntoViewIfNeeded();
     await first.click();
     await expect(page).toHaveURL(/\/(orcamento|capex|pessoal)\/\d+/);
@@ -61,8 +62,9 @@ test("menu: alterar senha valida confirmação", async ({ page }) => {
 test("orçamento OPEX: baixar o template preenchido do CC", async ({ page }) => {
   await login(page);
   await page.goto("/orcamento");
+  await expect(page.getByText("Carregando…")).toHaveCount(0);
   const first = page.locator(".table a").first();
-  test.skip(!(await first.isVisible()), "lista OPEX vazia (sem centros de custo)");
+  test.skip((await first.count()) === 0, "lista OPEX vazia (sem centros de custo)");
   await first.click();
   await expect(page).toHaveURL(/\/orcamento\/\d+/);
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("button:has-text('Baixar template (Excel)')")]);
