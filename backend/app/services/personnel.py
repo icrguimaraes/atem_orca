@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from app.domain.rules import personnel as pr
 from app.domain.rules.common import MONTHS, money
+from app.domain.workflow import EDITABLE, STATUS_LABELS
 from app.models import (
     Account,
     ActualEntry,
@@ -67,8 +68,12 @@ class ScenarioInfo:
     rules: pr.Scenario
 
 
-def contract_types(db: Session) -> dict[str, ContractType]:
-    return {c.code: c for c in db.scalars(select(ContractType).where(ContractType.is_active))}
+def contract_types(db: Session, *, active_only: bool = False) -> dict[str, ContractType]:
+    """Todos os tipos por padrão: colaboradores já cadastrados podem ter contrato inativado depois."""
+    stmt = select(ContractType)
+    if active_only:
+        stmt = stmt.where(ContractType.is_active)
+    return {c.code: c for c in db.scalars(stmt)}
 
 
 def scenario_info(
@@ -472,7 +477,13 @@ def _money(value, label: str, *, required: bool = False) -> Decimal | None:
 
 
 def set_employee_movement(
-    db: Session, sub: BudgetSubmission, employee: Employee, data: dict, user_id: int | None
+    db: Session,
+    sub: BudgetSubmission,
+    employee: Employee,
+    data: dict,
+    user_id: int | None,
+    *,
+    allowed_targets: set[int] | None = None,
 ) -> PersonnelMovement | None:
     """Define (ou limpa, com KEEP) a movimentação do colaborador no ano."""
     if employee.cost_center_id != sub.cost_center_id or not employee.is_active:
@@ -506,6 +517,20 @@ def set_employee_movement(
             raise PersonnelError("Informe o centro de custo de destino")
         if cc.id == sub.cost_center_id:
             raise PersonnelError("O destino deve ser outro centro de custo")
+        if allowed_targets is not None and cc.id not in allowed_targets:
+            raise PersonnelError("Você só pode transferir para centros de custo que gerencia")
+        target_sub = db.scalar(
+            select(BudgetSubmission).where(
+                BudgetSubmission.version_id == sub.version_id,
+                BudgetSubmission.cost_center_id == cc.id,
+                BudgetSubmission.module == MODULE,
+            )
+        )
+        if target_sub is not None and target_sub.status not in EDITABLE:
+            raise PersonnelError(
+                f"O orçamento de pessoal de {cc.code} está '{STATUS_LABELS.get(target_sub.status, target_sub.status)}' "
+                "e não aceita transferências; peça à Controladoria para devolvê-lo para ajuste"
+            )
         new_salary = _money(data.get("new_salary"), "o salário no destino")
     elif kind == "HIRE":
         new_salary = _money(data.get("new_salary"), "o salário de admissão")
@@ -533,7 +558,7 @@ def set_employee_movement(
 def save_hire(
     db: Session, sub: BudgetSubmission, data: dict, user_id: int | None, mv: PersonnelMovement | None = None
 ) -> PersonnelMovement:
-    contracts = contract_types(db)
+    contracts = contract_types(db, active_only=True)
     position_name = (data.get("position_name") or "").strip()
     if not position_name:
         raise PersonnelError("Informe o cargo da vaga")

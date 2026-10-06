@@ -103,9 +103,9 @@ def test_personnel_projection_workflow_and_transfer(client, admin, run_worker):
         json={"type": "TRANSFER", "month": 7, "target_cost_center_id": ccs[CC1]["id"]},
     )
     assert bad.status_code == 422
-    v = client.put(
+    v = client.put(  # transferência entre CCs de gestores diferentes: feita pela Controladoria
         f"/api/v1/personnel/submissions/{sub}/employees/{ana}/movement",
-        headers=mgr,
+        headers=admin,
         json={"type": "TRANSFER", "month": 7, "target_cost_center_id": ccs[CC2]["id"], "reason": "Nova área"},
     ).json()
     assert _by_name(v)["ANA"]["annual"] == "113400.00"
@@ -174,3 +174,24 @@ def test_quadro_without_cost_center_uses_default(client, admin, run_worker):
     b = status(client, admin, batch_id)
     assert b["summary"]["comparison"]["movements"][0]["cost_center"] == CC2
     assert b["summary"]["comparison"]["movements"][0]["actions"] == 2
+
+
+def test_inactive_contract_type_still_computes(client, admin, run_worker):
+    ccs, mgr, _ = _setup(client, admin, run_worker)
+    r = client.patch("/api/v1/contract-types/PJ", headers=admin, json={"is_active": False})
+    assert r.status_code == 200, r.text
+    head = client.get(f"/api/v1/personnel/cost-centers/{ccs[CC1]['id']}", headers=admin).json()
+    view = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin)
+    assert view.status_code == 200 and _by_name(view.json())["CARLA"]["annual"] == "15750.00"
+    assert client.get("/api/v1/consolidation/overview", headers=admin).status_code == 200
+    opts = client.get("/api/v1/personnel/options", headers=admin).json()
+    assert "PJ" not in {c["code"] for c in opts["contract_types"]}  # inativo não entra em novas vagas
+    # transferência para CC que o gestor não gerencia é recusada
+    ana = _by_name(view.json())["ANA"]["employee_id"]
+    sub = head["submission_id"]
+    resp = client.put(
+        f"/api/v1/personnel/submissions/{sub}/employees/{ana}/movement",
+        headers=mgr,
+        json={"type": "TRANSFER", "month": 7, "target_cost_center_id": ccs[CC2]["id"], "reason": "x"},
+    )
+    assert resp.status_code == 422 and "gerencia" in resp.json()["detail"]

@@ -323,10 +323,13 @@ def validate_capex_template(result: ParseResult, dims: Dimensions, options: dict
                 d["cost_center"],
             )
         acc_nature = nature(d["account"])
+        acc_obj = dims.accounts.get(d["account"])
         if acc_nature is None:
             rec.error("UNKNOWN_ACCOUNT", f"Conta {d['account']} não cadastrada", "CONTA", d["account"])
         elif acc_nature != "CAPEX":
             rec.error("WRONG_NATURE", f"Conta {d['account']} é de {acc_nature}; não entra no CAPEX", "CONTA")
+        elif acc_obj is not None and not acc_obj.is_active:
+            rec.error("INACTIVE_ACCOUNT", f"Conta {d['account']} está inativa", "CONTA", d["account"])
         if d.get("branch") and dims.branch_id(company_id, d["branch"]) is None:
             rec.warn("UNKNOWN_BRANCH", f"Filial {d['branch']} não cadastrada (fica sem filial)", "FILIAL", d["branch"])
         if d.get("project_type"):

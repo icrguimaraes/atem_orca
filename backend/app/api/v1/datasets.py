@@ -107,7 +107,22 @@ def _delete_dataset(
 
     removed_employees = 0
     if dataset_type == "EMPLOYEES":
+        from app.models import BudgetSubmission, BudgetVersion
+
         emp_ids = select(Employee.id).where(Employee.dataset_version_id.in_(version_ids))
+        frozen_refs = db.scalar(
+            select(func.count())
+            .select_from(PersonnelMovement)
+            .join(BudgetSubmission, BudgetSubmission.id == PersonnelMovement.submission_id)
+            .join(BudgetVersion, BudgetVersion.id == BudgetSubmission.version_id)
+            .where(PersonnelMovement.employee_id.in_(emp_ids), BudgetVersion.status == "FROZEN")
+        )
+        if frozen_refs:
+            raise HTTPException(
+                409,
+                "Colaboradores deste quadro têm movimentações numa versão congelada do orçamento; "
+                "use 'Excluir tudo' para recomeçar ou mantenha o quadro",
+            )
         # ações do ano (promoção, desligamento...) desses colaboradores saem junto com o quadro
         db.execute(delete(PersonnelMovement).where(PersonnelMovement.employee_id.in_(emp_ids)))
         removed_employees = db.execute(delete(Employee).where(Employee.dataset_version_id.in_(version_ids))).rowcount
@@ -248,6 +263,9 @@ def _reset_versions(db: Session) -> dict:
     ids = [v.id for v in versions]
     db.execute(delete(BudgetSnapshotLine).where(BudgetSnapshotLine.version_id.in_(ids)))
     db.execute(delete(BudgetSubmission).where(BudgetSubmission.version_id.in_(ids)))
+    # revisões apontam para a anterior (parent_version_id): solta o encadeamento antes de apagar
+    db.execute(update(BudgetVersion).where(BudgetVersion.id.in_(ids)).values(parent_version_id=None))
+    db.flush()
     for v in reversed(others):
         db.delete(v)
     db.flush()

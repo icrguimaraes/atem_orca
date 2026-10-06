@@ -217,7 +217,8 @@ def load_master(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
             obj.name = d["name"]
             obj.dre_group = d.get("dre_group") or obj.dre_group
             obj.package_id = package.id if package else obj.package_id
-            obj.nature = nature
+            if d.get("nature"):  # natureza inferida só vale para contas novas; ajuste manual prevalece
+                obj.nature = nature
             after = audit.snapshot(obj)
             if audit.diff(before, after)[0]:
                 audit.record(

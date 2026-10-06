@@ -45,6 +45,20 @@ ITEM_ALIASES = {
     "useful_life": ("VIDA ÚTIL", "Vida útil (meses)"),
 }
 REQUIRED = ("cost_center", "account", "item", "unit_value", "quantity")
+MONTH_NAMES = set(MONTH_LABELS) | {
+    "JANEIRO",
+    "FEVEREIRO",
+    "MARCO",
+    "ABRIL",
+    "MAIO",
+    "JUNHO",
+    "JULHO",
+    "AGOSTO",
+    "SETEMBRO",
+    "OUTUBRO",
+    "NOVEMBRO",
+    "DEZEMBRO",
+}
 YES = {"sim", "s", "yes", "x"}
 
 
@@ -61,8 +75,7 @@ def _month_columns(sheet: Sheet, header_row: int, after: int) -> dict[int, int]:
     for col, cell in enumerate(sheet.rows[header_row - 1], start=1):
         if col <= after or len(months) == 12:
             continue
-        text = norm(cell).upper()
-        if isinstance(cell, (datetime, date)) or text[:3] in MONTH_LABELS:
+        if isinstance(cell, (datetime, date)) or norm(cell).upper() in MONTH_NAMES:
             months[len(months) + 1] = col
     return months
 

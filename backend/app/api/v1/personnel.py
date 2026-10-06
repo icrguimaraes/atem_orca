@@ -316,7 +316,9 @@ def set_movement(
         )
     )
     try:
-        mv = svc.set_employee_movement(db, sub, emp, payload.model_dump(), user.id)
+        mv = svc.set_employee_movement(
+            db, sub, emp, payload.model_dump(), user.id, allowed_targets=None if access.global_ else _visible(db, user)
+        )
     except svc.PersonnelError as exc:
         db.rollback()
         raise HTTPException(422, str(exc)) from exc
@@ -464,7 +466,7 @@ def do_action(
         review = db.scalar(
             select(PackageReview).where(PackageReview.submission_id == sub.id, PackageReview.package_id == pkg.id)
         )
-        if review is not None and review.status != "APPROVED":
+        if review is None or review.status != "APPROVED":
             blockers.append(f"validação GMD obrigatória pendente: {pkg.name}")
     try:
         t = check_transition(
@@ -519,6 +521,8 @@ def review_package(
     user: User = Depends(get_current_user),
 ):
     ctx, sub, access = _load(db, user, submission_id)
+    if ctx.frozen:
+        raise HTTPException(409, f"A versão {ctx.version.label} está congelada; o fluxo continua na revisão")
     pkg = _people_package(db)
     if pkg is None or not (access.global_ or access.reviewer):
         raise HTTPException(403, "Você não é gestor do pacote Pessoas")
@@ -586,7 +590,7 @@ def options(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     return {
         "contract_types": [
             {"code": c.code, "name": c.name, "apply_multiplier": c.apply_multiplier}
-            for c in svc.contract_types(db).values()
+            for c in svc.contract_types(db, active_only=True).values()
         ],
         "positions": [p.name for p in db.scalars(select(JobPosition).order_by(JobPosition.name))],
         "cost_centers": [
@@ -759,7 +763,7 @@ def update_scenario(
     user: User = Depends(planner),
 ):
     row = db.get(PersonnelScenario, scenario_id)
-    if row is None:
+    if row is None or row.cycle_id != _ctx(db).cycle.id:
         raise HTTPException(404, "Cenário não encontrado")
     before = _scenario_row(db, row)
     try:
@@ -806,7 +810,7 @@ def set_baseline(scenario_id: int, request: Request, db: Session = Depends(get_d
 @router.delete("/scenarios/{scenario_id}")
 def delete_scenario(scenario_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(planner)):
     row = db.get(PersonnelScenario, scenario_id)
-    if row is None:
+    if row is None or row.cycle_id != _ctx(db).cycle.id:
         raise HTTPException(404, "Cenário não encontrado")
     if row.is_baseline:
         raise HTTPException(409, "O cenário base não pode ser excluído; defina outro como base antes")

@@ -70,6 +70,14 @@ def project_issues(project: CapexProject) -> list[dict]:
 # ------------------------------------------------------------------ saída
 
 
+def _plain(value: Decimal | None) -> str:
+    """Quantidade sem zeros à direita e sem notação científica (Decimal('100.00') → '100')."""
+    if value is None:
+        return "0"
+    normalized = value.normalize()
+    return f"{normalized:f}" if normalized == normalized.to_integral() else str(normalized)
+
+
 def item_out(ctx: Context, item: CapexItem, accounts: dict[int, Account] | None = None) -> dict:
     values = {m: ZERO for m in MONTHS}
     for v in item.values:
@@ -86,7 +94,7 @@ def item_out(ctx: Context, item: CapexItem, accounts: dict[int, Account] | None 
         "item_name": item.item_name,
         "description": item.description,
         "unit_value": str(money(item.unit_value)),
-        "quantity": str(item.quantity.normalize() if item.quantity is not None else 0),
+        "quantity": _plain(item.quantity),
         "total_value": str(money(item.total_value)),
         "useful_life_months": item.useful_life_months,
         "values": {m: str(money(v)) for m, v in values.items()},

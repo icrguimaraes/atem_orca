@@ -170,3 +170,17 @@ def test_frozen_version_does_not_create_submissions(client, admin, run_worker):
     r = client.delete("/api/v1/datasets/budget", headers=admin, params={"module": "OPEX", "confirm": "EXCLUIR"})
     assert r.status_code == 409
     assert client.delete("/api/v1/datasets/all", headers=admin, params={"confirm": "EXCLUIR"}).status_code == 200
+
+
+def test_delete_all_with_two_revisions(client, admin, run_worker):
+    _setup(client, admin, run_worker)
+    for n in (1, 2):
+        client.post("/api/v1/consolidation/freeze", headers=admin, json={})
+        assert client.post("/api/v1/consolidation/revise", headers=admin, json={"reason": f"r{n}"}).status_code == 200
+    labels = [v["label"] for v in client.get("/api/v1/consolidation/overview", headers=admin).json()["versions"]]
+    assert labels == ["1.0", "1.1", "1.2"]
+    r = client.delete("/api/v1/datasets/all", headers=admin, params={"confirm": "EXCLUIR"})
+    assert r.status_code == 200, r.text
+    assert [v["label"] for v in client.get("/api/v1/consolidation/overview", headers=admin).json()["versions"]] == [
+        "1.0"
+    ]

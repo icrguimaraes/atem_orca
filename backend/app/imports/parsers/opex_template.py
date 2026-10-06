@@ -48,6 +48,8 @@ def _header(sheet: Sheet) -> tuple[int, dict[int, int], int, dict[str, int], boo
         if len(months) == 12 and "CHAVE" in texts:
             first_month = months[1]
             key_cols = [c for c, t in enumerate(texts, start=1) if t == "CHAVE" and c < first_month]
+            if not key_cols:
+                continue  # CHAVE só depois dos meses: não é a tabela do pacote
             key_col = max(key_cols)  # a CHAVE mais próxima dos meses (consolidador da aba Viagens)
             others = {}
             for col, raw in enumerate(row, start=1):

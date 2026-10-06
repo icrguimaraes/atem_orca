@@ -89,6 +89,13 @@ def validate_batch(db: Session, batch: ImportBatch, storage: LocalStorage) -> Im
         db.add(ImportError_(batch_id=batch.id, code="STRUCTURE", severity="ERROR", message=str(exc)))
         db.commit()
         return batch
+    except Exception as exc:  # layout inesperado não pode deixar o lote preso em VALIDATING
+        log.exception("Erro inesperado ao ler a importação #%s", batch.id)
+        batch.status = "FAILED"
+        batch.error_message = f"Erro inesperado ao ler o arquivo: {exc}"
+        db.add(ImportError_(batch_id=batch.id, code="STRUCTURE", severity="ERROR", message=batch.error_message))
+        db.commit()
+        return batch
 
     validate(result, Dimensions(db), options)
     comparison = compare(db, result, options)
