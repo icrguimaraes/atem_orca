@@ -9,6 +9,7 @@ import { ThemeSwitch, useTheme, type Theme } from "../theme";
 
 const NAV = [
   { to: "/", label: "Painel", end: true },
+  { to: "/painel-2", label: "Painel 2 (Plotly)" },
   { to: "/analise", label: "Análise orçamentária" },
   { to: "/consolidacao", label: "Consolidação e exportação" },
   { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"] },

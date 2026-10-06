@@ -201,6 +201,39 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     assert client.get("/api/v1/dashboard/data-quality", headers=manager).status_code == 403
 
 
+def test_painel2_figures(client, admin, run_worker):
+    """Painel 2: as figuras Plotly saem do mesmo overview (mesmos números), só com `figures=true`."""
+    _setup(client, admin, run_worker)
+    rows_2025 = [r[:9] + tuple(v * 2 if v else v for v in r[9:]) for r in ROWS]
+    import_and_load(client, admin, run_worker, builders.realizado_wide(rows_2025, year=2025, months=8), "r2025.xlsx")
+    assert "figures" not in client.get("/api/v1/dashboard/overview?years=2026", headers=admin).json()
+    data = client.get("/api/v1/dashboard/overview?years=2026&figures=true", headers=admin).json()
+    figs = data["figures"]
+    expected = {
+        "monthly",
+        "cumulative",
+        "top_cost_centers",
+        "top_accounts",
+        "packages",
+        "package_variation",
+        "account_deltas",
+    }
+    assert expected <= set(figs)
+    monthly = {t["name"]: t for t in figs["monthly"]["data"]}
+    assert set(monthly) == {"Realizado 2025 até AGO", "Realizado 2026 até AGO"}
+    real = monthly["Realizado 2026 até AGO"]
+    assert real["y"][0] == float(data["monthly"][0]["ref"]) == 110.0 and real["customdata"][0] == ["R$ 110,00", 1]
+    assert real["marker"]["color"][0].startswith("rgba(68,114,196")  # azul do realizado
+    assert monthly["Realizado 2025 até AGO"]["marker"]["color"][0].startswith(
+        "rgba(139,149,167"
+    )  # cinza do ano anterior
+    ccs = figs["top_cost_centers"]["data"]
+    assert ccs[0]["customdata"][0][3] == data["top_cost_centers"][0]["id"]  # id do CC para o clique filtrar o painel
+    assert len(ccs) == 2 and ccs[1]["name"] == "Realizado 2025 até AGO"  # barra fina da base
+    cumulative = {t["name"]: t for t in figs["cumulative"]["data"]}
+    assert cumulative["Realizado 2026 até AGO"]["y"][-1] == 430.0
+
+
 def test_breakdown_drills_into_accounts_without_package(client, admin, run_worker):
     """A linha "Sem pacote" da tabela do painel também abre (contas sem pacote → centros de custo)."""
     _setup(client, admin, run_worker)

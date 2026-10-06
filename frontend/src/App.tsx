@@ -5,6 +5,8 @@ import Layout from "./components/Layout";
 import { Loading } from "./components/ui";
 // Plotly (~1 MB) só é baixado quando a Análise é aberta
 const Analytics = lazy(() => import("./pages/Analytics"));
+// Painel 2 (Painel em Plotly, para comparação): também só baixa o Plotly quando aberto
+const Painel2 = lazy(() => import("./pages/Painel2"));
 import Audit from "./pages/Audit";
 import CapexCostCenter from "./pages/CapexCostCenter";
 import Consolidation from "./pages/Consolidation";
@@ -42,6 +44,7 @@ export default function App() {
           >
             <Route index element={<Home />} />
             <Route path="analise" element={<Suspense fallback={<Loading />}><Analytics /></Suspense>} />
+            <Route path="painel-2" element={<Suspense fallback={<Loading />}><Painel2 /></Suspense>} />
             <Route path="importacoes" element={<Protected roles={["CONTROLLER"]}><Imports /></Protected>} />
             <Route path="importacoes/:id" element={<Protected roles={["CONTROLLER"]}><ImportDetail /></Protected>} />
             <Route path="orcamento" element={<Navigate to="/?tipo=OPEX" replace />} />

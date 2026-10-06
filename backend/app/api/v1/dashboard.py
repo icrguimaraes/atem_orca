@@ -34,6 +34,7 @@ from app.models import (
 from app.models.base import Role
 from app.services import consolidation as cons
 from app.services import opex as opex_svc
+from app.services import painel_figures
 
 router = APIRouter(prefix="/dashboard", tags=["painel"])
 ZERO = Decimal("0")
@@ -419,10 +420,12 @@ def overview(
     modules: str | None = None,
     compare: bool = True,
     same_period: bool = True,
+    figures: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """`years` (ex.: "2025,2026") são somados; `months` ("1,2,3") e `modules` ("OPEX,CAPEX,PERSONNEL") filtram
+    """`figures=true` acrescenta as figuras Plotly do Painel 2 (mesmos números, desenhados em Plotly).
+    `years` (ex.: "2025,2026") são somados; `months` ("1,2,3") e `modules` ("OPEX,CAPEX,PERSONNEL") filtram
     tudo. `compare` liga a comparação com o ano anterior (só com um ano escolhido); `same_period` limita a base
     ao último mês fechado do realizado em foco. O ano do ciclo traz o orçamento proposto como orçado."""
     P = _period(db, years, months, modules, compare, same_period, year)
@@ -494,7 +497,7 @@ def overview(
             )
         return rows
 
-    return {
+    data = {
         "reference_year": max(P.years),
         "previous_year": P.prev_years[0] if P.compare else None,
         "selected_years": P.years,
@@ -528,6 +531,9 @@ def overview(
         "account_deltas": _account_deltas(db, f, P) if P.base_kind else [],
         "budget_progress": budget_progress(db, user, company_id, cost_center_id, package_id),
     }
+    if figures:
+        data["figures"] = painel_figures.build(data)
+    return data
 
 
 @router.get("/breakdown", summary="Tabela do painel com drill-down: pacote GMD → conta → centro de custo")

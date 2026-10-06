@@ -34,8 +34,10 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
 - Frontend: tokens de cor/fonte em `styles.css` (`:root`, claro e escuro); gráficos em `components/charts.tsx` com a paleta
   `SERIES`; coral só em ações primárias. Toda tabela nova vai dentro de `.table-wrap`; conferir celular (390px) sem overflow.
 - Gráficos analíticos: figuras Plotly são montadas **no backend** (`services/analytics.py`, uma base filtrada por request,
-  formatação pt-BR em rótulos/tooltips) e renderizadas por `components/PlotlyChart.tsx` (bundle `plotly.js-basic-dist-min`,
-  carregado só na página Análise). Novos gráficos: nova função `fig_*` + chave em `dashboard()['figures']`.
+  formatação pt-BR em rótulos/tooltips) e renderizadas por `components/PlotlyChart.tsx` (bundle `plotly.js-basic-dist-min`:
+  barras, linhas e pizza; carregado só na Análise e no Painel 2). Novos gráficos: nova função `fig_*` + chave em `dashboard()['figures']`.
+- Painel 2 (`pages/Painel2.tsx`, `/painel-2`): o Painel em Plotly para comparação — mesmos números de `/dashboard/overview`,
+  figuras em `services/painel_figures.py` (`overview?figures=true`); clique em mês, CC ou pacote filtra. Depois da escolha, uma versão sai.
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

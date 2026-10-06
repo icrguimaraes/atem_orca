@@ -3,6 +3,7 @@ import { expectNoHorizontalOverflow, login } from "./helpers";
 
 const PAGES: [string, string][] = [
   ["/", "Painel"],
+  ["/painel-2", "Painel 2"],
   ["/analise", "Análise orçamentária"],
   ["/consolidacao", "Consolidação e exportação"],
   ["/importacoes", "Importação de dados"],
