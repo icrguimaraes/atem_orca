@@ -255,6 +255,27 @@ def compare_macro(db: Session, result: ParseResult) -> dict:
     return {"kind": "MACRO", "new": new, "changed": changed, "unchanged": unchanged, "no_changes": no_changes}
 
 
+def _template_master(master: dict) -> None:
+    """Template de gestor não altera cadastros existentes: só o que é novo entra."""
+    ignored = sum(c.get("UPDATE", 0) for c in master.get("by_type", {}).values())
+    for c in master.get("by_type", {}).values():
+        c["IGNORED"] = c.pop("UPDATE", 0)
+    master["template"] = True
+    master["updates_ignored"] = ignored
+    master["no_changes"] = all(c.get("CREATE", 0) == 0 for c in master.get("by_type", {}).values())
+
+
+def _template_actual(actual: dict) -> None:
+    """Realizado do template só entra se ainda não houver realizado daquela empresa/ano na base."""
+    skipped = [s for s in actual.get("scopes", []) if s.get("current_version")]
+    for s in skipped:
+        s["skipped"] = True
+    actual["template"] = True
+    actual["skipped_scopes"] = [s["scope"] for s in skipped]
+    if skipped and len(skipped) == len(actual.get("scopes", [])):
+        actual["no_changes"] = True
+
+
 def _full_replace_ok(export: dict, cc_code: str, recs: list, ctx) -> bool:
     """Exportação do sistema: só o CC exportado tem todos os lançamentos substituídos — e só se nenhuma
     linha dele estiver com erro (senão a linha com erro sumiria do orçamento) e a versão for a vigente."""
@@ -291,9 +312,12 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
         return ParseResult(result.dataset_type, result.layout, [r for r in result.records if r.record_type in types])
 
     master = compare_master(part("BRANCH", "COST_CENTER", "ACCOUNT"))
+    _template_master(master)
     facts = part("FACT")
     facts.dataset_type = "ACTUAL"
     actual = compare_financial(db, facts, options) if facts.records else None
+    if actual is not None:
+        _template_actual(actual)
 
     budget = []
     lines = [r for r in result.records if r.record_type in ("BUDGET_LINE", "TRAVEL") and r.data.get("cost_center")]
@@ -342,6 +366,8 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
                 ]
                 if export.get("cost_center") == cc_code and not full_replace:
                     replaced = []  # exportação barrada (erros/versão): nada do CC é carregado
+                if full_replace:
+                    replaced = [line for line in replaced if line.line_type != "EVENT"]  # eventos são preservados
             valid = [r for r in recs if final_status(r) in ("VALID", "WARNING")]
             new_total = sum((Decimal(v) for r in valid for v in r.data["values"].values()), Decimal(0))
             budget.append(
@@ -378,6 +404,7 @@ def compare_capex_template(db: Session, result: ParseResult, options: dict) -> d
             [r for r in result.records if r.record_type in ("BRANCH", "COST_CENTER", "ACCOUNT")],
         )
     )
+    _template_master(master)
     existing_assets = {name.upper() for name in db.scalars(select(AssetItem.name))}
     assets = [r for r in result.records if r.record_type == "ASSET_ITEM"]
     catalog = {

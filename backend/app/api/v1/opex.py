@@ -28,6 +28,7 @@ from app.models import (
     LookupValue,
     PackageManager,
     PackageReview,
+    ReferenceBudgetEntry,
     User,
     WorkflowEvent,
 )
@@ -60,12 +61,16 @@ class Access:
         self.cc = db.get(CostCenter, sub.cost_center_id)
         visible = visible_cost_center_ids(db, user)
         self.global_ = is_global(user)
-        self.owner = self.cc.manager_user_id == user.id or (visible is not None and self.cc.id in visible)
+        in_scope = self.cc.manager_user_id == user.id or (visible is not None and self.cc.id in visible)
+        # Só o papel Gestor de CC edita/envia; Consulta e Gestor de pacote com escopo apenas leem
+        self.editor_role = self.global_ or "MANAGER" in user.role_codes
+        self.owner = in_scope and self.editor_role
+        self.read_only_scope = in_scope and not self.editor_role
         managed = _managed_packages(db, ctx, user)
         self.reviewable = {
             pkg for pkg, companies in managed.items() if None in companies or self.cc.company_id in companies
         }
-        self.view = self.global_ or self.owner or bool(self.reviewable)
+        self.view = self.global_ or self.owner or self.read_only_scope or bool(self.reviewable)
         cycle_ok = ctx.cycle.status == "OPEN" or self.global_
         self.frozen = ctx.frozen
         self.edit = (self.global_ or self.owner) and sub.status in EDITABLE and cycle_ok and not ctx.frozen
@@ -85,6 +90,8 @@ def _load(db: Session, user: User, submission_id: int) -> tuple[svc.Context, Bud
 
 
 def _require_edit(access: Access) -> None:
+    if not access.edit and not access.editor_role:
+        raise HTTPException(403, "Seu perfil é somente de consulta neste centro de custo")
     if not access.edit and access.frozen:
         raise HTTPException(409, "A versão do orçamento está congelada; peça à Controladoria uma revisão para alterar")
     if not access.edit:
@@ -176,23 +183,24 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
         ).all()
     )
 
-    def actual(year: int) -> dict[int, Decimal]:
+    def actual(year: int, model=ActualEntry) -> dict[int, Decimal]:
         return dict(
             db.execute(
-                select(ActualEntry.cost_center_id, func.sum(ActualEntry.amount))
-                .join(DatasetVersion, DatasetVersion.id == ActualEntry.dataset_version_id)
-                .join(Account, Account.id == ActualEntry.account_id)
+                select(model.cost_center_id, func.sum(model.amount))
+                .join(DatasetVersion, DatasetVersion.id == model.dataset_version_id)
+                .join(Account, Account.id == model.account_id)
                 .where(
                     DatasetVersion.is_current,
-                    ActualEntry.fiscal_year == year,
+                    model.fiscal_year == year,
                     Account.nature.in_(svc.OPEX_NATURES),
-                    ActualEntry.cost_center_id.in_(ids),
+                    model.cost_center_id.in_(ids),
                 )
-                .group_by(ActualEntry.cost_center_id)
+                .group_by(model.cost_center_id)
             ).all()
         )
 
     prev, ref = actual(ctx.prev_year), actual(ctx.ref_year)
+    ref_budget = actual(ctx.ref_year, ReferenceBudgetEntry)
     closed_by_company = {}
     rows = []
     for cc in ccs:
@@ -203,6 +211,7 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
         r = ref.get(cc.id, ZERO)
         annualized = r * 12 / closed if closed else ZERO
         p = proposed.get(cc.id, ZERO)
+        base = annualized or ref_budget.get(cc.id, ZERO) or prev.get(cc.id, ZERO)  # mesma cascata da tela do CC
         sub = subs.get(cc.id)
         rows.append(
             {
@@ -219,9 +228,7 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
                 "prev_actual": str(prev.get(cc.id, ZERO)),
                 "ref_annualized": str(annualized.quantize(Decimal("0.01"))),
                 "proposed": str(p),
-                "variation_pct": str(((p - annualized) / annualized).quantize(Decimal("0.0001")))
-                if annualized and p
-                else None,
+                "variation_pct": str(((p - base) / base).quantize(Decimal("0.0001"))) if annualized and p else None,
             }
         )
     counts = defaultdict(int)
@@ -344,10 +351,12 @@ def list_lines(
 ):
     _, sub, access = _load(db, user, submission_id)
     stmt = select(BudgetLine).where(BudgetLine.submission_id == sub.id)
+    if not (access.global_ or access.owner or access.read_only_scope):
+        if package_id and package_id not in access.reviewable:
+            raise HTTPException(403, "Você não é gestor deste pacote")
+        stmt = stmt.where(BudgetLine.package_id.in_(access.reviewable or {-1}))
     if package_id:
         stmt = stmt.where(BudgetLine.package_id == package_id)
-    elif not (access.global_ or access.owner):
-        stmt = stmt.where(BudgetLine.package_id.in_(access.reviewable or {-1}))
     return [svc.line_out(line) for line in db.scalars(stmt.order_by(BudgetLine.id))]
 
 
@@ -541,7 +550,7 @@ def do_action(
         pending = db.scalars(
             select(BudgetPackage.name)
             .join(PackageReview, PackageReview.package_id == BudgetPackage.id)
-            .where(PackageReview.submission_id == sub.id, PackageReview.status != "APPROVED")
+            .where(PackageReview.submission_id == sub.id, PackageReview.status.in_(("PENDING", "ADJUST_REQUESTED")))
         ).all()
         if pending:
             blockers.append("validação GMD obrigatória pendente: " + ", ".join(pending))
@@ -619,6 +628,9 @@ def review_package(
         raise HTTPException(403, "Você não é gestor deste pacote")
     if sub.status not in ("SUBMITTED", "UNDER_REVIEW"):
         raise HTTPException(409, "A validação GMD ocorre com o orçamento enviado ou em análise")
+    pkg_obj = db.get(BudgetPackage, package_id)
+    if pkg_obj is None or pkg_obj.package_type != 1:
+        raise HTTPException(422, "Só pacotes Tipo 1 têm validação GMD obrigatória; os demais são consultivos")
     if payload.status != "APPROVED" and not (payload.comment or "").strip():
         raise HTTPException(422, "Explique no comentário o ajuste necessário")
     review = db.scalar(

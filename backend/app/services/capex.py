@@ -45,7 +45,7 @@ def _limits(ctx: Context) -> tuple[Decimal, int]:
 
 
 def item_issues(ctx: Context, item: CapexItem) -> list[dict]:
-    min_value, _ = _limits(ctx)
+    min_value, min_life = _limits(ctx)
     schedule = {v.month: v.amount for v in item.values}
     check = rules.check_item(
         item.unit_value,
@@ -53,6 +53,7 @@ def item_issues(ctx: Context, item: CapexItem) -> list[dict]:
         schedule,
         min_unit_value=min_value,
         useful_life_months=item.useful_life_months,
+        min_useful_life_months=min_life,
     )
     return [{"code": i.code, "severity": i.severity, "message": i.message} for i in check.issues]
 
@@ -196,6 +197,7 @@ def submission_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
         "by_type": [{"label": k, "total": str(money(v))} for k, v in sorted(by_type.items(), key=lambda kv: -kv[1])],
         "totals": {
             "proposed": str(money(total)),
+            "scheduled": str(money(sum(monthly, ZERO))),  # soma do cronograma: é o que entra na consolidação
             "projects_total": str(money(sum((Decimal(p["total"]) for p in out_projects if p["is_project"]), ZERO))),
             "requests": len(out_projects),
             "projects": sum(1 for p in out_projects if p["is_project"]),

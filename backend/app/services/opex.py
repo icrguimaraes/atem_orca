@@ -314,11 +314,15 @@ def submit_blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[st
         blockers.append("nenhuma linha orçada")
     view = account_view(db, ctx, sub)
     missing = [
-        r["code"] for r in view["accounts"] if r["needs_justification"] and not (r["justification"] or "").strip()
+        f"{r['code']} {r['name']}"
+        for r in view["accounts"]
+        if r["needs_justification"] and not (r["justification"] or "").strip()
     ]
     if missing:
+        extra = f" e mais {len(missing) - 3}" if len(missing) > 3 else ""
         blockers.append(
-            f"{len(missing)} conta(s) com variação acima do limite sem justificativa ({', '.join(missing[:5])})"
+            f"{len(missing)} conta(s) com variação acima do limite sem justificativa: {'; '.join(missing[:3])}{extra}. "
+            "Preencha a coluna Justificativa na aba Visão por conta (ou use “Não vou orçar esta conta”)"
         )
     return blockers
 
@@ -432,12 +436,17 @@ def _travel_lines(db: Session, ctx: Context, data: dict, common: dict) -> list[B
     manual_fare = t.get("ticket_amount")
     if manual_fare not in (None, ""):
         fare = Decimal(str(manual_fare))  # valor informado pelo gestor quando a matriz não tem a rota
+    per_diem, lodging = rate("PER_DIEM"), rate("LODGING")
     result = calc.calculate_travel(
         calc.TravelInput(
             int(t["departure_month"]), int(t["return_month"]) if t.get("return_month") else None, int(t["days"])
         ),
-        calc.TravelRates(fare, rate("PER_DIEM"), rate("LODGING"), ctx.param("travel.one_way_factor", 0.5)),
+        calc.TravelRates(fare, per_diem, lodging, ctx.param("travel.one_way_factor", 0.5)),
     )
+    if int(t["days"]) > 0:
+        for kind, value in (("Diária", per_diem), ("Hospedagem", lodging)):
+            if value == 0:
+                result.warnings.append(f"{kind} sem tarifa para {t['trip_type']} / {t['job_level']}: orçada em R$ 0")
     group = uuid.uuid4().hex[:12]
     attributes = {k: t.get(k) for k in (*required, "return_month", "purpose")} | {
         "warnings": result.warnings,
@@ -505,6 +514,8 @@ def update_line(db: Session, ctx: Context, line: BudgetLine, data: dict, user_id
     if "account_id" in data and data["account_id"] != line.account_id:
         acc = _validate_account(db, data["account_id"], line.package_id)
         line.account_id = acc.id
+        if line.account_detail_id and data.get("account_detail_id") is None:
+            line.account_detail_id = None  # o detalhamento era da conta anterior
     cc = db.get(CostCenter, line.cost_center_id)
     if "branch_id" in data:
         line.branch_id = _branch(db, cc, data["branch_id"])

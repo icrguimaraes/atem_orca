@@ -366,6 +366,16 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 - **Campos preservados na ida e volta**: além de detalhamento, fornecedor e justificativa, o parser lê `GESTOR DO CONTRATO`, `PREMISSA` e `PRODUTO/SERVIÇO` (detalhamento da conta). No CAPEX, as colunas `EMPRESA` e `SOLICITAÇÃO` (código · título) mantêm a empresa e o agrupamento/título das solicitações; a empresa das viagens vem da CHAVE e o `BD-Novo` exportado traz a coluna Empresa (CCs da REAM não caem na ATEM).
 - Testes `tests/test_template_export.py`: exporta, reparseia com o próprio parser (mesmos valores, consolidador ok, sem erros) e reimporta mantendo total e número de linhas/solicitações.
 
+### 15.2 Auditoria pré-produção (regras aplicadas)
+
+- **Perfis**: só Gestor de CC (e RH, em Pessoal) editam e enviam; usuários Consulta e Gestor de pacote com escopo apenas leem (`Access.editor_role`; 403 "perfil somente de consulta").
+- **Template de gestor** (OPEX/CAPEX): cadastros existentes não são alterados (só registros novos entram; prévia mostra "existentes não alterados"); a aba Realizado só é carregada se ainda não houver realizado daquela empresa/ano (`loaders._template_guard`, `compare._template_actual`). O realizado oficial vem da importação "Realizado" da Controladoria.
+- **Prévia obsoleta**: um lote VALIDATED não pode ser confirmado se outra importação foi concluída depois da sua validação (409 "prévia desatualizada"); reenviar o arquivo.
+- **Pessoal**: movimentação de colaborador que mudou de CC na base não bloqueia o envio; vaga do quadro exige "Mês da Ação"; justificativa de vaga não é preenchida com o nome; simulação lista só os CCs do gestor.
+- **OPEX**: variação da lista usa a mesma cascata da tela do CC; trocar a conta zera o detalhamento; viagem sem tarifa de diária/hospedagem gera aviso; validação GMD só em pacote Tipo 1 e COMMENTED não bloqueia aprovação; gestor de pacote só lista linhas dos seus pacotes; mensagem de justificativas pendentes nomeia as contas e onde preencher.
+- **CAPEX**: vida útil mínima parametrizada (`capex.min_useful_life_months`); cabeçalho mostra o total do cronograma quando difere do total dos itens (a consolidação usa o cronograma).
+- **UX do gestor**: Painel abre com "Suas tarefas" (CC × módulo × situação × prazo); "Lançar" na Visão por conta já cria a linha na conta; botão "Não vou orçar esta conta" preenche a justificativa; Visão por conta cabe em 1440 px (coluna de tendência só acima de 1700 px; orçado 2026 só quando carregado); Cadastros e Ciclo só no menu da Controladoria.
+
 ## 16. Backlog para as próximas fases
 
 Itens fora do roadmap original, em ordem sugerida. Cada um cabe numa fase curta e não exige refazer o que existe.

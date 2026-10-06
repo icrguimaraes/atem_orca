@@ -441,7 +441,7 @@ input:disabled, select:disabled { opacity: 0.6; }
 
 /* ---------- OPEX */
 textarea { font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; width: 100%; resize: vertical; }
-textarea.justification { min-width: 220px; font-size: 13px; }
+textarea.justification { min-width: 180px; width: 100%; font-size: 13px; }
 textarea.required { border-color: var(--bad); }
 .just-cell { min-width: 240px; }
 .row-alert { background: color-mix(in srgb, var(--bad-bg) 45%, transparent); }
@@ -478,7 +478,10 @@ tr.saving { opacity: 0.6; }
   .package-nav { position: static; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .timeline li { grid-template-columns: 1fr; }
 }
-.accounts-table td:first-child { min-width: 300px; }
+.accounts-table td:first-child { min-width: 230px; }
+.accounts-table td, .accounts-table th { padding-left: 8px; padding-right: 8px; }
+.accounts-table .just-cell { min-width: 200px; }
+@media (max-width: 1700px) { .accounts-table .col-spark { display: none; } }  /* a tendência mensal fica no botão "Mensal" */
 .row-tools .btn-sm { padding: 3px 8px; }
 
 /* ---------- gráficos adicionais (divergente azul↔vermelho e sequencial azul validados) */

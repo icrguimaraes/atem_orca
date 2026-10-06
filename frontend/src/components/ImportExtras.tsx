@@ -190,6 +190,15 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
           )}
         </>
       )}
+      {comparison.kind === "FINANCIAL" && comparison.template && (comparison.skipped_scopes?.length ?? 0) > 0 && (
+        <Alert tone="info">
+          A base já tem realizado para {comparison.skipped_scopes!.map((s) => s.replace("ACTUAL:", "").replace(":", " · empresa ")).join(", ")}: a aba
+          “Realizado” deste template <strong>não</strong> será carregada. Para atualizar o realizado, importe o arquivo pela opção “Realizado”.
+        </Alert>
+      )}
+      {comparison.kind === "MASTER" && comparison.template && (
+        <p className="muted small">Template de gestor só cria cadastros novos; filiais, centros de custo e contas já existentes não são alterados.</p>
+      )}
       {comparison.kind === "MASTER" && comparison.by_type && (
         <div className="table-wrap">
         <table className="table">
@@ -197,7 +206,7 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
             <tr>
               <th>Cadastro</th>
               {Object.values(ACTION_LABELS).map((l) => (
-                <th key={l} className="right">{l}</th>
+                <th key={l} className="right">{l === "Alterados" && comparison.template ? "Existentes (não alterados)" : l}</th>
               ))}
             </tr>
           </thead>
@@ -206,7 +215,7 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
               <tr key={type}>
                 <td>{RECORD_TYPES[type] ?? type}</td>
                 <td className="right">{fmtInt(c.CREATE)}</td>
-                <td className="right">{fmtInt(c.UPDATE)}</td>
+                <td className="right">{fmtInt(c.UPDATE ?? c.IGNORED ?? 0)}</td>
                 <td className="right">{fmtInt(c.UNCHANGED)}</td>
               </tr>
             ))}

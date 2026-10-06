@@ -63,7 +63,11 @@ class Access:
         self.cc = db.get(CostCenter, sub.cost_center_id)
         visible = _visible(db, user)
         self.global_ = _is_global(user)
-        self.owner = self.cc.manager_user_id == user.id or (visible is not None and self.cc.id in visible)
+        in_scope = self.cc.manager_user_id == user.id or (visible is not None and self.cc.id in visible)
+        # Só Gestor de CC e RH editam/enviam; Consulta e Gestor de pacote com escopo apenas leem
+        self.editor_role = self.global_ or bool(user.role_codes & {"MANAGER", "HR"})
+        self.owner = in_scope and self.editor_role
+        self.read_only_scope = in_scope and not self.editor_role
         pkg = _people_package(db)
         self.reviewer = pkg is not None and any(
             pm.company_id in (None, self.cc.company_id)
@@ -75,7 +79,7 @@ class Access:
                 )
             )
         )
-        self.view = self.global_ or self.owner or self.reviewer
+        self.view = self.global_ or self.owner or self.read_only_scope or self.reviewer
         cycle_ok = ctx.cycle.status == "OPEN" or self.global_
         self.frozen = ctx.frozen
         self.edit = (self.global_ or self.owner) and sub.status in EDITABLE and cycle_ok and not ctx.frozen
@@ -95,6 +99,8 @@ def _load(db: Session, user: User, submission_id: int):
 
 
 def _require_edit(access: Access) -> None:
+    if not access.edit and not access.editor_role:
+        raise HTTPException(403, "Seu perfil é somente de consulta neste centro de custo")
     if not access.edit and access.frozen:
         raise HTTPException(409, "A versão do orçamento está congelada; peça à Controladoria uma revisão para alterar")
     if not access.edit:
@@ -585,8 +591,9 @@ def events(submission_id: int, db: Session = Depends(get_db), user: User = Depen
 
 
 @router.get("/options", summary="Contratos, cargos, centros de custo (transferência) e cenário base")
-def options(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+def options(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     ctx = _ctx(db)
+    visible = _visible(db, user)
     return {
         "contract_types": [
             {"code": c.code, "name": c.name, "apply_multiplier": c.apply_multiplier}
@@ -596,6 +603,7 @@ def options(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
         "cost_centers": [
             {"id": c.id, "code": c.code, "name": c.name, "company_id": c.company_id}
             for c in db.scalars(select(CostCenter).where(CostCenter.is_active).order_by(CostCenter.name))
+            if visible is None or c.id in visible
         ],
         "scenario": svc.scenario_out(svc.baseline(db, ctx)),
     }

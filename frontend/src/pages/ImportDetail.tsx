@@ -21,7 +21,31 @@ import {
 const ACTIVE = new Set(["UPLOADED", "VALIDATING", "CONFIRMED", "PROCESSING"]);
 const HIDDEN_KEYS = new Set(["company_id", "branch_id", "cost_center_id", "account_id", "_action", "_duplicate"]);
 
+const LOAD_GROUPS: Record<string, string> = { master: "Cadastros", actual: "Realizado", budget: "Orçamento", capex: "CAPEX", catalog: "Catálogo", movements: "Pessoal" };
+
+/** Resultado da carga vem aninhado por parte (cadastros, realizado, orçamento…): achata em linhas legíveis. */
+function flattenLoad(load: Record<string, unknown>, prefix = ""): [string, string | number][] {
+  const out: [string, string | number][] = [];
+  for (const [k, v] of Object.entries(load)) {
+    if (k === "versions") continue;
+    const label = prefix ? `${prefix} · ${LOAD_LABELS[k] ?? k}` : (LOAD_GROUPS[k] ?? LOAD_LABELS[k] ?? k);
+    if (v && typeof v === "object" && !Array.isArray(v)) out.push(...flattenLoad(v as Record<string, unknown>, LOAD_GROUPS[k] ?? LOAD_LABELS[k] ?? k));
+    else if (typeof v === "number" || typeof v === "string") out.push([label, v]);
+  }
+  return out;
+}
+
 const LOAD_LABELS: Record<string, string> = {
+  lines_created: "Linhas criadas",
+  lines_replaced: "Linhas substituídas (de template anterior)",
+  cost_centers: "Centros de custo carregados",
+  cost_centers_locked: "Centros de custo bloqueados (não carregados)",
+  trips: "Viagens",
+  items_created: "Itens criados",
+  requests_created: "Solicitações criadas",
+  requests_replaced: "Solicitações substituídas",
+  updates_ignored: "Existentes não alterados (template)",
+  skipped: "Observação",
   branches_created: "Filiais criadas",
   branches_updated: "Filiais atualizadas",
   cost_centers_created: "Centros de custo criados",
@@ -197,14 +221,12 @@ export default function ImportDetail() {
       {load && (
         <Card title="Resultado da carga">
           <dl className="kv">
-            {Object.entries(load)
-              .filter(([k]) => k !== "versions")
-              .map(([k, v]) => (
-                <div key={k} className="kv-row">
-                  <dt>{LOAD_LABELS[k] ?? k}</dt>
-                  <dd>{fmtInt(Number(v))}</dd>
-                </div>
-              ))}
+            {flattenLoad(load).map(([k, v]) => (
+              <div key={k} className="kv-row">
+                <dt>{k}</dt>
+                <dd>{typeof v === "number" ? fmtInt(v) : String(v)}</dd>
+              </div>
+            ))}
             {Array.isArray(load.versions) &&
               (load.versions as { scope: string; version: number; entries: number }[]).map((v) => (
                 <div key={v.scope} className="kv-row">

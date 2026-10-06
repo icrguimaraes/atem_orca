@@ -139,7 +139,7 @@ def parse_employees(sheets: list[Sheet], options: dict) -> ParseResult:
                 rec.error("REQUIRED", "Salário obrigatório", "Salário")
             elif salary is not None and salary < 0:
                 rec.error("INVALID_NUMBER", "Salário negativo", "Salário", raw_salary)
-            if action in ("PROMOTION", "TERMINATION", "HIRE") and action_month is None:
+            if action in ("PROMOTION", "TERMINATION", "HIRE", "VACANCY") and action_month is None:
                 rec.error("REQUIRED", "Mês da ação obrigatório para a ação informada", "Mês da Ação")
             if action == "PROMOTION" and new_salary is None:
                 rec.error("REQUIRED", "Novo salário obrigatório para promoção", "Novo Salário")

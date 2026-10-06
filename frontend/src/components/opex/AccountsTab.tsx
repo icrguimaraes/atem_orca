@@ -43,11 +43,11 @@ function Justification({ row, submissionId, editable, onSaved }: { row: OpexAcco
   useEffect(() => setText(row.justification ?? ""), [row.justification]);
   if (!editable)
     return row.justification ? <div className="small">{row.justification}</div> : row.needs_justification ? <span className="error-text">sem justificativa</span> : null;
-  async function save() {
-    if ((text.trim() || null) === (row.justification || null)) return;
+  async function save(value: string = text) {
+    if ((value.trim() || null) === (row.justification || null)) return;
     setState("saving");
     try {
-      await api(`/opex/submissions/${submissionId}/justifications/${row.account_id}`, { method: "PUT", body: JSON.stringify({ text }) });
+      await api(`/opex/submissions/${submissionId}/justifications/${row.account_id}`, { method: "PUT", body: JSON.stringify({ text: value }) });
       setState("saved");
       onSaved();
     } catch {
@@ -62,8 +62,17 @@ function Justification({ row, submissionId, editable, onSaved }: { row: OpexAcco
         value={text}
         placeholder={row.needs_justification ? "Obrigatória: explique a variação" : "Opcional"}
         onChange={(e) => setText(e.target.value)}
-        onBlur={save}
+        onBlur={() => save()}
       />
+      {row.needs_justification && !text.trim() && Number(row.proposed) === 0 && (
+        <button
+          type="button"
+          className="btn-link link small"
+          onClick={() => { const t = "Conta não será orçada em 2027."; setText(t); void save(t); }}
+        >
+          Não vou orçar esta conta
+        </button>
+      )}
       {state === "saving" && <span className="muted small">salvando…</span>}
       {state === "error" && <span className="error-text">não foi possível salvar</span>}
     </div>
@@ -72,10 +81,12 @@ function Justification({ row, submissionId, editable, onSaved }: { row: OpexAcco
 
 export function AccountsTab({ submissionId, data, years, editable, onChanged, onGoToPackage }: {
   submissionId: number; data: OpexAccounts; years: { prev: number; ref: number; target: number }; editable: boolean;
-  onChanged: () => void; onGoToPackage: (packageId: number) => void;
+  onGoToPackage: (packageId: number, accountId?: number) => void;
+  onChanged: () => void; 
 }) {
   const [open, setOpen] = useState<number | null>(null);
   const [onlyAlerts, setOnlyAlerts] = useState(false);
+  const showBudget = Number(data.totals.ref_budget ?? 0) !== 0; // sem orçado 2026 carregado, a coluna só ocupa espaço
   const [error, setError] = useState<string | null>(null);
   const rows = data.accounts.filter((r) => !onlyAlerts || r.flags.length > 0);
   const closed = data.closed_period ? MONTHS[data.closed_period - 1] : null;
@@ -119,10 +130,10 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
               <tr>
                 <th>Conta</th>
                 <th className="right">{years.prev} R</th>
-                <th>{years.ref} mês a mês</th>
+                <th className="col-spark">{years.ref} mês a mês</th>
                 <th className="right">{years.ref} R{closed ? ` (até ${closed})` : ""}</th>
                 <th className="right">{years.ref} anualizado</th>
-                <th className="right">{years.ref} orçado</th>
+                {showBudget && <th className="right">{years.ref} orçado</th>}
                 <th className="right">{years.target} proposto</th>
                 <th className="right">Var.</th>
                 <th>Justificativa</th>
@@ -139,8 +150,8 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
                         <button className="btn btn-ghost btn-sm" onClick={() => setOpen(open === r.account_id ? null : r.account_id)}>
                           {open === r.account_id ? "Ocultar mensal" : "Mensal"}
                         </button>
-                        {r.package_id && (
-                          <button className="btn btn-ghost btn-sm" onClick={() => onGoToPackage(r.package_id!)}>Lançar</button>
+                        {editable && r.package_id && (
+                          <button className="btn btn-ghost btn-sm" title="Abre o pacote e cria uma linha nesta conta" onClick={() => onGoToPackage(r.package_id!, r.account_id)}>Lançar</button>
                         )}
                         {editable && Number(r.proposed) === 0 && Number(r.ref_annualized) > 0 && r.package_id && (
                           <button className="btn btn-ghost btn-sm" title={`Cria uma linha com ${years.ref} anualizado dividido em 12`} onClick={() => applyAverage(r)}>
@@ -153,10 +164,10 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
                       ))}
                     </td>
                     <td className="right">{fmtMoney(r.prev_actual)}</td>
-                    <td>{r.ref_monthly ? <Sparkline values={r.ref_monthly.map(Number).slice(0, data.closed_period ?? 12)} /> : <span className="muted small">—</span>}</td>
+                    <td className="col-spark">{r.ref_monthly ? <Sparkline values={r.ref_monthly.map(Number).slice(0, data.closed_period ?? 12)} /> : <span className="muted small">—</span>}</td>
                     <td className="right">{fmtMoney(r.ref_actual_ytd)}</td>
                     <td className="right">{fmtMoney(r.ref_annualized)}</td>
-                    <td className="right">{fmtMoney(r.ref_budget)}</td>
+                    {showBudget && <td className="right">{fmtMoney(r.ref_budget)}</td>}
                     <td className="right"><strong>{fmtMoney(r.proposed)}</strong></td>
                     <td className="right nowrap">{fmtPct(r.variation_pct)}</td>
                     <td className="just-cell">
@@ -165,7 +176,7 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
                   </tr>
                   {open === r.account_id && (
                     <tr className="sub-row">
-                      <td colSpan={9}><Monthly submissionId={submissionId} accountId={r.account_id} years={years} /></td>
+                      <td colSpan={showBudget ? 9 : 8}><Monthly submissionId={submissionId} accountId={r.account_id} years={years} /></td>
                     </tr>
                   )}
                 </Fragment>
@@ -177,8 +188,8 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
                 {(["prev_actual"] as const).map((k) => (
                   <td key={k} className="right"><strong>{fmtMoney(data.totals[k] ?? 0)}</strong></td>
                 ))}
-                <td />
-                {(["ref_actual_ytd", "ref_annualized", "ref_budget", "proposed"] as const).map((k) => (
+                <td className="col-spark" />
+                {(showBudget ? (["ref_actual_ytd", "ref_annualized", "ref_budget", "proposed"] as const) : (["ref_actual_ytd", "ref_annualized", "proposed"] as const)).map((k) => (
                   <td key={k} className="right"><strong>{fmtMoney(data.totals[k] ?? 0)}</strong></td>
                 ))}
                 <td className="right">

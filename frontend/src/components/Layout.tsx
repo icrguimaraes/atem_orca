@@ -15,8 +15,8 @@ const NAV = [
   { to: "/pessoal", label: "Orçamento de Pessoal" },
   { to: "/consolidacao", label: "Consolidação e exportação" },
   { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"] },
-  { to: "/cadastros", label: "Cadastros" },
-  { to: "/ciclo", label: "Ciclo e parâmetros" },
+  { to: "/cadastros", label: "Cadastros", roles: ["CONTROLLER"] },
+  { to: "/ciclo", label: "Ciclo e parâmetros", roles: ["CONTROLLER"] },
   { to: "/usuarios", label: "Usuários", roles: ["CONTROLLER"] },
   { to: "/auditoria", label: "Auditoria", roles: ["CONTROLLER"] },
 ];

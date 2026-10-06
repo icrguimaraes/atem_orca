@@ -156,7 +156,8 @@ def build_positions(db: Session, ctx: Context, cc_ids: set[int] | None = None) -
     positions_names = {p.id: p.name for p in db.scalars(select(JobPosition))}
     out: dict[int, list[Position]] = defaultdict(list)
 
-    stmt = select(Employee).where(Employee.is_active, Employee.cost_center_id.is_not(None))
+    active_ccs = select(CostCenter.id).where(CostCenter.is_active)
+    stmt = select(Employee).where(Employee.is_active, Employee.cost_center_id.in_(active_ccs))
     if cc_ids is not None:
         moved_out = {
             m.employee_id for m in movements if m.movement_type == "TRANSFER" and m.target_cost_center_id in cc_ids
@@ -591,6 +592,10 @@ def blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[str]:
     """Contratações e desligamentos precisam de justificativa para o envio (análise da Controladoria/RH)."""
     missing = []
     for mv in db.scalars(select(PersonnelMovement).where(PersonnelMovement.submission_id == sub.id)):
+        if mv.employee_id:
+            emp = db.get(Employee, mv.employee_id)
+            if emp is None or emp.cost_center_id != sub.cost_center_id:
+                continue  # colaborador mudou de CC na base: a movimentação não aparece nem bloqueia
         if mv.movement_type in ("HIRE", "TERMINATION", "TRANSFER") and not (mv.reason or "").strip():
             who = (mv.attributes or {}).get("position_name") if mv.movement_type == "HIRE" else None
             if who is None and mv.employee_id:

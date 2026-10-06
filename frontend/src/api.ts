@@ -150,8 +150,9 @@ export interface Comparison {
   no_changes: boolean;
   mode?: "MERGE" | "REPLACE";
   scopes?: ScopeComparison[];
-  by_type?: Record<string, { CREATE: number; UPDATE: number; UNCHANGED: number }>;
+  by_type?: Record<string, { CREATE: number; UPDATE?: number; IGNORED?: number; UNCHANGED: number }>;
   new?: number; changed?: number; unchanged?: number;
+  template?: boolean; updates_ignored?: number; skipped_scopes?: string[];
 }
 
 export interface Ranked { id: number; code: string | null; name: string | null; ref_ytd: string; prev_ytd: string; ytd_var_pct: string | null }
@@ -292,7 +293,7 @@ export interface CapexView {
   monthly: string[];
   by_type: { label: string; total: string }[];
   totals: {
-    proposed: string; projects_total: string; requests: number; projects: number; items: number;
+    proposed: string; scheduled: string; projects_total: string; requests: number; projects: number; items: number;
     prev_actual: string; ref_actual: string; ref_budget: string;
   };
   issues: { critical: number; warning: number };

@@ -46,7 +46,7 @@ def _load(db: Session, user: User, submission_id: int) -> tuple[opex_svc.Context
     if sub is None or sub.module != svc.MODULE:
         raise HTTPException(404, "Orçamento CAPEX não encontrado")
     access = Access(db, ctx, user, sub)
-    if not (access.global_ or access.owner):
+    if not (access.global_ or access.owner or access.read_only_scope):
         raise HTTPException(403, "Sem acesso a este centro de custo")
     return ctx, sub, access
 
@@ -200,7 +200,7 @@ def open_cost_center(cost_center_id: int, db: Session = Depends(get_db), user: U
     if sub is None:
         raise HTTPException(404, f"Este centro de custo não tem orçamento na versão congelada {ctx.version.label}")
     access = Access(db, ctx, user, sub)
-    if not (access.global_ or access.owner):
+    if not (access.global_ or access.owner or access.read_only_scope):
         db.rollback()
         raise HTTPException(403, "Sem acesso a este centro de custo")
     db.commit()

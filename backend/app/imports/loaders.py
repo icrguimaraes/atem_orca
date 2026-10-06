@@ -529,7 +529,7 @@ def load_personnel_actions(db: Session, batch: ImportBatch, user_id: int | None)
                             "month": d.get("action_month") or 1,
                             "new_salary": d.get("new_salary") or d.get("salary"),
                             "contract_type_code": d.get("contract") or "CLT",
-                            "reason": d.get("name"),
+                            "reason": d.get("reason"),  # o template não traz justificativa: o gestor informa na tela
                             "source": "TEMPLATE",
                         },
                         user_id,
@@ -607,12 +607,47 @@ def _full_replace(batch: ImportBatch, cc_code: str) -> bool:
     return export.get("cost_center") == cc_code
 
 
+def _template_guard(db: Session, batch: ImportBatch) -> dict:
+    """Template de gestor não é fonte de verdade de cadastros nem de realizado:
+    - cadastros existentes (BD-Novo) não são alterados — só registros novos são criados;
+    - a aba Realizado só é carregada se ainda não houver realizado daquela empresa/ano na base
+      (a Controladoria atualiza o realizado pela importação própria)."""
+    skipped = {"master_updates_ignored": 0, "actual_skipped": []}
+    for row in _rows(db, batch.id):
+        if row.record_type in ("BRANCH", "COST_CENTER", "ACCOUNT") and row.data.get("_action") == "UPDATE":
+            row.status = "SKIPPED"
+            skipped["master_updates_ignored"] += 1
+    facts = _rows(db, batch.id, "FACT")
+    if facts:
+        scopes = {f"ACTUAL:{int(r.data['year'])}:{r.data['company']}" for r in facts}
+        existing = set(
+            db.scalars(
+                select(DatasetVersion.scope_key).where(
+                    DatasetVersion.dataset_type == "ACTUAL",
+                    DatasetVersion.scope_key.in_(scopes),
+                    DatasetVersion.is_current,
+                )
+            )
+        )
+        for row in facts:
+            if f"ACTUAL:{int(row.data['year'])}:{row.data['company']}" in existing:
+                row.status = "SKIPPED"
+        skipped["actual_skipped"] = sorted(existing)
+    db.flush()
+    return skipped
+
+
 def load_opex_template(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
-    """Cadastros → realizado → orçamento 2027, na mesma transação."""
+    """Cadastros novos → realizado (só se ainda não houver) → orçamento 2027, na mesma transação."""
+    guard = _template_guard(db, batch)
     stats = {"master": load_master(db, batch, user_id)}
     if _rows(db, batch.id, "FACT"):
         stats["actual"] = load_financial(db, batch, user_id, dataset="ACTUAL")
+    elif guard["actual_skipped"]:
+        stats["actual"] = {"skipped": "realizado já carregado na base; não substituído pelo template"}
     stats["budget"] = load_budget_lines(db, batch, user_id)
+    if guard["master_updates_ignored"]:
+        stats["master"]["updates_ignored"] = guard["master_updates_ignored"]
     return stats
 
 
@@ -702,8 +737,11 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
 
 
 def load_capex_template(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
-    """Cadastros → catálogo de ativos → solicitações CAPEX, na mesma transação."""
+    """Cadastros novos → catálogo de ativos → solicitações CAPEX, na mesma transação."""
+    guard = _template_guard(db, batch)
     stats = {"master": load_master(db, batch, user_id), "catalog": load_asset_catalog(db, batch)}
+    if guard["master_updates_ignored"]:
+        stats["master"]["updates_ignored"] = guard["master_updates_ignored"]
     stats["capex"] = load_capex_items(db, batch, user_id)
     return stats
 

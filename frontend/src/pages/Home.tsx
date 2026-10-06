@@ -29,6 +29,7 @@ import {
   fmtInt,
   fmtMoney,
   fmtPct,
+  SUBMISSION_STATUS,
 } from "../labels";
 
 const SEVERITY = {
@@ -135,6 +136,8 @@ export default function Home() {
             : `Olá, ${user?.name.split(" ")[0]}. ${cycle ? cycle.name : ""}`
         }
       />
+
+      {!isController && <ManagerTasks />}
 
       <FilterBar
         onApply={(v) => setFilters({ company_id: v.company_id, cost_center_id: v.cost_center_id, package_id: v.package_id })}
@@ -535,5 +538,70 @@ export default function Home() {
         </div>
       )}
     </>
+  );
+}
+
+
+interface TaskRow { cost_center_id: number; code: string; name: string; status: string; status_label: string }
+interface TaskSummary { cycle: { deadline: string | null; status: string }; rows: TaskRow[] }
+
+/** Primeira coisa que o gestor vê: seus centros de custo, a situação de cada módulo e os prazos. */
+function ManagerTasks() {
+  const opex = useLoad(() => api<TaskSummary>("/opex/summary"));
+  const capex = useLoad(() => api<TaskSummary>("/capex/summary"));
+  const people = useLoad(() => api<TaskSummary>("/personnel/summary"));
+  if (!opex.data || !capex.data || !people.data) return null;
+  const ccs = new Map<number, TaskRow>();
+  for (const r of [...opex.data.rows, ...capex.data.rows, ...people.data.rows]) if (!ccs.has(r.cost_center_id)) ccs.set(r.cost_center_id, r);
+  if (ccs.size === 0) return <Alert tone="warn">Nenhum centro de custo está vinculado ao seu usuário. Peça à Controladoria para associar o seu CC.</Alert>;
+  const modules: { key: string; label: string; route: string; data: TaskSummary }[] = [
+    { key: "opex", label: "OPEX", route: "/orcamento", data: opex.data },
+    { key: "capex", label: "CAPEX", route: "/capex", data: capex.data },
+    { key: "personnel", label: "Pessoal", route: "/pessoal", data: people.data },
+  ];
+  const days = (iso: string | null) => (iso ? Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000) : null);
+  const todo = (status: string) => ["DRAFT", "IN_PROGRESS", "ADJUSTMENT_REQUESTED"].includes(status);
+  return (
+    <Card title="Suas tarefas" actions={<span className="muted small">{opex.data.cycle.status === "OPEN" ? "ciclo aberto para preenchimento" : "ciclo fechado"}</span>}>
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Centro de custo</th>
+              {modules.map((m) => {
+                const d = days(m.data.cycle.deadline);
+                return (
+                  <th key={m.key}>
+                    {m.label}
+                    <div className="muted small" style={{ fontWeight: 400, textTransform: "none" }}>
+                      {m.data.cycle.deadline ? `prazo ${fmtDate(m.data.cycle.deadline)}${d !== null ? (d < 0 ? " · vencido" : ` · faltam ${d} dia(s)`) : ""}` : "sem prazo definido"}
+                    </div>
+                  </th>
+                );
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {[...ccs.values()].map((cc) => (
+              <tr key={cc.cost_center_id}>
+                <td><strong>{cc.name}</strong><div className="muted small mono">{cc.code}</div></td>
+                {modules.map((m) => {
+                  const row = m.data.rows.find((r) => r.cost_center_id === cc.cost_center_id);
+                  const st = row ? SUBMISSION_STATUS[row.status] : null;
+                  return (
+                    <td key={m.key}>
+                      <Link to={`${m.route}/${cc.cost_center_id}`} className="nowrap" style={{ textDecoration: "none" }}>
+                        <Badge tone={st?.tone ?? "neutral"}>{st?.label ?? row?.status_label ?? "Não iniciado"}</Badge>
+                      </Link>
+                      {row && todo(row.status) && <div className="muted small">{row.status === "ADJUSTMENT_REQUESTED" ? "veja o motivo e ajuste" : "preencher e enviar"}</div>}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

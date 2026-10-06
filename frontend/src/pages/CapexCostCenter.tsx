@@ -48,6 +48,7 @@ export default function CapexCostCenter() {
   const refresh = useCallback(async (sub?: number) => {
     const id = sub ?? head?.submission_id;
     if (!id) return;
+    setError(null);
     const [h, v, ev] = await Promise.all([
       api<CapexHeader>(`/capex/submissions/${id}`),
       api<CapexView>(`/capex/submissions/${id}/view`),
@@ -167,7 +168,16 @@ export default function CapexCostCenter() {
       {error && <Alert>{error}</Alert>}
 
       <div className="stats">
-        <Stat label={`CAPEX solicitado ${y.target}`} value={fmtCompact(total)} tone="warn" hint={`${fmtInt(view.totals.items)} itens em ${fmtInt(view.totals.requests)} solicitações`} />
+        <Stat
+          label={`CAPEX solicitado ${y.target}`}
+          value={fmtCompact(total)}
+          tone="warn"
+          hint={
+            Number(view.totals.scheduled) !== total
+              ? `cronograma ${fmtCompact(view.totals.scheduled)} — a consolidação usa o cronograma; ajuste os meses`
+              : `${fmtInt(view.totals.items)} itens em ${fmtInt(view.totals.requests)} solicitações`
+          }
+        />
         <Stat label="Em projetos" value={fmtCompact(view.totals.projects_total)} hint={`${fmtInt(view.totals.projects)} projeto(s)`} />
         <Stat label={`Realizado CAPEX ${y.ref}`} value={fmtCompact(view.totals.ref_actual)} hint={`${y.prev}: ${fmtCompact(view.totals.prev_actual)}`} />
         <Stat label="Pendências críticas" value={fmtInt(view.issues.critical)} tone={view.issues.critical ? "bad" : "good"} hint="bloqueiam envio e aprovação" />

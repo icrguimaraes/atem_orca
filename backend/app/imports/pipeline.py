@@ -212,6 +212,19 @@ def confirmation_blockers(batch: ImportBatch) -> list[str]:
 def confirm_batch(db: Session, batch: ImportBatch, user_id: int | None, *, force: bool = False) -> ImportBatch:
     if batch.status != "VALIDATED":
         raise ImportStateError(f"Importação em status {batch.status} não pode ser confirmada")
+    newer = db.scalar(
+        select(ImportBatch.id).where(
+            ImportBatch.id != batch.id,
+            ImportBatch.status == "COMPLETED",
+            ImportBatch.completed_at.is_not(None),
+            ImportBatch.completed_at > (batch.validated_at or batch.created_at),
+        )
+    )
+    if newer is not None:
+        raise ImportStateError(
+            f"A prévia desta importação ficou desatualizada: a importação #{newer} foi aplicada depois dela. "
+            "Envie o arquivo novamente para gerar uma prévia atual."
+        )
     blockers = confirmation_blockers(batch)
     if blockers and not force:
         raise ImportStateError(" ".join(blockers) + " Para importar mesmo assim, confirme novamente marcando 'forçar'.")

@@ -46,6 +46,7 @@ def check_item(
     *,
     min_unit_value: Decimal = Decimal("1200"),
     useful_life_months: int | None = None,
+    min_useful_life_months: int = 12,
 ) -> CapexItemCheck:
     """Excel: Check = IF(SUM(meses) - VLR TOTAL = 0, "ok", "diferença - verificar").
 
@@ -74,8 +75,10 @@ def check_item(
                 f"Valor unitário até {brl(Decimal(min_unit_value))}: avaliar se é OPEX (bem de pequeno valor)",
             )
         )
-    if useful_life_months is not None and useful_life_months <= 12:
-        issues.append(Issue("CAPEX_SHORT_LIFE", "WARNING", "Vida útil ≤ 12 meses não caracteriza CAPEX"))
+    if useful_life_months is not None and useful_life_months <= min_useful_life_months:
+        issues.append(
+            Issue("CAPEX_SHORT_LIFE", "WARNING", f"Vida útil ≤ {min_useful_life_months} meses não caracteriza CAPEX")
+        )
     return CapexItemCheck(value, scheduled, diff, issues)
 
 

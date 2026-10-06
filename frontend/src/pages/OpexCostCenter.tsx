@@ -106,10 +106,18 @@ export default function OpexCostCenter() {
   const pkgTotal = (id: number) => lines.filter((l) => l.package_id === id).reduce((s, l) => s + Number(l.total), 0);
   const totalProposed = Number(accounts.totals.proposed ?? 0);
   const annualized = Number(accounts.totals.ref_annualized ?? 0);
-  const goToPackage = (id: number) => {
+  const goToPackage = async (id: number, accountId?: number) => {
     setPackageId(id);
     setTab("fill");
     setParams({ pacote: String(id) });
+    if (accountId && editable) {
+      try {
+        await api(`/opex/submissions/${head.submission_id}/lines`, { method: "POST", body: JSON.stringify({ account_id: accountId, package_id: id, values: {} }) });
+        await refresh();
+      } catch (err) {
+        setError((err as Error).message);
+      }
+    }
   };
 
   return (
