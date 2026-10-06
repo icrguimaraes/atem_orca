@@ -48,7 +48,7 @@ function useWidth(fallback = 760): [RefObject<HTMLDivElement>, number] {
   return [ref, w];
 }
 
-export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: MonthlyRow[]; prevYear: number; refYear: number; showBudget: boolean }) {
+export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean }) {
   const [hover, setHover] = useState<number | null>(null);
   const [box, W] = useWidth();
   const H = 260, L = 84, R = 12, T = 12, B = 28;
@@ -64,7 +64,7 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
 
   return (
     <div className="chart" ref={box}>
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={`Realizado mensal ${prevYear} e ${refYear}`} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={prevYear ? `Realizado mensal ${prevYear} e ${refYear}` : `Realizado mensal ${refYear}`} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="grid" />
@@ -154,7 +154,7 @@ export function PairedBars({ rows, prevLabel, refLabel }: { rows: CompareRow[]; 
         <div key={r.label} className={`paired-row ${hover === i ? "hover" : ""}`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
           <div className="paired-label" title={r.label}>{r.label}</div>
           <div className="paired-bars">
-            <div className="paired-bar" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%`, background: SERIES.prev }} />
+            {prevLabel && <div className="paired-bar" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%`, background: SERIES.prev }} />}
             <div className="paired-bar" style={{ width: `${(Math.max(r.ref, 0) / max) * 100}%`, background: SERIES.ref }} />
           </div>
           <div className="paired-value">
@@ -164,7 +164,7 @@ export function PairedBars({ rows, prevLabel, refLabel }: { rows: CompareRow[]; 
           {hover === i && (
             <div className="tooltip tooltip-inline">
               <strong>{r.label}</strong>
-              <span><i style={{ background: SERIES.prev }} />{prevLabel}: {fmtMoney(r.prev)}</span>
+              {prevLabel && <span><i style={{ background: SERIES.prev }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
               <span><i style={{ background: SERIES.ref }} />{refLabel}: {fmtMoney(r.ref)}</span>
             </div>
           )}

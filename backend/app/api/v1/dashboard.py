@@ -101,29 +101,40 @@ def overview(
     cost_center_id: int | None = None,
     package_id: int | None = None,
     year: int | None = None,
+    years: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
+    """`years` (ex.: "2025" ou "2025,2026") escolhe os anos exibidos: um ano só mostra esse ano, sem
+    comparação; dois ou mais comparam o maior (referência) com o segundo maior (anterior). Sem o
+    parâmetro, vale o ano mais recente com realizado comparado ao anterior, quando carregado."""
     actual_years = _loaded_years(db, "ACTUAL", 1)
     budget_years = _loaded_years(db, "REFERENCE_BUDGET", 2)
+    available = sorted(set(actual_years) | set(budget_years), reverse=True)
     cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
-    # ano exibido: o pedido, senão o mais recente com realizado, senão com orçamento, senão o do ciclo
-    ref = year or (
-        max(actual_years)
-        if actual_years
-        else max(budget_years)
-        if budget_years
-        else cycle.actual_reference_year
-        if cycle
-        else datetime.utcnow().year
-    )
-    prev = ref - 1
+    selected = sorted({int(y) for y in (years or "").split(",") if y.strip().isdigit()} & set(available), reverse=True)
+    if selected:
+        ref = selected[0]
+        prev = selected[1] if len(selected) > 1 else None
+    else:
+        # ano exibido: o pedido, senão o mais recente com realizado, senão com orçamento, senão o do ciclo
+        ref = year or (
+            max(actual_years)
+            if actual_years
+            else max(budget_years)
+            if budget_years
+            else cycle.actual_reference_year
+            if cycle
+            else datetime.utcnow().year
+        )
+        prev = ref - 1
+        selected = [ref] + ([prev] if prev in available else [])
     f = Facts(db, user, company_id, cost_center_id, package_id)
     closed = _last_closed(db, ref)  # último mês com realizado no ano de referência
 
     # ---- KPIs
-    prev_total = f.total(ActualEntry, prev)
-    prev_ytd = f.total(ActualEntry, prev, closed) if closed else ZERO
+    prev_total = f.total(ActualEntry, prev) if prev else ZERO
+    prev_ytd = f.total(ActualEntry, prev, closed) if (prev and closed) else ZERO
     ref_ytd = f.total(ActualEntry, ref)
     ref_annualized = (ref_ytd * 12 / closed) if closed else ZERO
     budget_total = f.total(ReferenceBudgetEntry, ref)
@@ -131,7 +142,7 @@ def overview(
 
     # ---- série mensal
     monthly = {m: {"month": m, "prev": ZERO, "ref": ZERO, "budget": ZERO} for m in range(1, 13)}
-    for period, amount in f.sums(ActualEntry, prev, ActualEntry.period):
+    for period, amount in f.sums(ActualEntry, prev, ActualEntry.period) if prev else []:
         monthly[period]["prev"] = amount
     for period, amount in f.sums(ActualEntry, ref, ActualEntry.period):
         monthly[period]["ref"] = amount
@@ -154,8 +165,8 @@ def overview(
         return out
 
     packages = {p.id: p for p in db.scalars(select(BudgetPackage))}
-    pkg_prev = by_package(ActualEntry, prev)
-    pkg_prev_ytd = by_package(ActualEntry, prev, closed) if closed else {}
+    pkg_prev = by_package(ActualEntry, prev) if prev else {}
+    pkg_prev_ytd = by_package(ActualEntry, prev, closed) if (prev and closed) else {}
     pkg_ref = by_package(ActualEntry, ref)
     pkg_budget = by_package(ReferenceBudgetEntry, ref)
     package_rows = []
@@ -181,7 +192,7 @@ def overview(
     # ---- rankings (CC e conta) no acumulado do ano de referência vs mesmo período do ano anterior
     def ranking(column, label_model, label_attrs):
         cur = dict(f.sums(ActualEntry, ref, column))
-        base = dict(f.sums(ActualEntry, prev, column, max_period=closed)) if closed else {}
+        base = dict(f.sums(ActualEntry, prev, column, max_period=closed)) if (prev and closed) else {}
         ids = sorted(cur, key=lambda k: cur[k], reverse=True)[:10]
         objs = {o.id: o for o in db.scalars(select(label_model).where(label_model.id.in_(ids)))} if ids else {}
         rows = []
@@ -202,12 +213,13 @@ def overview(
     return {
         "reference_year": ref,
         "previous_year": prev,
+        "selected_years": sorted(selected),
         "last_closed_period": closed,
         "years_loaded": actual_years,
         "budget_years": budget_years,
-        "available_years": sorted(set(actual_years) | set(budget_years), reverse=True),
+        "available_years": available,
         "has_actual": ref in actual_years,
-        "has_prev": prev in actual_years,
+        "has_prev": prev is not None and prev in actual_years,
         "has_budget": budget_total != ZERO,
         "kpis": {
             "prev_total": _money(prev_total),
@@ -224,8 +236,10 @@ def overview(
         "by_package": package_rows,
         "top_cost_centers": ranking(ActualEntry.cost_center_id, CostCenter, ("code", "name")),
         "top_accounts": ranking(ActualEntry.account_id, Account, ("code", "name")),
-        "heatmap": _heatmap(db, f, ref if ref in actual_years else prev),
-        "account_deltas": _account_deltas(db, f, ref, prev, closed) if (closed and prev in actual_years) else [],
+        "heatmap": _heatmap(db, f, ref if ref in actual_years else (prev or ref)),
+        "account_deltas": _account_deltas(db, f, ref, prev, closed)
+        if (closed and prev and prev in actual_years)
+        else [],
         "budget_progress": budget_progress(db, user, company_id, cost_center_id, package_id),
     }
 

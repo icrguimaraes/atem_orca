@@ -89,7 +89,13 @@ export default function Home() {
   const isController = can("CONTROLLER");
   const [filters, setFilters] = useState({ company_id: "", cost_center_id: "", package_id: "" });
   const [showTable, setShowTable] = useState(false);
-  const [year, setYear] = useState<number | null>(null);
+  // anos exibidos: vazio = padrão do servidor (mais recente com realizado + anterior); um ano = só ele; dois = comparação
+  const [years, setYears] = useState<number[]>([]);
+  function toggleYear(y: number, current: number[]) {
+    const base = years.length ? years : current;
+    const next = base.includes(y) ? base.filter((x) => x !== y) : [...base, y];
+    if (next.length) setYears(next.sort());
+  }
 
   const base = useLoad(async () => {
     const [cycles, companies, ccs, packages] = await Promise.all([
@@ -102,7 +108,7 @@ export default function Home() {
   });
 
   const query = new URLSearchParams(
-    Object.entries({ ...filters, year: year ? String(year) : "" }).filter(([, v]) => v),
+    Object.entries({ ...filters, years: years.join(",") }).filter(([, v]) => v),
   ).toString();
   const inventory = useLoad(() => api<Inventory>("/dashboard/inventory"));
   const overview = useLoad(() => api<Overview>(`/dashboard/overview${query ? `?${query}` : ""}`), [query]);
@@ -121,7 +127,7 @@ export default function Home() {
   const { cycle, companies, ccs, packages } = base.data;
   const o = overview.data;
   const monthName = o?.last_closed_period ? MONTHS[o.last_closed_period - 1] : null;
-  const prevLabel = o ? `${o.previous_year} até ${monthName ?? "—"}` : "";
+  const prevLabel = o?.previous_year ? `${o.previous_year} até ${monthName ?? "—"}` : "";
   const refLabel = o ? `${o.reference_year} até ${monthName ?? "—"}` : "";
   const hasData = Boolean(o && (o.has_actual || o.has_budget));
   const inv = inventory.data;
@@ -132,7 +138,7 @@ export default function Home() {
         title="Painel"
         subtitle={
           o?.last_closed_period
-            ? `Olá, ${user?.name.split(" ")[0]}. Realizado ${o.reference_year} até ${monthName} comparado ao mesmo período de ${o.previous_year}.`
+            ? `Olá, ${user?.name.split(" ")[0]}. Realizado ${o.reference_year} até ${monthName}${o.has_prev ? ` comparado ao mesmo período de ${o.previous_year}` : ""}.`
             : `Olá, ${user?.name.split(" ")[0]}. ${cycle ? cycle.name : ""}`
         }
       />
@@ -162,10 +168,15 @@ export default function Home() {
           },
         ]}
         extra={o && o.available_years.length > 1 && (
-          <div className="year-tabs" role="tablist" aria-label="Ano">
-            {o.available_years.map((y) => (
-              <button key={y} className={y === o.reference_year ? "active" : ""} onClick={() => setYear(y)}>{y}</button>
-            ))}
+          <div className="year-tabs" role="group" aria-label="Anos exibidos (um ano mostra só ele; dois comparam)">
+            {o.available_years.map((y) => {
+              const on = o.selected_years.includes(y);
+              return (
+                <button key={y} type="button" className={on ? "active" : ""} aria-pressed={on} onClick={() => toggleYear(y, o.selected_years)}>
+                  {y}
+                </button>
+              );
+            })}
           </div>
         )}
       />
@@ -241,29 +252,31 @@ export default function Home() {
                   <thead>
                     <tr>
                       <th>Mês</th>
-                      <th className="right">{o.previous_year}</th>
+                      {o.has_prev && <th className="right">{o.previous_year}</th>}
                       <th className="right">{o.reference_year}</th>
                       {o.has_budget && <th className="right">Orçado {o.reference_year}</th>}
-                      <th className="right">Var.</th>
+                      {o.has_prev && <th className="right">Var.</th>}
                     </tr>
                   </thead>
                   <tbody>
                     {o.monthly.map((m) => (
                       <tr key={m.month}>
                         <td>{MONTHS[m.month - 1]}</td>
-                        <td className="right">{fmtMoney(m.prev)}</td>
+                        {o.has_prev && <td className="right">{fmtMoney(m.prev)}</td>}
                         <td className="right">{Number(m.ref) ? fmtMoney(m.ref) : "—"}</td>
                         {o.has_budget && <td className="right">{fmtMoney(m.budget)}</td>}
-                        <td className="right">
-                          {Number(m.prev) && Number(m.ref) ? <Delta pct={String((Number(m.ref) - Number(m.prev)) / Number(m.prev))} /> : "—"}
-                        </td>
+                        {o.has_prev && (
+                          <td className="right">
+                            {Number(m.prev) && Number(m.ref) ? <Delta pct={String((Number(m.ref) - Number(m.prev)) / Number(m.prev))} /> : "—"}
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             ) : (
-              <MonthlyChart rows={o.monthly} prevYear={o.previous_year} refYear={o.reference_year} showBudget={o.has_budget} />
+              <MonthlyChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} />
             )}
           </Card>
 

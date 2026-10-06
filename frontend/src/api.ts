@@ -161,7 +161,7 @@ export interface PackageRow {
   ref_ytd: string; ref_annualized: string; budget: string; ytd_var_pct: string | null;
 }
 export interface Overview {
-  reference_year: number; previous_year: number; last_closed_period: number | null; years_loaded: number[];
+  reference_year: number; previous_year: number | null; selected_years: number[]; last_closed_period: number | null; years_loaded: number[];
   budget_years: number[]; available_years: number[]; has_actual: boolean; has_prev: boolean; has_budget: boolean;
   kpis: {
     prev_total: string; prev_ytd: string; ref_ytd: string; ytd_var_pct: string | null; ref_annualized: string;

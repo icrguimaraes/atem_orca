@@ -120,6 +120,21 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     packages = {p["package"]: p for p in data["by_package"]}
     assert packages["Viagens"]["ref_ytd"] == "350.00" and packages["DTI"]["prev_total"] == "160.00"
     assert [c["code"] for c in data["top_cost_centers"]] == ["1050101011", "1050101012"]
+    assert data["selected_years"] == [2025, 2026] and data["previous_year"] == 2025
+
+    # um ano só: sem comparação (o ano anterior não entra em nenhum número)
+    only = client.get("/api/v1/dashboard/overview?years=2025", headers=admin).json()
+    assert (only["reference_year"], only["previous_year"], only["selected_years"]) == (2025, None, [2025])
+    assert only["has_prev"] is False and only["last_closed_period"] == 8
+    assert only["kpis"]["ref_ytd"] == "860.00" and only["kpis"]["prev_ytd"] == "0.00"
+    assert only["kpis"]["ytd_var_pct"] is None and only["account_deltas"] == []
+    assert only["monthly"][0] == {"month": 1, "prev": "0.00", "ref": "220.00", "budget": "0.00"}
+    assert only["heatmap"]["year"] == 2025 and only["top_cost_centers"][0]["ytd_var_pct"] is None
+    # dois anos: o maior é a referência e o menor a base, qualquer que seja a ordem informada
+    both = client.get("/api/v1/dashboard/overview?years=2026,2025", headers=admin).json()
+    assert (both["reference_year"], both["previous_year"], both["kpis"]["ytd_var_pct"]) == (2026, 2025, "-0.5000")
+    # ano sem base carregada é ignorado
+    assert client.get("/api/v1/dashboard/overview?years=2019", headers=admin).json()["selected_years"] == [2025, 2026]
 
     # gestor só enxerga o próprio CC
     client.post(
