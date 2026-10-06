@@ -209,6 +209,25 @@ export default function ImportDetail() {
             {summary.cost_centers !== undefined && (<><dt>Centros de custo</dt><dd>{fmtInt(summary.cost_centers)}</dd></>)}
             {summary.accounts !== undefined && (<><dt>Contas</dt><dd>{fmtInt(summary.accounts)}</dd></>)}
             {summary.actions && (<><dt>Cadastros</dt><dd>{renderValue({ novos: summary.actions.CREATE ?? 0, existentes: summary.actions.UPDATE ?? 0 })}</dd></>)}
+            {(summary.new_cost_centers?.length > 0 || summary.new_accounts?.length > 0) && (
+              <>
+                <dt>Cadastros novos</dt>
+                <dd>
+                  {[
+                    summary.new_cost_centers?.length ? `${fmtInt(summary.new_cost_centers.length)} centro(s) de custo` : null,
+                    summary.new_accounts?.length ? `${fmtInt(summary.new_accounts.length)} conta(s)` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}{" "}
+                  <span className="muted small">(criados na confirmação, com o nome do arquivo)</span>
+                  <div className="muted small mono" style={{ fontWeight: 400, marginTop: 4 }}>
+                    {[...(summary.new_cost_centers ?? []), ...(summary.new_accounts ?? [])]
+                      .map((x: { code: string; name: string | null }) => (x.name ? `${x.code} ${x.name}` : x.code))
+                      .join(" · ")}
+                  </div>
+                </dd>
+              </>
+            )}
             {summary.record_types && (<><dt>Tipos de registro</dt><dd>
                   {Object.entries(summary.record_types as Record<string, number>)
                     .map(([k, n]) => `${RECORD_TYPES[k] ?? k}: ${fmtInt(n)}`)

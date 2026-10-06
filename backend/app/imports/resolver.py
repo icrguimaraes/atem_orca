@@ -116,6 +116,16 @@ def validate_master(result: ParseResult, dims: Dimensions, options: dict) -> Non
 def validate_financial(result: ParseResult, dims: Dimensions, options: dict) -> None:
     default_company = options.get("company_code")
     create_missing = bool(options.get("create_missing_dimensions"))
+    # avisos de cadastro (criação, filial desconhecida) valem para o arquivo inteiro: um por código,
+    # na primeira linha em que aparece — num KSB1 com 12 mil partidas, repetir por linha esconde o resto
+    announced: set[tuple[str, str]] = set()
+
+    def once(kind: str, code: str) -> bool:
+        if (kind, code) in announced:
+            return False
+        announced.add((kind, code))
+        return True
+
     for rec in result.records:
         d = rec.data
         company_id = _company(rec, dims, default_company)
@@ -124,9 +134,12 @@ def validate_financial(result: ParseResult, dims: Dimensions, options: dict) -> 
             continue
         if d.get("branch"):
             d["branch_id"] = dims.branch_id(company_id, d["branch"])
-            if d["branch_id"] is None:
+            if d["branch_id"] is None and once("branch", d["branch"]):
                 rec.warn(
-                    "UNKNOWN_BRANCH", f"Filial {d['branch']} não cadastrada (ficará sem filial)", "Filial", d["branch"]
+                    "UNKNOWN_BRANCH",
+                    f"Filial {d['branch']} não cadastrada (as linhas dessa filial ficarão sem filial)",
+                    "Filial",
+                    d["branch"],
                 )
         cc_code = d.get("cost_center")
         if not cc_code:
@@ -136,7 +149,13 @@ def validate_financial(result: ParseResult, dims: Dimensions, options: dict) -> 
             d["cost_center_id"] = cc.id if cc else None
             if cc is None:
                 if create_missing and d.get("cost_center_name"):
-                    rec.warn("NEW_COST_CENTER", f"Centro de custo {cc_code} será criado", "Centro de Custo", cc_code)
+                    if once("cc", cc_code):
+                        rec.warn(
+                            "NEW_COST_CENTER",
+                            f"Centro de custo {cc_code} ({d['cost_center_name']}) será criado",
+                            "Centro de Custo",
+                            cc_code,
+                        )
                 else:
                     rec.error(
                         "UNKNOWN_COST_CENTER",
@@ -152,7 +171,10 @@ def validate_financial(result: ParseResult, dims: Dimensions, options: dict) -> 
             d["account_id"] = acc.id if acc else None
             if acc is None:
                 if create_missing and d.get("account_name"):
-                    rec.warn("NEW_ACCOUNT", f"Conta {acc_code} será criada", "Conta", acc_code)
+                    if once("account", acc_code):
+                        rec.warn(
+                            "NEW_ACCOUNT", f"Conta {acc_code} ({d['account_name']}) será criada", "Conta", acc_code
+                        )
                 else:
                     rec.error("UNKNOWN_ACCOUNT", f"Conta {acc_code} não cadastrada", "Conta", acc_code)
         amounts = list(d.get("values", {}).values()) + ([d["amount"]] if d.get("amount") else [])

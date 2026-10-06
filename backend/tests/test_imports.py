@@ -376,6 +376,10 @@ def test_ksb1_sap_export_xlsx(client, admin, run_worker, db):
     assert b["status"] == "VALIDATED", b
     assert b["layout"] == "SAP_KSB1" and b["dataset_type"] == "ACTUAL"  # detecção automática
     assert (b["valid_rows"], b["duplicate_rows"], b["error_rows"]) == (4, 0, 0)  # subtotal e total ignorados
+    # avisos de cadastro valem uma vez por código (conta nova e planta desconhecida), não por partida
+    assert b["warning_rows"] == 2
+    assert b["summary"]["new_accounts"] == [{"code": "6010399999", "name": "Conta Nova KSB1"}]
+    assert "new_cost_centers" in b["summary"] and b["summary"]["new_cost_centers"] == []
     resp = client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin)
     assert resp.status_code == 200, resp.text
     run_worker()

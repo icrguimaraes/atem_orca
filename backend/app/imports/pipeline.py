@@ -185,13 +185,23 @@ def _summarize(result) -> dict:
     if result.dataset_type in ("ACTUAL", "REFERENCE_BUDGET"):
         total = Decimal("0")
         ccs, accounts = set(), set()
+        new_ccs: dict[str, str | None] = {}
+        new_accounts: dict[str, str | None] = {}
         for r in result.records:
             if final_status(r) in ("VALID", "WARNING"):
                 total += sum((Decimal(v) for v in r.data.get("values", {}).values()), Decimal("0"))
                 total += Decimal(r.data.get("amount") or 0)
                 ccs.add(r.data.get("cost_center"))
                 accounts.add(r.data.get("account"))
+                # cadastros que a carga vai criar (opção "cadastrar automaticamente")
+                if r.data.get("cost_center") and r.data.get("cost_center_id") is None:
+                    new_ccs.setdefault(r.data["cost_center"], r.data.get("cost_center_name"))
+                if r.data.get("account") and r.data.get("account_id") is None:
+                    new_accounts.setdefault(r.data["account"], r.data.get("account_name"))
         summary |= {"total_amount": str(total), "cost_centers": len(ccs), "accounts": len(accounts)}
+        if new_ccs or new_accounts:
+            summary["new_cost_centers"] = [{"code": c, "name": n} for c, n in sorted(new_ccs.items())]
+            summary["new_accounts"] = [{"code": c, "name": n} for c, n in sorted(new_accounts.items())]
     actions = Counter(r.data.get("_action") for r in result.records if r.data.get("_action"))
     if actions:
         summary["actions"] = dict(actions)
