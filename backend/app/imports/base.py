@@ -146,6 +146,15 @@ class Sheet:
             return None
 
 
+EXPORT_MARKER = "ATEM_EXPORT"
+
+
+def is_system_export(sheets: list[Sheet]) -> bool:
+    """Planilha gerada pela exportação do sistema (marcador em A1 da primeira aba): ao reimportar,
+    todos os lançamentos do centro de custo são substituídos, não só os vindos de template."""
+    return any(s.rows and s.rows[0] and str(s.rows[0][0] or "").startswith(EXPORT_MARKER) for s in sheets)
+
+
 def load_sheets(content: bytes, file_name: str) -> list[Sheet]:
     name = file_name.lower()
     if name.endswith(".csv"):

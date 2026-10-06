@@ -20,7 +20,7 @@ com importação versionada, workflow de aprovação, auditoria e comparação 2
 | 6 — Análise (Plotly) | Dashboard FP&A interativo: KPIs (realizado 2025, orçado 2026, orçamento 2027, variações, módulos, % preenchido/aprovado), evolução mensal, comparativo por dimensão com drill-down (empresa → diretoria → CC → conta → mês), variação R$/%, ranking, composição, análise por CC e andamento; figuras geradas em Python (plotly) a partir da mesma base da consolidação | ✅ |
 | 5 — Consolidação | Painel OPEX + CAPEX + Pessoal × realizado, pontos de atenção, congelamento de versão (fotografia imutável), revisão (1.1 / 2.0) e exportação Excel (resumo, carga SAP chave × mês, consolidado, variações, detalhes por módulo, status) | ✅ |
 
-Também: bases carregadas com exclusão por escopo, por módulo ou total; design system Coral Stay (`docs/design-system.md`); 56 testes automatizados (regras, importação ponta a ponta, workflow, RBAC, consolidação, análise).
+Também: bases carregadas com exclusão por escopo, por módulo ou total; comparação entre versões (1.0 × 1.1); exportação do **template preenchido** por CC (OPEX e CAPEX, reimportável); alteração de senha e limite de tentativas de login; design system Coral Stay (`docs/design-system.md`); 60 testes de backend (regras, importação ponta a ponta, workflow, RBAC, consolidação, análise, ida e volta dos templates) e 22 testes de interface Playwright (`frontend/e2e/`, desktop e celular).
 A interface fica na raiz do domínio; a API está documentada em `/api/docs` (Swagger).
 
 ### Próximos passos sugeridos (fora do roadmap original)
@@ -29,6 +29,17 @@ A interface fica na raiz do domínio; a API está documentada em `/api/docs` (Sw
 - Rateio de CSC/BackOffice entre empresas (matriz de rateio da contabilidade) — ver decisão 6 em `docs/02`.
 - Notificações por e-mail (prazos, ajuste solicitado, envio recebido).
 - Confirmar com a contabilidade as contas de pessoal da consolidação (parâmetros `personnel.*_account`).
+
+### Testes de interface (Playwright)
+
+Rodam contra um app no ar (local ou Railway) com um usuário válido:
+
+```bash
+cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=... npm run e2e
+```
+
+`smoke.spec.ts` abre todas as páginas em desktop e 390px (sem erro de console nem rolagem horizontal);
+`fluxos.spec.ts` cobre drill-down da análise, exportação da consolidação, download do template e alteração de senha.
 
 ## Rodando localmente
 

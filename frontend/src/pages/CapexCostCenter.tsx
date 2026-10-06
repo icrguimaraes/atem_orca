@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, type CapexHeader, type CapexItem, type CapexIssue, type CapexOptions, type CapexProject, type CapexView, type OpexAction, type WorkflowEventItem } from "../api";
+import { api, download, type CapexHeader, type CapexItem, type CapexIssue, type CapexOptions, type CapexProject, type CapexView, type OpexAction, type WorkflowEventItem } from "../api";
 import { ItemForm, ProjectForm } from "../components/capex/CapexForms";
 import { Legend, MonthlyBars, PairedBars, RankBars, SERIES } from "../components/charts";
 import { Alert, Badge, Card, Empty, Loading, Modal, PageHeader, Stat } from "../components/ui";
@@ -131,6 +131,15 @@ export default function CapexCostCenter() {
         actions={
           <>
             <Link to="/capex" className="btn btn-ghost">Voltar</Link>
+            <button
+              className="btn btn-ghost"
+              title="Planilha no layout do template, com os lançamentos deste CC; pode ser ajustada e reimportada"
+              onClick={() =>
+                download(`/capex/submissions/${head.submission_id}/template.xlsx`, `Template_CAPEX_${head.years.target}_${head.cost_center.code}.xlsx`).catch((e) => setError((e as Error).message))
+              }
+            >
+              Baixar template (Excel)
+            </button>
             {head.actions.map((a) => (
               <button
                 key={a.action}

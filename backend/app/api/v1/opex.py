@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -30,7 +31,7 @@ from app.models import (
     User,
     WorkflowEvent,
 )
-from app.services import audit
+from app.services import audit, template_export
 from app.services import opex as svc
 
 router = APIRouter(prefix="/opex", tags=["OPEX"])
@@ -303,6 +304,21 @@ def open_cost_center(cost_center_id: int, db: Session = Depends(get_db), user: U
 def get_submission(submission_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     ctx, sub, access = _load(db, user, submission_id)
     return _header(db, ctx, sub, access)
+
+
+@router.get(
+    "/submissions/{submission_id}/template.xlsx",
+    summary="Orçamento OPEX do centro de custo no layout do template Excel (reimportável)",
+)
+def template_xlsx(submission_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    ctx, sub, access = _load(db, user, submission_id)
+    content = template_export.opex_template_workbook(db, ctx, sub)
+    name = f"Template_OPEX_{ctx.target_year}_{access.cc.code}_v{ctx.version.label}.xlsx"
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 @router.get("/submissions/{submission_id}/accounts", summary="Histórico × proposta por conta, com alertas")

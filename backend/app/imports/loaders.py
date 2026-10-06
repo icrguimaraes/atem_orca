@@ -586,6 +586,11 @@ def load_macro(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
     return {"assumptions": len(payload)}
 
 
+def _full_replace(batch: ImportBatch) -> bool:
+    """Planilha exportada pelo sistema: substitui todos os lançamentos do CC (não só os de template)."""
+    return bool(((batch.summary or {}).get("meta") or {}).get("system_export"))
+
+
 def load_opex_template(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
     """Cadastros → realizado → orçamento 2027, na mesma transação."""
     stats = {"master": load_master(db, batch, user_id)}
@@ -606,6 +611,7 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
     rows = _rows(db, batch.id, "BUDGET_LINE") + _rows(db, batch.id, "TRAVEL")
     if not rows:
         return {}
+    full_replace = _full_replace(batch)
     ctx = opex_svc.context(db)
     if ctx.frozen:
         return {"skipped": f"versão {ctx.version.label} congelada"}
@@ -622,7 +628,7 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
             stats["cost_centers_locked"] += 1
             continue
         for old in db.scalars(select(BudgetLine).where(BudgetLine.submission_id == sub.id)):
-            if (old.attributes or {}).get("source") == "TEMPLATE":
+            if full_replace or (old.attributes or {}).get("source") == "TEMPLATE":
                 db.delete(old)
                 stats["lines_replaced"] += 1
         total = Decimal("0")
@@ -727,6 +733,7 @@ def load_capex_items(db: Session, batch: ImportBatch, user_id: int | None) -> di
     ctx = opex_svc.context(db)
     if ctx.frozen:
         return {"skipped": f"versão {ctx.version.label} congelada"}
+    full_replace = _full_replace(batch)
     companies = {c.code: c.id for c in db.scalars(select(Company))}
     accounts = {a.code: a.id for a in db.scalars(select(Account))}
     assets = {i.name.upper(): i.id for i in db.scalars(select(AssetItem))}
@@ -742,7 +749,7 @@ def load_capex_items(db: Session, batch: ImportBatch, user_id: int | None) -> di
             stats["cost_centers_locked"] += 1
             continue
         for old in db.scalars(select(CapexProject).where(CapexProject.submission_id == sub.id)):
-            if (old.attributes or {}).get("source") == "TEMPLATE":
+            if full_replace or (old.attributes or {}).get("source") == "TEMPLATE":
                 db.delete(old)
                 stats["requests_replaced"] += 1
         db.flush()

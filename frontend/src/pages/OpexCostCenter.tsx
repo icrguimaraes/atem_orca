@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { api, type OpexAccounts, type OpexAction, type OpexHeader, type OpexLine, type OpexOptions, type WorkflowEventItem } from "../api";
+import { api, download, type OpexAccounts, type OpexAction, type OpexHeader, type OpexLine, type OpexOptions, type WorkflowEventItem } from "../api";
 import { AccountsTab } from "../components/opex/AccountsTab";
 import { EventPanel } from "../components/opex/EventPanel";
 import { LinesGrid } from "../components/opex/LinesGrid";
@@ -120,6 +120,15 @@ export default function OpexCostCenter() {
         actions={
           <>
             <Link to="/orcamento" className="btn btn-ghost">Voltar</Link>
+            <button
+              className="btn btn-ghost"
+              title="Planilha no layout do template, com os lançamentos deste CC; pode ser ajustada e reimportada"
+              onClick={() =>
+                download(`/opex/submissions/${head.submission_id}/template.xlsx`, `Template_OPEX_${head.years.target}_${head.cost_center.code}.xlsx`).catch((e) => setError((e as Error).message))
+              }
+            >
+              Baixar template (Excel)
+            </button>
             {head.actions.map((a) => (
               <button
                 key={a.action}

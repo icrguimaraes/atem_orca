@@ -55,3 +55,14 @@ test("menu: alterar senha valida confirmação", async ({ page }) => {
   await expect(page.locator(".modal .alert")).toContainText("confirmação");
   await page.click(".modal button:has-text('Cancelar')");
 });
+
+test("orçamento OPEX: baixar o template preenchido do CC", async ({ page }) => {
+  await login(page);
+  await page.goto("/orcamento");
+  const first = page.locator(".table a").first();
+  if (!(await first.isVisible())) return; // sem CC carregado
+  await first.click();
+  await expect(page).toHaveURL(/\/orcamento\/\d+/);
+  const [download] = await Promise.all([page.waitForEvent("download"), page.click("button:has-text('Baixar template (Excel)')")]);
+  expect(download.suggestedFilename()).toMatch(/^Template_OPEX_\d{4}_\d+\.xlsx$/);
+});

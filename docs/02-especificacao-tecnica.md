@@ -356,6 +356,15 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 - **Exportação Excel** (`/consolidation/export.xlsx`, filtros de versão/empresa/CC): Resumo (módulo × anos, mês × módulo), **Carga SAP** (chave × JAN..DEZ), Consolidado, Variações por conta (com alertas), OPEX (linhas), CAPEX (itens com pendências), Pessoal (quadro com ações e custo mensal) e Status por CC. Valores numéricos com formato contábil, filtros, painéis congelados e totais com `SUBTOTAL`.
 - Migração `0004`: tabela `budget_snapshot_lines`.
 
+### 15.1 Exportação do template preenchido (ida e volta Excel)
+
+`services/template_export.py` gera, por centro de custo, uma planilha no layout que o importador reconhece:
+
+- **OPEX**: `Instruções`, `BD-Novo` (CC, filiais da empresa, contas OPEX ativas com pacote e detalhamento) e uma aba por pacote (`I - Viagens` … `XII - Comercial`). Abas genéricas trazem CHAVE (`empresa-filial-CC-conta`), detalhamento, gestor do contrato, fornecedor, justificativa, produto/serviço, códigos e `JAN..DEZ` + total (`SUM`). `I - Viagens` traz uma linha por viagem (as 3 linhas `TRAVEL` do mesmo `group_ref` viram objetivo, cargo, ida/volta, dias, rota e os três valores) e o consolidador CHAVE × mês à direita. Lançamentos sem pacote (ou do pacote Viagens sem ser viagem) vão para `XIII - Outros lançamentos`.
+- **CAPEX**: `Instruções`, `Template_Orç AAAA` (uma linha por item, cabeçalho na linha 6, meses datados do ano do ciclo, vida útil) e `BD-Novo` com as contas de ativo.
+- **Marcador**: a célula A1 de `Instruções` começa com `ATEM_EXPORT` (`imports.base.EXPORT_MARKER`). O parser grava `meta.system_export`; nesse caso a prévia e a carga substituem **todos** os lançamentos do CC (não só os de origem template), porque a planilha já contém as linhas digitadas no sistema — sem isso a reimportação duplicaria essas linhas. Regras de bloqueio continuam valendo (CC enviado/aprovado, versão congelada).
+- Testes `tests/test_template_export.py`: exporta, reparseia com o próprio parser (mesmos valores, consolidador ok, sem erros) e reimporta mantendo total e número de linhas/solicitações.
+
 ## 16. Backlog para as próximas fases
 
 Itens fora do roadmap original, em ordem sugerida. Cada um cabe numa fase curta e não exige refazer o que existe.
@@ -367,11 +376,11 @@ Itens fora do roadmap original, em ordem sugerida. Cada um cabe numa fase curta 
 | 3 | **Carga no SAP**: hoje via aba Carga SAP do Excel. Integração direta (RFC/arquivo em layout SAP) quando houver acesso | TI/SAP | Novo serviço `services/sap_export.py` lendo `consolidation.rows_for` (já na granularidade chave × mês) |
 | 4 | **Rateio de CSC/BackOffice** entre empresas (decisão 6) | Matriz de rateio da contabilidade | Tabela `allocation_rules` (CC origem → % por empresa/CC destino) aplicada sobre `consolidation.live_rows` ao congelar; nova aba no Excel |
 | 5 | **Notificações por e-mail**: prazo próximo/vencido, ajuste solicitado, envio recebido, validação GMD pendente | SMTP/serviço de e-mail | `attention_points` já calcula os eventos; falta despacho (worker diário) e preferências por usuário |
-| 6 | **Comparação entre versões** (1.0 × 1.1 por conta/CC) | — | `consolidation.rows_for` para duas versões; tela em Consolidação |
+| 6 | ~~Comparação entre versões~~ — **entregue**: `GET /consolidation/compare?from_version_id&to_version_id` (total, mensal, por módulo, CC e conta) e card "Comparar versões" em Consolidação | — | `consolidation.compare_versions` |
 | 7 | **Sazonalidade** do anualizado (decisão 2): usar perfil mensal de 2025 em vez de linear | Controladoria | `services/opex.account_view` e `consolidation.reference` (um ponto cada) |
-| 8 | **Exportação dos templates preenchidos** de volta ao layout Excel original (para quem ainda trabalha no arquivo) | — | `services/exports.py` com openpyxl sobre os templates como modelo |
+| 8 | ~~Exportação dos templates preenchidos~~ — **entregue**: `GET /opex/submissions/{id}/template.xlsx` e `GET /capex/submissions/{id}/template.xlsx` (botão "Baixar template (Excel)" na tela do CC). Ver 15.1 | — | `services/template_export.py` |
 | 9 | **Separar o worker de importação** em serviço próprio no Railway (já suportado por `RUN_IMPORT_WORKER=false` + `python -m app.worker`) | — | Infra |
-| 10 | **Testes de interface** automatizados (Playwright) no CI, a partir dos roteiros usados na validação manual | — | `frontend/e2e/` |
+| 10 | ~~Testes de interface~~ — **entregue**: Playwright em `frontend/e2e/` (smoke de todas as páginas em desktop e 390px sem erro de console nem rolagem horizontal; fluxos de análise, consolidação, template e senha). Roda contra um app no ar: `E2E_BASE_URL`, `E2E_EMAIL`, `E2E_PASSWORD` e `npm run e2e`; não está no CI (precisa de banco com dados) | — | `frontend/playwright.config.ts` |
 
 Pré-requisitos já prontos para esses itens: `CLAUDE.md` com comandos e convenções, `scripts/dev-db.sh` para o banco local,
 migrações numeradas com verificação de drift, seed idempotente que acrescenta parâmetros novos a ciclos existentes.

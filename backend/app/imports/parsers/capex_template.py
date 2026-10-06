@@ -22,6 +22,7 @@ from app.imports.base import (
     clean_str,
     find_table,
     is_blank,
+    is_system_export,
     norm,
     to_decimal,
 )
@@ -204,7 +205,10 @@ def parse_capex_template(sheets: list[Sheet], options: dict) -> ParseResult:
     for sheet in sheets:
         if not norm(sheet.name).startswith("bd"):
             items += parse_items(sheet, result)
-    result.meta = {"parts": {"master": len(master.records), "asset_items": catalog, "capex_items": items}}
+    result.meta = {
+        "parts": {"master": len(master.records), "asset_items": catalog, "capex_items": items},
+        "system_export": is_system_export(sheets),
+    }
     if not items:
         result.structural.append(
             Issue("NO_CAPEX_ITEMS", "Nenhuma linha de CAPEX preenchida na aba Template_Orç", severity="WARNING")

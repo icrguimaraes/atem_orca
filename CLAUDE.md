@@ -14,6 +14,7 @@ cd backend && pytest -q                              # suíte completa (~1 min);
 cd backend && ruff check . && ruff format --check .  # obrigatório antes de commitar
 cd frontend && npm ci && npm run build               # tsc -b + vite; o Docker copia dist para backend/frontend_dist
 cd backend && FRONTEND_DIST=../frontend/dist uvicorn app.main:app --port 8077   # app completo local
+cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=... npm run e2e   # Playwright (app no ar)
 ```
 
 ## Convenções
@@ -35,6 +36,9 @@ cd backend && FRONTEND_DIST=../frontend/dist uvicorn app.main:app --port 8077   
 - Gráficos analíticos: figuras Plotly são montadas **no backend** (`services/analytics.py`, uma base filtrada por request,
   formatação pt-BR em rótulos/tooltips) e renderizadas por `components/PlotlyChart.tsx` (bundle `plotly.js-basic-dist-min`,
   carregado só na página Análise). Novos gráficos: nova função `fig_*` + chave em `dashboard()['figures']`.
+- Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
+  faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
+- Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.
 - Testes usam planilhas sintéticas de `tests/builders.py`. **Nunca** commitar `.xlsx` reais (dados pessoais) — já no `.gitignore`.
 - Branch de trabalho: `claude/atem-budget-planning-2027-1ril6s`; o Railway publica a cada push. Não abrir PR sem pedido.
 

@@ -257,6 +257,7 @@ def compare_macro(db: Session, result: ParseResult) -> dict:
 
 def compare_opex_template(db: Session, result: ParseResult, options: dict) -> dict:
     """Template OPEX: compara cada parte e checa se o orçamento de cada CC ainda aceita alterações."""
+    full_replace = bool(result.meta.get("system_export"))  # exportação do sistema: substitui tudo
     from app.domain.workflow import EDITABLE, STATUS_LABELS
     from app.models import BudgetLine, Company
     from app.services import opex as opex_svc
@@ -311,7 +312,7 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
                 replaced = [
                     line
                     for line in db.scalars(select(BudgetLine).where(BudgetLine.submission_id == sub.id))
-                    if (line.attributes or {}).get("source") == "TEMPLATE"
+                    if full_replace or (line.attributes or {}).get("source") == "TEMPLATE"
                 ]
             valid = [r for r in recs if final_status(r) in ("VALID", "WARNING")]
             new_total = sum((Decimal(v) for r in valid for v in r.data["values"].values()), Decimal(0))
@@ -337,6 +338,7 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
 
 def compare_capex_template(db: Session, result: ParseResult, options: dict) -> dict:
     """Template CAPEX: cadastros, catálogo de ativos e, por CC, se o orçamento CAPEX aceita a carga."""
+    full_replace = bool(result.meta.get("system_export"))  # exportação do sistema: substitui tudo
     from app.domain.workflow import EDITABLE, STATUS_LABELS
     from app.models import AssetItem, CapexProject, Company
     from app.services import opex as opex_svc
@@ -390,7 +392,7 @@ def compare_capex_template(db: Session, result: ParseResult, options: dict) -> d
                 replaced = [
                     p
                     for p in db.scalars(select(CapexProject).where(CapexProject.submission_id == sub.id))
-                    if (p.attributes or {}).get("source") == "TEMPLATE"
+                    if full_replace or (p.attributes or {}).get("source") == "TEMPLATE"
                 ]
             valid = [r for r in recs if final_status(r) in ("VALID", "WARNING")]
             total = sum(

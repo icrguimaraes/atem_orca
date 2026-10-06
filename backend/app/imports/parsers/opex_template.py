@@ -14,7 +14,17 @@ import re
 from decimal import Decimal
 
 from app.domain.rules.common import MONTH_LABELS, month_from_label
-from app.imports.base import Issue, ParseResult, Record, Sheet, clean_code, clean_str, norm, to_decimal
+from app.imports.base import (
+    Issue,
+    ParseResult,
+    Record,
+    Sheet,
+    clean_code,
+    clean_str,
+    is_system_export,
+    norm,
+    to_decimal,
+)
 from app.imports.parsers.financial import parse_wide
 from app.imports.parsers.master import parse_master
 
@@ -340,6 +350,7 @@ def parse_opex_template(sheets: list[Sheet], options: dict) -> ParseResult:
         },
         "budget_by_sheet": {k: v for k, v in per_sheet.items() if v},
         "actual_year": actual.meta.get("year"),
+        "system_export": is_system_export(sheets),
     }
     if not per_sheet or not any(per_sheet.values()):
         result.structural.append(
