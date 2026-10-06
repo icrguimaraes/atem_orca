@@ -77,7 +77,8 @@ class Access:
         )
         self.view = self.global_ or self.owner or self.reviewer
         cycle_ok = ctx.cycle.status == "OPEN" or self.global_
-        self.edit = (self.global_ or self.owner) and sub.status in EDITABLE and cycle_ok
+        self.frozen = ctx.frozen
+        self.edit = (self.global_ or self.owner) and sub.status in EDITABLE and cycle_ok and not ctx.frozen
         self.cycle_blocked = not cycle_ok
         self.roles = set(user.role_codes)
 
@@ -94,6 +95,8 @@ def _load(db: Session, user: User, submission_id: int):
 
 
 def _require_edit(access: Access) -> None:
+    if not access.edit and access.frozen:
+        raise HTTPException(409, "A versão do orçamento está congelada; peça à Controladoria uma revisão para alterar")
     if not access.edit:
         if access.cycle_blocked:
             raise HTTPException(409, "O ciclo orçamentário ainda não está aberto para preenchimento")
@@ -136,8 +139,9 @@ def _header(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, access: A
             "global": access.global_,
             "reviewer": access.reviewer,
             "cycle_blocked": access.cycle_blocked,
+            "frozen": access.frozen,
         },
-        "actions": available_actions(sub.status, roles=access.roles, is_owner=access.owner),
+        "actions": [] if access.frozen else available_actions(sub.status, roles=access.roles, is_owner=access.owner),
         "package_review": None
         if review is None
         else {
@@ -445,6 +449,8 @@ def do_action(
     user: User = Depends(get_current_user),
 ):
     ctx, sub, access = _load(db, user, submission_id)
+    if ctx.frozen:
+        raise HTTPException(409, f"A versão {ctx.version.label} está congelada; o fluxo continua na revisão")
     blockers: list[str] = []
     pkg = _people_package(db)
     if action == "submit":

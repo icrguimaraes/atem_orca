@@ -8,6 +8,7 @@ import { CYCLE_STATUS, PARAM_LABELS, fmtDate, fmtDateTime } from "../labels";
 const PERCENT_KEYS = new Set(["alert.growth_pct", "alert.reduction_pct", "alert.history_band_pct", "personnel.salary_adjustment_pct"]);
 
 function display(key: string, value: unknown): string {
+  if (key.endsWith("_account")) return String(value);  // código de conta: sem separador de milhar
   if (typeof value === "number" && PERCENT_KEYS.has(key)) return `${(value * 100).toLocaleString("pt-BR")}%`;
   return typeof value === "number" ? value.toLocaleString("pt-BR") : JSON.stringify(value);
 }

@@ -6,6 +6,7 @@ import { Loading } from "./components/ui";
 import Audit from "./pages/Audit";
 import CapexCostCenter from "./pages/CapexCostCenter";
 import CapexList from "./pages/CapexList";
+import Consolidation from "./pages/Consolidation";
 import CyclePage from "./pages/CyclePage";
 import Home from "./pages/Home";
 import ImportDetail from "./pages/ImportDetail";
@@ -50,6 +51,7 @@ export default function App() {
             <Route path="pessoal" element={<PersonnelList />} />
             <Route path="pessoal/simulacao" element={<PersonnelSimulation />} />
             <Route path="pessoal/:ccId" element={<PersonnelCostCenter />} />
+            <Route path="consolidacao" element={<Consolidation />} />
             <Route path="cadastros" element={<MasterData />} />
             <Route path="ciclo" element={<CyclePage />} />
             <Route path="usuarios" element={<Protected roles={["CONTROLLER"]}><Users /></Protected>} />

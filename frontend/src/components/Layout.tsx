@@ -7,6 +7,7 @@ const NAV = [
   { to: "/orcamento", label: "Orçamento OPEX" },
   { to: "/capex", label: "Orçamento CAPEX" },
   { to: "/pessoal", label: "Orçamento de Pessoal" },
+  { to: "/consolidacao", label: "Consolidação e exportação" },
   { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"] },
   { to: "/cadastros", label: "Cadastros" },
   { to: "/ciclo", label: "Ciclo e parâmetros" },
@@ -14,7 +15,7 @@ const NAV = [
   { to: "/auditoria", label: "Auditoria", roles: ["CONTROLLER"] },
 ];
 
-const SOON = ["Consolidação e exportação"];
+const SOON: string[] = [];
 
 export default function Layout() {
   const { user, logout, can } = useAuth();
@@ -34,7 +35,7 @@ export default function Layout() {
               {n.label}
             </NavLink>
           ))}
-          <div className="nav-section">Próximas fases</div>
+          {SOON.length > 0 && <div className="nav-section">Próximas fases</div>}
           {SOON.map((s) => (
             <span key={s} className="nav-disabled">
               {s}

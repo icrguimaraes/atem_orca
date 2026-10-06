@@ -171,3 +171,27 @@ class AssetItem(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), unique=True)
     asset_class_id: Mapped[int] = mapped_column(ForeignKey("asset_classes.id"))
+
+
+class BudgetSnapshotLine(Base):
+    """Fotografia da versão congelada: orçamento consolidado (OPEX, CAPEX e Pessoal) por chave × mês.
+
+    Gravada ao congelar; a partir daí os relatórios da versão leem só daqui (imutável, mesmo que o
+    quadro de pessoal ou os cadastros mudem depois)."""
+
+    __tablename__ = "budget_snapshot_lines"
+    __table_args__ = (Index("ix_budget_snapshot_lines_version", "version_id", "module"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(ForeignKey("budget_versions.id", ondelete="CASCADE"))
+    module: Mapped[str] = mapped_column(String(20))
+    company_code: Mapped[str] = mapped_column(String(10))
+    branch_code: Mapped[str | None] = mapped_column(String(10))
+    cost_center_id: Mapped[int | None] = mapped_column(ForeignKey("cost_centers.id"))
+    cost_center_code: Mapped[str] = mapped_column(String(20))
+    cost_center_name: Mapped[str | None] = mapped_column(String(200))
+    account_code: Mapped[str] = mapped_column(String(20))
+    account_name: Mapped[str | None] = mapped_column(String(200))
+    package: Mapped[str | None] = mapped_column(String(120))
+    values: Mapped[list] = mapped_column(JSONB)  # 12 valores (texto decimal)
+    total: Mapped[Decimal] = mapped_column(Money, default=0)

@@ -215,7 +215,7 @@ def _personnel_movements(db: Session, result: ParseResult) -> list[dict]:
         cc = db.get(CostCenter, cc_id)
         sub = opex_svc.get_submission(db, ctx, cc_id, create=False, module="PERSONNEL")
         status = sub.status if sub else "DRAFT"
-        editable = status in EDITABLE
+        editable = status in EDITABLE and not ctx.frozen
         if not editable:
             for r in g["records"]:
                 r.warn(
@@ -298,7 +298,7 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
                 opex_svc.get_submission(db, ctx, cc.id, create=False) if (cc is not None and ctx is not None) else None
             )
             status = sub.status if sub else "DRAFT"
-            editable = status in EDITABLE and (ctx is None or ctx.cycle.status != "CLOSED")
+            editable = status in EDITABLE and (ctx is None or (ctx.cycle.status != "CLOSED" and not ctx.frozen))
             if not editable:
                 for r in recs:
                     r.error(
@@ -377,7 +377,7 @@ def compare_capex_template(db: Session, result: ParseResult, options: dict) -> d
                 else None
             )
             status = sub.status if sub else "DRAFT"
-            editable = status in EDITABLE and (ctx is None or ctx.cycle.status != "CLOSED")
+            editable = status in EDITABLE and (ctx is None or (ctx.cycle.status != "CLOSED" and not ctx.frozen))
             if not editable:
                 for r in recs:
                     r.error(

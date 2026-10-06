@@ -50,6 +50,11 @@ class Context:
     target_year: int
     params: dict
 
+    @property
+    def frozen(self) -> bool:
+        """Versão congelada (consolidada): só leitura; alterações exigem uma revisão (nova versão)."""
+        return self.version.status != "WORKING"
+
     def param(self, key: str, default):
         value = self.params.get(key, default)
         return Decimal(str(value)) if isinstance(value, (int, float, str)) else value
@@ -64,8 +69,14 @@ def context(db: Session) -> Context:
         .where(BudgetVersion.cycle_id == cycle.id, BudgetVersion.status == "WORKING")
         .order_by(BudgetVersion.major.desc(), BudgetVersion.minor.desc())
     )
+    if version is None:  # todas congeladas: a mais recente fica disponível para consulta
+        version = db.scalar(
+            select(BudgetVersion)
+            .where(BudgetVersion.cycle_id == cycle.id)
+            .order_by(BudgetVersion.major.desc(), BudgetVersion.minor.desc())
+        )
     if version is None:
-        raise OpexError("O ciclo não tem versão em elaboração")
+        raise OpexError("O ciclo não tem versão de orçamento")
     params = {p.key: p.value for p in db.scalars(select(CycleParameter).where(CycleParameter.cycle_id == cycle.id))}
     ref = cycle.actual_reference_year
     return Context(cycle, version, ref - 1, ref, cycle.fiscal_year, params)

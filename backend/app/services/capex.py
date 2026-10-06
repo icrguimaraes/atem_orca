@@ -200,6 +200,10 @@ def submission_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
     }
 
 
+def _lower_first(text: str) -> str:
+    return text[:1].lower() + text[1:]
+
+
 def blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[str]:
     """Pendências críticas: impedem envio e aprovação."""
     found = projects(db, sub)
@@ -209,11 +213,11 @@ def blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[str]:
     for p in found:
         for issue in project_issues(p):
             if issue["severity"] == "CRITICAL":
-                out.append(f"{p.code} {p.title}: {issue['message'].lower()}")
+                out.append(f"{p.code} {p.title}: {_lower_first(issue['message'])}")
         for item in p.items:
             for issue in item_issues(ctx, item):
                 if issue["severity"] == "CRITICAL":
-                    out.append(f"{p.code} · {item.item_name}: {issue['message'].lower()}")
+                    out.append(f"{p.code} · {item.item_name}: {_lower_first(issue['message'])}")
     if len(out) > 6:
         out = out[:6] + [f"e mais {len(out) - 6} pendência(s)"]
     return out

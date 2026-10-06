@@ -154,6 +154,7 @@ a { color: inherit; }
 .alert-bad { background: var(--bad-bg); color: var(--bad); }
 .alert-good { background: var(--good-bg); color: var(--good); }
 .alert-warn { background: var(--warn-bg); color: var(--warn); }
+.alert-info { background: var(--info-bg); color: var(--info); }
 .empty { padding: 28px; text-align: center; color: var(--muted); }
 
 .btn {

@@ -63,6 +63,9 @@ export const NATURE_LABELS: Record<string, string> = {
 };
 
 export const PARAM_LABELS: Record<string, string> = {
+  "personnel.salary_account": "Conta de salários (consolidação de Pessoal)",
+  "personnel.charges_account": "Conta de encargos e benefícios (Pessoal)",
+  "personnel.severance_account": "Conta de verbas rescisórias (Pessoal)",
   "alert.growth_pct": "Alerta de crescimento (vs. realizado anualizado)",
   "alert.reduction_pct": "Alerta de redução (vs. realizado anualizado)",
   "alert.history_band_pct": "Banda em torno da média histórica",

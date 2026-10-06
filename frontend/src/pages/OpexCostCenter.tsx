@@ -137,6 +137,7 @@ export default function OpexCostCenter() {
         {head.submitted_at && <span className="muted small">enviado em {fmtDateTime(head.submitted_at)}</span>}
         {editable ? <span className="muted small">alterações são salvas automaticamente</span> : <span className="muted small">somente leitura</span>}
       </div>
+      {head.permissions.frozen && <Alert tone="info">A versão {head.version} do orçamento está <strong>congelada</strong> (consolidada). Para alterar, a Controladoria abre uma revisão em Consolidação.</Alert>}
       {head.permissions.cycle_blocked && <Alert tone="warn">O ciclo ainda não foi aberto pela Controladoria. Você pode consultar o histórico, mas não editar.</Alert>}
       {lastAdjustment && (
         <Alert tone="bad">

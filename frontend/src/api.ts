@@ -214,7 +214,7 @@ export interface OpexHeader {
   cycle: { id: number; name: string; status: string; deadline: string | null };
   version: string;
   years: { prev: number; ref: number; target: number };
-  permissions: { edit: boolean; owner: boolean; global: boolean; review_packages: number[]; cycle_blocked: boolean };
+  permissions: { edit: boolean; owner: boolean; global: boolean; review_packages: number[]; cycle_blocked: boolean; frozen?: boolean };
   actions: OpexAction[];
   package_reviews: PackageReviewInfo[];
   submitted_at: string | null;
@@ -297,7 +297,7 @@ export interface CapexHeader {
   cycle: { id: number; name: string; status: string; deadline: string | null };
   version: string;
   years: { prev: number; ref: number; target: number };
-  permissions: { edit: boolean; owner: boolean; global: boolean; cycle_blocked: boolean };
+  permissions: { edit: boolean; owner: boolean; global: boolean; cycle_blocked: boolean; frozen?: boolean };
   actions: OpexAction[];
   submitted_at: string | null;
 }
@@ -355,7 +355,7 @@ export interface PersonnelHeader {
   cost_center: { id: number; code: string; name: string; company_id: number; company_code: string; manager_name: string | null };
   cycle: { id: number; name: string; status: string; deadline: string | null };
   version: string; years: { prev: number; ref: number; target: number };
-  permissions: { edit: boolean; owner: boolean; global: boolean; reviewer: boolean; cycle_blocked: boolean };
+  permissions: { edit: boolean; owner: boolean; global: boolean; reviewer: boolean; cycle_blocked: boolean; frozen?: boolean };
   actions: OpexAction[];
   package_review: { package: string; status: string; comment: string | null; reviewer: string | null; updated_at: string | null; can_review: boolean } | null;
   submitted_at: string | null;
@@ -383,4 +383,35 @@ export interface WhatIfResult {
   difference: string; difference_pct: string | null; monthly_impact: string[];
   by_cost_center: { cost_center_id: number; code: string | null; name: string; base: string; simulated: string; difference: string }[];
   by_contract: { contract: string; people: number; base: string; simulated: string; difference: string }[];
+}
+
+// ---------------------------------------------------------------- Consolidação
+
+export interface ModuleTotals { label: string; proposed: string; prev_actual: string; ref_annualized: string; ref_budget: string; monthly: string[] }
+export interface VersionInfo { id: number; label: string; status: string; reason: string | null; frozen_at: string | null; created_at: string | null; current: boolean }
+export interface VariationRow {
+  account: string; name: string | null; module: string; package: string | null; prev_actual: string; ref_actual_ytd: string;
+  ref_annualized: string; ref_budget: string; proposed: string; variation: string; variation_pct: string | null; flags: string[];
+}
+export interface ConsolidationOverview {
+  cycle: { id: number; name: string; status: string };
+  years: { prev: number; ref: number; target: number };
+  version: { id: number; label: string; status: string };
+  versions: VersionInfo[];
+  modules: Record<"OPEX" | "CAPEX" | "PERSONNEL", ModuleTotals>;
+  total: string; ref_total: string; prev_total: string;
+  by_package: { label: string; proposed: string; ref_annualized: string }[];
+  by_company: { company: string; total: string }[];
+  status_counts: Record<string, Record<string, number>>;
+  matrix: {
+    cost_center_id: number; code: string; name: string; company_code: string; manager_name: string | null;
+    status: Record<string, string>; totals: Record<string, string>; total: string;
+  }[];
+  variations: VariationRow[];
+  flag_counts: Record<string, number>;
+  personnel_accounts: Record<string, { code: string; name: string }>;
+}
+export interface AttentionPoint {
+  severity: "high" | "medium" | "low" | "info"; module: string; module_label: string; kind: string;
+  cost_center_id: number | null; cost_center: string | null; message: string; link: string | null;
 }

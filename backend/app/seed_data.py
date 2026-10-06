@@ -309,6 +309,10 @@ CYCLE_PARAMETERS = {
     "capex.min_useful_life_months": (12, "Vida útil mínima (meses) para CAPEX"),
     "personnel.salary_adjustment_pct": (0.05, "Premissa de reajuste salarial (template Pessoal, E9)"),
     "personnel.adjustment_month": (1, "Mês de aplicação do reajuste (data-base)"),
+    # Consolidação: contas em que o custo de pessoal é lançado (confirmar com a contabilidade)
+    "personnel.salary_account": (6010101001, "Conta do salário (com reajuste) na consolidação e na carga SAP"),
+    "personnel.charges_account": (6010102001, "Conta de encargos e benefícios (parte do multiplicador)"),
+    "personnel.severance_account": (6010101010, "Conta das verbas rescisórias"),
 }
 
 # code, nome, aplica multiplicador, multiplicador padrão

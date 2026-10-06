@@ -135,6 +135,12 @@ def seed(db: Session, *, fiscal_year: int = 2027) -> None:
         for code, _, _apply, mult in S.CONTRACT_TYPES:
             db.add(ScenarioMultiplier(scenario_id=baseline.id, contract_type_code=code, multiplier=Decimal(mult)))
 
+    # parâmetros novos chegam também aos ciclos já existentes (sem sobrescrever valores alterados)
+    existing = set(db.scalars(select(CycleParameter.key).where(CycleParameter.cycle_id == cycle.id)))
+    for key, (value, desc) in S.CYCLE_PARAMETERS.items():
+        if key not in existing:
+            db.add(CycleParameter(cycle_id=cycle.id, key=key, value=value, description=desc))
+
     settings = get_settings()
     if settings.admin_password and _get(db, User, email=settings.admin_email.lower()) is None:
         admin = User(

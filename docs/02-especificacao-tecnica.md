@@ -292,7 +292,7 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 | 2 — OPEX | Histórico comparativo por conta; grade de preenchimento por pacote (colar do Excel, ÷12, média 2026); calculadoras de viagem e evento; justificativas obrigatórias; workflow + validação GMD Tipo 1; fila do gestor de pacote | **entregue** |
 | 3 — CAPEX | Projetos/itens/cronograma, catálogo de ativos, bloqueio por inconsistência | concluída |
 | 4 — Pessoal | Quadro, movimentos, what-if, admissões/desligamentos, headcount | concluída |
-| 5 — Consolidação | Dashboard executivo, variações, exportações xlsx, consolidação final e versões | |
+| 5 — Consolidação | Dashboard executivo, variações, exportações xlsx, consolidação final e versões | concluída |
 
 ## 11. Decisões e pontos em aberto
 
@@ -345,3 +345,13 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 - **Importação do quadro**: AÇÃO (PROMOVER/REMOVER/INCLUIR) vira movimentação no orçamento do CC; linhas sem matrícula (vagas) viram contratações. Substitui só o que veio de importação anterior. Opção "CC padrão" para arquivos sem a coluna CENTRO DE CUSTO. CC enviado/aprovado não recebe as ações (aviso na prévia).
 - **Benefícios** do líder ficam informativos (já estão no multiplicador — decisão 11.1).
 - Migração `0003`: `personnel_movements.attributes`, `target_cost_center_id`, `created_by`, `updated_by`.
+
+## 15. Regras implementadas na Fase 5 (Consolidação e exportação)
+
+- **Base consolidada** (`services/consolidation.py`): OPEX (linhas), CAPEX (itens) e Pessoal (projeção do quadro) na mesma granularidade `empresa-filial-CC-conta × mês`. Pessoal entra em três contas por CC, parametrizáveis no ciclo: `personnel.salary_account` (salário com reajuste), `personnel.charges_account` (parte do multiplicador: encargos e benefícios) e `personnel.severance_account` (verbas rescisórias). Valores sugeridos 6010101001 / 6010102001 / 6010101010 — **confirmar com a contabilidade**; enquanto a conta não existir no cadastro, aparece como ponto de atenção.
+- **Painel** (`/consolidacao`): totais por módulo × ano anterior × ano de referência anualizado, ponte por módulo, mês × módulo, pacote, maiores variações por conta (mesmos alertas do OPEX), matriz CC × módulo × situação e versões. Gestor vê só os seus CCs.
+- **Pontos de atenção**: CCs não iniciados (com prazo), prazo vencido, ajuste pendente, envios aguardando análise, justificativas pendentes (OPEX e Pessoal), pendências críticas de CAPEX, contas de pessoal não cadastradas.
+- **Congelar versão** (Controladoria): grava a fotografia (`budget_snapshot_lines`) e torna a versão só leitura em todos os módulos (edição, importação de templates e fluxo). Relatórios de versão congelada leem a fotografia — não mudam se o quadro ou os cadastros mudarem.
+- **Revisão**: cria `1.1` (ou `2.0` em revisão geral) a partir da congelada, copiando orçamentos, linhas, justificativas, validações GMD, solicitações/itens CAPEX e movimentações de pessoal; consolidados voltam para "Aprovado" (reabrir só os CCs que mudam). Motivo obrigatório; a anterior continua consultável.
+- **Exportação Excel** (`/consolidation/export.xlsx`, filtros de versão/empresa/CC): Resumo (módulo × anos, mês × módulo), **Carga SAP** (chave × JAN..DEZ), Consolidado, Variações por conta (com alertas), OPEX (linhas), CAPEX (itens com pendências), Pessoal (quadro com ações e custo mensal) e Status por CC. Valores numéricos com formato contábil, filtros, painéis congelados e totais com `SUBTOTAL`.
+- Migração `0004`: tabela `budget_snapshot_lines`.

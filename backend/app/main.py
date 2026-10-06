@@ -13,6 +13,7 @@ from app.api.v1 import (
     audit_logs,
     auth,
     capex,
+    consolidation,
     cycles,
     dashboard,
     datasets,
@@ -62,7 +63,22 @@ app.add_middleware(
 )
 
 api = APIRouter(prefix="/api/v1")
-for module in (auth, users, master, cycles, imports, audit_logs, rules, dashboard, datasets, opex, capex, personnel):
+for module in (
+    auth,
+    users,
+    master,
+    cycles,
+    imports,
+    audit_logs,
+    rules,
+    dashboard,
+    datasets,
+    opex,
+    capex,
+    consolidation,
+    personnel,
+    consolidation,
+):
     api.include_router(module.router)
 app.include_router(api)
 

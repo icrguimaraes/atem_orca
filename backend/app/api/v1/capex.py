@@ -76,8 +76,9 @@ def _header(ctx: opex_svc.Context, sub: BudgetSubmission, access: Access) -> dic
             "owner": access.owner,
             "global": access.global_,
             "cycle_blocked": access.cycle_blocked,
+            "frozen": access.frozen,
         },
-        "actions": available_actions(sub.status, roles=access.roles, is_owner=access.owner),
+        "actions": [] if access.frozen else available_actions(sub.status, roles=access.roles, is_owner=access.owner),
         "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
     }
 
@@ -461,6 +462,8 @@ def do_action(
     user: User = Depends(get_current_user),
 ):
     ctx, sub, access = _load(db, user, submission_id)
+    if ctx.frozen:
+        raise HTTPException(409, f"A versão {ctx.version.label} está congelada; o fluxo continua na revisão")
     blockers: list[str] = []
     if action == "submit":
         if ctx.cycle.status != "OPEN" and not access.global_:

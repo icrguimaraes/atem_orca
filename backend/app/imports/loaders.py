@@ -506,7 +506,7 @@ def load_personnel_actions(db: Session, batch: ImportBatch, user_id: int | None)
             stats["without_cost_center"] += 1
     for cc_id, items in by_cc.items():
         sub = opex_svc.get_submission(db, ctx, cc_id, module="PERSONNEL")
-        if sub.status not in EDITABLE:
+        if sub.status not in EDITABLE or ctx.frozen:
             stats["cost_centers_locked"] += 1
             continue
         for old in db.scalars(select(PersonnelMovement).where(PersonnelMovement.submission_id == sub.id)):
@@ -613,7 +613,7 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
         company_id = companies[company]
         cc = db.scalar(select(CostCenter).where(CostCenter.company_id == company_id, CostCenter.code == cc_code))
         sub = opex_svc.get_submission(db, ctx, cc.id)
-        if sub.status not in EDITABLE:
+        if sub.status not in EDITABLE or ctx.frozen:
             stats["cost_centers_locked"] += 1
             continue
         for old in db.scalars(select(BudgetLine).where(BudgetLine.submission_id == sub.id)):
@@ -731,7 +731,7 @@ def load_capex_items(db: Session, batch: ImportBatch, user_id: int | None) -> di
         company_id = companies[company]
         cc = db.scalar(select(CostCenter).where(CostCenter.company_id == company_id, CostCenter.code == cc_code))
         sub = opex_svc.get_submission(db, ctx, cc.id, module="CAPEX")
-        if sub.status not in EDITABLE:
+        if sub.status not in EDITABLE or ctx.frozen:
             stats["cost_centers_locked"] += 1
             continue
         for old in db.scalars(select(CapexProject).where(CapexProject.submission_id == sub.id)):

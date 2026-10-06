@@ -156,6 +156,7 @@ export default function PersonnelCostCenter() {
         <span className="muted small">{editable ? "edição liberada" : "somente leitura"}</span>
         <span className="muted small">· cenário {view.scenario.name}: reajuste {fmtPct(view.scenario.salary_adjustment_pct)} em {MONTHS[view.scenario.adjustment_month - 1]}, CLT × {Number(view.scenario.multipliers.CLT ?? 1).toLocaleString("pt-BR")}</span>
       </div>
+      {head.permissions.frozen && <Alert tone="info">A versão {head.version} do orçamento está <strong>congelada</strong> (consolidada). Para alterar, a Controladoria abre uma revisão em Consolidação.</Alert>}
       {head.permissions.cycle_blocked && <Alert tone="warn">O ciclo ainda não foi aberto pela Controladoria. Você pode consultar, mas não editar.</Alert>}
       {lastAdjustment && (
         <Alert tone="bad"><strong>Ajuste solicitado</strong> por {lastAdjustment.user ?? "—"} em {fmtDateTime(lastAdjustment.created_at)}: {lastAdjustment.comment}</Alert>
