@@ -10,9 +10,6 @@ import { ThemeSwitch, useTheme, type Theme } from "../theme";
 const NAV = [
   { to: "/", label: "Painel", end: true },
   { to: "/analise", label: "Análise orçamentária" },
-  { to: "/orcamento", label: "Orçamento OPEX" },
-  { to: "/capex", label: "Orçamento CAPEX" },
-  { to: "/pessoal", label: "Orçamento de Pessoal" },
   { to: "/consolidacao", label: "Consolidação e exportação" },
   { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"] },
   { to: "/cadastros", label: "Cadastros", roles: ["CONTROLLER"] },
@@ -114,9 +111,8 @@ export default function Layout() {
 // Barra de abas inferior (celular): destinos principais + "Mais" com o restante da navegação e a conta.
 const TABS = [
   { to: "/", label: "Painel", end: true, icon: "M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
-  { to: "/orcamento", label: "OPEX", icon: "M4 19h16M6 16V9m4 7V5m4 11v-6m4 6V7" },
-  { to: "/capex", label: "CAPEX", icon: "M3 20h18M5 20V9l7-5 7 5v11M10 20v-6h4v6" },
-  { to: "/pessoal", label: "Pessoal", icon: "M16 11a4 4 0 1 0-8 0 4 4 0 0 0 8 0zM4 21a8 8 0 0 1 16 0" },
+  { to: "/analise", label: "Análise", icon: "M4 19h16M6 16V9m4 7V5m4 11v-6m4 6V7" },
+  { to: "/consolidacao", label: "Consolidação", icon: "M12 3 3 7.5l9 4.5 9-4.5L12 3zM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5" },
 ];
 
 function Icon({ d }: { d: string }) {

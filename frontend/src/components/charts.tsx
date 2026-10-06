@@ -56,8 +56,9 @@ function short(v: number): string {
 
 /** Comparativo mensal em colunas: ano anterior (cinza), ano em foco (azul) e orçado (verde-água), lado a lado.
  * Com espaço, cada barra recebe o próprio valor; senão, só máximo e mínimo de cada série. */
-export function MonthlyChart({ rows, prevYear, refYear, showBudget, prevColor = SERIES.past, refLabel, prevLabel }: {
-  rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean; prevColor?: string; refLabel?: string; prevLabel?: string;
+export function MonthlyChart({ rows, prevYear, refYear, showBudget, showRef = true, prevColor = SERIES.past, refLabel, prevLabel, budgetLabel }: {
+  rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean; showRef?: boolean; prevColor?: string;
+  refLabel?: string; prevLabel?: string; budgetLabel?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const [box, W] = useWidth();
@@ -66,8 +67,8 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget, prevColor = 
   type Key = "prev" | "ref" | "budget";
   const series: { key: Key; label: string; color: string }[] = [
     ...(prevYear !== null ? [{ key: "prev" as Key, label: prevLabel ?? String(prevYear), color: prevColor }] : []),
-    { key: "ref" as Key, label: refLabel ?? String(refYear), color: SERIES.ref },
-    ...(showBudget ? [{ key: "budget" as Key, label: `Orçado ${refLabel ?? refYear}`, color: SERIES.budget }] : []),
+    ...(showRef ? [{ key: "ref" as Key, label: refLabel ?? String(refYear), color: SERIES.ref }] : []),
+    ...(showBudget ? [{ key: "budget" as Key, label: budgetLabel ?? `Orçado ${refLabel ?? refYear}`, color: SERIES.budget }] : []),
   ];
   // degradê por série: a maior barra em cor cheia, as menores esmaecendo (mesmo padrão dos rankings)
   const ranks = series.map((s) => {
@@ -141,8 +142,9 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget, prevColor = 
 
 /** Total acumulado mês a mês: ano em foco (azul, linha com marcadores) sobre a base (orçado em verde-água
  * ou ano anterior em cinza, área). A série do ano em foco para no último mês com realizado. */
-export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor = SERIES.past, refLabel, prevLabel }: {
-  rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean; prevColor?: string; refLabel?: string; prevLabel?: string;
+export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor = SERIES.past, refLabel, prevLabel, budgetLabel }: {
+  rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean; prevColor?: string; refLabel?: string;
+  prevLabel?: string; budgetLabel?: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
   const [box, W] = useWidth();
@@ -154,7 +156,7 @@ export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor
   const baseKey = showBudget ? "budget" : prevYear !== null ? "prev" : null;
   const base = baseKey ? cum(baseKey) : null;
   const baseColor = baseKey === "budget" ? SERIES.budget : prevColor;
-  const baseLabel = baseKey === "budget" ? `Orçado ${refLabel ?? refYear}` : (prevLabel ?? String(prevYear));
+  const baseLabel = baseKey === "budget" ? (budgetLabel ?? `Orçado ${refLabel ?? refYear}`) : (prevLabel ?? String(prevYear));
   const curLabel = refLabel ?? String(refYear);
   const max = niceMax(Math.max(ref[lastRef] ?? 0, ...(base ?? [0]), 0));
   const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
@@ -249,11 +251,13 @@ export interface RankRow { label: string; sub?: string | null; value: number; pr
 
 /** Ranking em barras horizontais, do maior para o menor, com degradê no tom da série
  * (a maior barra em cor cheia, as menores esmaecendo em direção ao fundo). */
-export function TopBars({ rows, label, prevLabel, prevColor = SERIES.past }: { rows: RankRow[]; label: string; prevLabel?: string | null; prevColor?: string }) {
+export function TopBars({ rows, label, prevLabel, prevColor = SERIES.past, color = SERIES.ref }: {
+  rows: RankRow[]; label: string; prevLabel?: string | null; prevColor?: string; color?: string;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   // sem eixo, a maior barra ocupa a trilha inteira (niceMax deixaria todas curtas)
   const max = Math.max(...rows.flatMap((r) => [r.value, r.prev ?? 0]), 0) || 1;
-  const tone = (i: number) => `color-mix(in srgb, ${SERIES.ref} ${Math.round(100 - (i / Math.max(rows.length - 1, 1)) * 60)}%, transparent)`;
+  const tone = (i: number) => `color-mix(in srgb, ${color} ${Math.round(100 - (i / Math.max(rows.length - 1, 1)) * 60)}%, transparent)`;
   return (
     <div className="paired" role="list" aria-label={label}>
       {rows.map((r, i) => (
@@ -273,7 +277,7 @@ export function TopBars({ rows, label, prevLabel, prevColor = SERIES.past }: { r
           {hover === i && (
             <div className="tooltip tooltip-inline">
               <strong>{r.label}</strong>
-              <span><i style={{ background: SERIES.ref }} />{label}: {fmtMoney(r.value)}</span>
+              <span><i style={{ background: color }} />{label}: {fmtMoney(r.value)}</span>
               {prevLabel && r.prev !== undefined && <span><i style={{ background: prevColor }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
             </div>
           )}
@@ -451,10 +455,11 @@ export function Waterfall({
 }
 
 /** Mapa de calor (linhas × 12 meses), escala sequencial de um só tom. */
-export function Heatmap({ rows }: { rows: { label: string; sub?: string | null; values: number[]; total: number }[] }) {
+export function Heatmap({ rows, budget = false }: { rows: { label: string; sub?: string | null; values: number[]; total: number }[]; budget?: boolean }) {
   const max = Math.max(1, ...rows.flatMap((r) => r.values));
+  const [lo, hi] = budget ? ["var(--seqg-lo)", "var(--seqg-hi)"] : ["var(--seq-lo)", "var(--seq-hi)"]; // verde = orçamento
   const shade = (v: number) =>
-    v <= 0 ? "var(--surface-2)" : `color-mix(in oklab, var(--seq-hi) ${Math.round(12 + (v / max) * 88)}%, var(--seq-lo))`;
+    v <= 0 ? "var(--surface-2)" : `color-mix(in oklab, ${hi} ${Math.round(12 + (v / max) * 88)}%, ${lo})`;
   return (
     <div className="table-wrap">
       <table className="heatmap">

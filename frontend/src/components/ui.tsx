@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useNavigate } from "react-router-dom";
 import type { Tone } from "../labels";
 
 export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
@@ -15,6 +16,16 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
       </div>
       {actions && <div className="page-actions">{actions}</div>}
     </header>
+  );
+}
+
+/** "Voltar": volta para a tela anterior (Painel, Consolidação, fila de validação…); sem histórico, vai ao Painel. */
+export function BackButton({ fallback = "/" }: { fallback?: string }) {
+  const navigate = useNavigate();
+  return (
+    <button type="button" className="btn btn-ghost" onClick={() => (window.history.length > 1 ? navigate(-1) : navigate(fallback))}>
+      Voltar
+    </button>
   );
 }
 

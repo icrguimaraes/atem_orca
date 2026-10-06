@@ -165,7 +165,7 @@ export interface Overview {
   last_closed_period: number | null; years_loaded: number[]; target_year: number | null; period: PeriodInfo;
   budget_years: number[]; available_years: number[]; has_actual: boolean; has_prev: boolean; has_budget: boolean;
   kpis: {
-    prev_total: string; prev_ytd: string; ref_ytd: string; ytd_var_pct: string | null; ref_annualized: string;
+    prev_total: string; prev_ytd: string; ref_ytd: string; actual_total: string; ytd_var_pct: string | null; ref_annualized: string;
     annualized_vs_prev_pct: string | null; budget_total: string; budget_ytd: string; budget_consumption_pct: string | null;
   };
   monthly: { month: number; prev: string; ref: string; budget: string }[];
@@ -179,9 +179,10 @@ export interface Overview {
 
 /** Período do painel: anos somados × meses, comparação opcional com o ano anterior. */
 export interface PeriodInfo {
-  years: number[]; years_label: string; months: number[]; kind_label: string; closed: number | null;
-  closed_month: string | null; compare: boolean; compare_available: boolean; same_period: boolean;
-  same_period_available: boolean; prev_years: number[]; base_label: string | null; target_year: number | null;
+  years: number[]; years_label: string; months: number[]; modules: string[]; main: "actual" | "budget"; main_label: string;
+  actual_label: string | null; budget_label: string | null; closed: number | null; closed_month: string | null;
+  compare: boolean; compare_available: boolean; same_period: boolean; same_period_available: boolean; prev_years: number[];
+  base_kind: "prev" | "budget" | null; base_label: string | null; annualized_base: boolean; target_year: number | null;
 }
 export interface BreakdownRow {
   id: number | null; code: string | null; name: string; ref: string; base: string; share_ref: string | null;
@@ -189,7 +190,7 @@ export interface BreakdownRow {
 }
 export interface Breakdown {
   group_by: "package" | "account" | "cost_center"; reference_year: number; previous_year: number | null;
-  last_closed_period: number | null; period: PeriodInfo; base: "prev" | "budget" | null; base_label: string | null;
+  last_closed_period: number | null; period: PeriodInfo; base: "prev" | "budget" | null; base_label: string | null; main_label: string;
   thresholds: { growth: number; reduction: number }; rows: BreakdownRow[];
   total: { ref: string; base: string; var: string; var_pct: string | null };
 }

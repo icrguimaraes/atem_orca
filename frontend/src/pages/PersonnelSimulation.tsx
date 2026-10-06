@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api, type PersonnelOptions, type PersonnelScenario, type WhatIfResult } from "../api";
 import { useAuth } from "../auth";
 import { DivergingBars, Legend, MonthlyBars, SERIES } from "../components/charts";
-import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
+import { Alert, BackButton, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import { MONTHS, fmtCompact, fmtInt, fmtMoney, fmtPct } from "../labels";
 
 /** What-if de pessoal: multiplicador por contrato, reajuste e data-base, comparados ao cenário base. */
@@ -104,7 +103,7 @@ export default function PersonnelSimulation() {
       <PageHeader
         title="Simulação de pessoal"
         subtitle={`Compare o cenário base (${o.scenario.name}) com outro multiplicador por tipo de contrato, reajuste ou data-base. PJ não recebe multiplicador. A simulação não altera nenhum orçamento.`}
-        actions={<Link to="/pessoal" className="btn btn-ghost">Voltar</Link>}
+        actions={<BackButton />}
       />
       {error && <Alert>{error}</Alert>}
       {msg && <Alert tone="good">{msg}</Alert>}

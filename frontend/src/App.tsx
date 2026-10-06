@@ -7,7 +7,6 @@ import { Loading } from "./components/ui";
 const Analytics = lazy(() => import("./pages/Analytics"));
 import Audit from "./pages/Audit";
 import CapexCostCenter from "./pages/CapexCostCenter";
-import CapexList from "./pages/CapexList";
 import Consolidation from "./pages/Consolidation";
 import CyclePage from "./pages/CyclePage";
 import Home from "./pages/Home";
@@ -16,9 +15,7 @@ import Imports from "./pages/Imports";
 import Login from "./pages/Login";
 import MasterData from "./pages/MasterData";
 import OpexCostCenter from "./pages/OpexCostCenter";
-import OpexList from "./pages/OpexList";
 import PersonnelCostCenter from "./pages/PersonnelCostCenter";
-import PersonnelList from "./pages/PersonnelList";
 import PersonnelSimulation from "./pages/PersonnelSimulation";
 import Users from "./pages/Users";
 
@@ -47,11 +44,11 @@ export default function App() {
             <Route path="analise" element={<Suspense fallback={<Loading />}><Analytics /></Suspense>} />
             <Route path="importacoes" element={<Protected roles={["CONTROLLER"]}><Imports /></Protected>} />
             <Route path="importacoes/:id" element={<Protected roles={["CONTROLLER"]}><ImportDetail /></Protected>} />
-            <Route path="orcamento" element={<OpexList />} />
+            <Route path="orcamento" element={<Navigate to="/?tipo=OPEX" replace />} />
             <Route path="orcamento/:ccId" element={<OpexCostCenter />} />
-            <Route path="capex" element={<CapexList />} />
+            <Route path="capex" element={<Navigate to="/?tipo=CAPEX" replace />} />
             <Route path="capex/:ccId" element={<CapexCostCenter />} />
-            <Route path="pessoal" element={<PersonnelList />} />
+            <Route path="pessoal" element={<Navigate to="/?tipo=PERSONNEL" replace />} />
             <Route path="pessoal/simulacao" element={<PersonnelSimulation />} />
             <Route path="pessoal/:ccId" element={<PersonnelCostCenter />} />
             <Route path="consolidacao" element={<Consolidation />} />

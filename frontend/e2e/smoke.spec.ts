@@ -4,9 +4,6 @@ import { expectNoHorizontalOverflow, login } from "./helpers";
 const PAGES: [string, string][] = [
   ["/", "Painel"],
   ["/analise", "Análise orçamentária"],
-  ["/orcamento", "Orçamento OPEX"],
-  ["/capex", "Orçamento CAPEX"],
-  ["/pessoal", "Orçamento de Pessoal"],
   ["/consolidacao", "Consolidação e exportação"],
   ["/importacoes", "Importação de dados"],
   ["/cadastros", "Cadastros"],
@@ -35,8 +32,8 @@ test("celular: barra de abas e folha Mais", async ({ page }, testInfo) => {
   const tabbar = page.locator(".tabbar");
   await expect(tabbar).toBeVisible();
   await expect(page.locator(".sidebar nav")).toBeHidden();
-  await tabbar.locator("a", { hasText: "CAPEX" }).click();
-  await expect(page).toHaveURL(/\/capex/);
+  await tabbar.locator("a", { hasText: "Consolidação" }).click();
+  await expect(page).toHaveURL(/\/consolidacao/);
   await tabbar.locator("button", { hasText: "Mais" }).click();
   await expect(page.locator(".sheet")).toBeVisible();
   await page.locator(".sheet-nav a", { hasText: "Cadastros" }).click();

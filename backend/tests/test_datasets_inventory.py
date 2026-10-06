@@ -72,7 +72,8 @@ def test_delete_employees_dataset(client, admin, run_worker, db):
 def test_overview_uses_loaded_years_and_inventory(client, admin, run_worker):
     _load(client, admin, run_worker)
     data = client.get("/api/v1/dashboard/overview", headers=admin).json()
-    assert data["available_years"] == [2026] and data["has_actual"] and not data["has_prev"]
+    # 2027 é o ano do ciclo (orçamento proposto): sempre disponível no seletor
+    assert data["available_years"] == [2026, 2027] and data["has_actual"] and not data["has_prev"]
     # só 2025 carregado também funciona: o painel mostra o ano que existe
     old = client.get("/api/v1/dashboard/overview", headers=admin, params={"year": 2025}).json()
     assert old["reference_year"] == 2025 and not old["has_actual"]

@@ -61,10 +61,11 @@ test("menu: alterar senha valida confirmação", async ({ page }) => {
 
 test("orçamento OPEX: baixar o template preenchido do CC", async ({ page }) => {
   await login(page);
-  await page.goto("/orcamento");
+  // o CC é aberto pela matriz da Consolidação (as páginas-lista por módulo viraram o filtro "Tipo" do Painel)
+  await page.goto("/consolidacao");
   await expect(page.getByText("Carregando…")).toHaveCount(0);
-  const first = page.locator(".table a").first();
-  test.skip((await first.count()) === 0, "lista OPEX vazia (sem centros de custo)");
+  const first = page.locator('a[href^="/orcamento/"]').first();
+  test.skip((await first.count()) === 0, "sem centros de custo na consolidação");
   await first.click();
   await expect(page).toHaveURL(/\/orcamento\/\d+/);
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("button:has-text('Baixar template (Excel)')")]);
@@ -79,4 +80,12 @@ test("tema: escolha persiste e volta ao automático", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.locator(".theme-switch button", { hasText: "Auto" }).click();
   await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
+});
+
+test("painel: endereço antigo /capex abre o Painel filtrado por CAPEX", async ({ page }) => {
+  await login(page);
+  await page.goto("/capex");
+  await expect(page).toHaveURL(/\/\?tipo=CAPEX/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Painel");
+  await expect(page.locator('[aria-label="Tipos de orçamento"] button', { hasText: "CAPEX" })).toHaveAttribute("aria-pressed", "true");
 });

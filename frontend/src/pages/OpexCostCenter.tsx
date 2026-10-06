@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { api, download, type OpexAccounts, type OpexAction, type OpexHeader, type OpexLine, type OpexOptions, type WorkflowEventItem } from "../api";
 import { AccountsTab } from "../components/opex/AccountsTab";
 import { EventPanel } from "../components/opex/EventPanel";
 import { LinesGrid } from "../components/opex/LinesGrid";
 import { TravelPanel } from "../components/opex/TravelPanel";
 import { Legend, MonthlyBars, PairedBars, SERIES } from "../components/charts";
-import { Alert, Badge, Card, Loading, Modal, PageHeader, Stat } from "../components/ui";
+import { Alert, BackButton, Badge, Card, Loading, Modal, PageHeader, Stat } from "../components/ui";
 import { REVIEW_STATUS, SUBMISSION_STATUS, fmtCompact, fmtDate, fmtDateTime, fmtMoney, fmtPct } from "../labels";
 
 type Tab = "accounts" | "fill" | "history";
@@ -127,7 +127,7 @@ export default function OpexCostCenter() {
         subtitle={`Centro de custo ${head.cost_center.company_code} · ${head.cost_center.code} · gestor ${head.cost_center.manager_name ?? "—"} · ${head.cycle.name} (versão ${head.version}) · prazo ${fmtDate(head.cycle.deadline)}`}
         actions={
           <>
-            <Link to="/orcamento" className="btn btn-ghost">Voltar</Link>
+            <BackButton />
             <button
               className="btn btn-ghost"
               title="Planilha no layout do template, com os lançamentos deste CC; pode ser ajustada e reimportada"

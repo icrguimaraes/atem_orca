@@ -211,3 +211,10 @@ def test_chart_data(client, admin, run_worker):
     dti = next(p for p in progress["by_package"] if p["package"] == "DTI")
     assert dti == {"package_id": pkg["DTI"]["id"], "package": "DTI", "proposed": "7200.00", "ref_annualized": "6000.00"}
     assert client.get("/api/v1/opex/summary", headers=mgr).json()["progress"]["proposed_total"] == "7200.00"
+    # Painel com o ano do ciclo: o orçamento proposto entra como orçado (verde), comparado com 2026 anualizado
+    plan = client.get("/api/v1/dashboard/overview?years=2027", headers=admin).json()
+    assert plan["period"]["main"] == "budget" and plan["kpis"]["budget_total"] == "7200.00"
+    assert plan["monthly"][0]["budget"] == "600.00" and plan["period"]["base_label"] == "Realizado 2026 anualizado"
+    assert plan["period"]["annualized_base"] is True
+    capex_only = client.get("/api/v1/dashboard/overview?years=2027&modules=CAPEX", headers=admin).json()
+    assert capex_only["kpis"]["budget_total"] == "0.00"

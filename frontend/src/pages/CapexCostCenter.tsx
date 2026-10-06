@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { api, download, type CapexHeader, type CapexItem, type CapexIssue, type CapexOptions, type CapexProject, type CapexView, type OpexAction, type WorkflowEventItem } from "../api";
 import { ItemForm, ProjectForm } from "../components/capex/CapexForms";
 import { Legend, MonthlyBars, PairedBars, RankBars, SERIES } from "../components/charts";
-import { Alert, Badge, Card, Empty, Loading, Modal, PageHeader, Stat } from "../components/ui";
+import { Alert, BackButton, Badge, Card, Empty, Loading, Modal, PageHeader, Stat } from "../components/ui";
 import { MONTHS, SUBMISSION_STATUS, fmtCompact, fmtDate, fmtDateTime, fmtInt, fmtMoney } from "../labels";
 
 type Tab = "requests" | "summary" | "history";
@@ -131,7 +131,7 @@ export default function CapexCostCenter() {
         subtitle={`Centro de custo ${head.cost_center.company_code} · ${head.cost_center.code} · gestor ${head.cost_center.manager_name ?? "—"} · ${head.cycle.name} (versão ${head.version}) · prazo ${fmtDate(head.cycle.deadline)}`}
         actions={
           <>
-            <Link to="/capex" className="btn btn-ghost">Voltar</Link>
+            <BackButton />
             <button
               className="btn btn-ghost"
               title="Planilha no layout do template, com os lançamentos deste CC; pode ser ajustada e reimportada"

@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { api, type OpexAction, type PersonnelHeader, type PersonnelOptions, type PersonnelPosition, type PersonnelView, type WorkflowEventItem } from "../api";
 import { HireForm, MovementForm } from "../components/personnel/PersonnelForms";
 import { Legend, MonthlyBars, RankBars, SERIES, Sparkline } from "../components/charts";
-import { Alert, Badge, Card, Empty, Loading, Modal, PageHeader, SearchBox, Stat } from "../components/ui";
+import { Alert, BackButton, Badge, Card, Empty, Loading, Modal, PageHeader, SearchBox, Stat } from "../components/ui";
 import { MONTHS, MOVEMENT_LABELS, REVIEW_STATUS, SUBMISSION_STATUS, fmtCompact, fmtDate, fmtDateTime, fmtInt, fmtMoney, fmtPct } from "../labels";
 
 type Tab = "roster" | "summary" | "history";
@@ -137,7 +137,7 @@ export default function PersonnelCostCenter() {
         subtitle={`Centro de custo ${head.cost_center.company_code} · ${head.cost_center.code} · gestor ${head.cost_center.manager_name ?? "—"} · ${head.cycle.name} (versão ${head.version})${head.cycle.deadline ? ` · prazo ${fmtDate(head.cycle.deadline)}` : ""}`}
         actions={
           <>
-            <Link to="/pessoal" className="btn btn-ghost">Voltar</Link>
+            <BackButton />
             {head.actions.map((a) => (
               <button
                 key={a.action}

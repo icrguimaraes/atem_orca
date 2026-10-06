@@ -115,7 +115,8 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     # padrão: ano mais recente com realizado (2026), comparado com 2025 no mesmo período (até AGO)
     assert data["reference_year"] == 2026 and data["last_closed_period"] == 8
     assert data["selected_years"] == [2026] and data["previous_year"] == 2025 and data["has_prev"] is True
-    assert data["period"]["years_label"] == "2026" and data["period"]["base_label"] == "2025 até AGO"
+    assert data["period"]["years_label"] == "2026" and data["period"]["base_label"] == "Realizado 2025 até AGO"
+    assert data["period"]["main"] == "actual" and data["period"]["main_label"] == "Realizado 2026 até AGO"
     assert data["period"]["compare_available"] is True and data["period"]["same_period_available"] is True
     assert data["kpis"]["ref_ytd"] == "430.00" and data["kpis"]["prev_ytd"] == "860.00"
     assert data["kpis"]["ytd_var_pct"] == "-0.5000"
@@ -148,11 +149,21 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     assert jf["period"]["same_period_available"] is False
     # ano-alvo do ciclo (orçamento proposto) é selecionável; sem lançamentos, soma zero
     target = client.get("/api/v1/dashboard/overview?years=2027", headers=admin).json()
-    assert target["period"]["kind_label"] == "Orçamento 2027" and target["kpis"]["ref_ytd"] == "0.00"
+    assert target["period"]["main"] == "budget" and target["period"]["main_label"] == "Orçamento 2027"
+    assert target["kpis"]["ref_ytd"] == "0.00" and target["has_actual"] is False
+    # 2026 + 2027: realizado 2026 (série principal) e orçamento 2027 (orçado) como base, sem repetir o ano
+    mixed = client.get("/api/v1/dashboard/overview?years=2026,2027&compare=false", headers=admin).json()
+    assert mixed["period"]["main_label"] == "Realizado 2026 até AGO" and mixed["period"]["base_kind"] == "budget"
+    assert mixed["period"]["base_label"] == "Orçamento 2027 até AGO"
+    # tipo de orçamento: as contas do fixture são OPEX; Pessoal não tem lançamentos
+    opex = client.get("/api/v1/dashboard/overview?years=2026&modules=OPEX", headers=admin).json()
+    people = client.get("/api/v1/dashboard/overview?years=2026&modules=PERSONNEL", headers=admin).json()
+    assert opex["kpis"]["ref_ytd"] == "430.00" and opex["period"]["modules"] == ["OPEX"]
+    assert people["kpis"]["ref_ytd"] == "0.00" and people["top_accounts"] == []
 
     # tabela com drill-down: pacote → conta → centro de custo, base = ano anterior no mesmo período
     bd = client.get("/api/v1/dashboard/breakdown?years=2026", headers=admin).json()
-    assert bd["base"] == "prev" and bd["base_label"] == "2025 até AGO"
+    assert bd["base"] == "prev" and bd["base_label"] == "Realizado 2025 até AGO"
     assert bd["thresholds"] == {"growth": 0.2, "reduction": 0.3}
     by_name = {r["name"]: r for r in bd["rows"]}
     assert by_name["Viagens"]["ref"] == "350.00" and by_name["Viagens"]["base"] == "700.00"
@@ -173,7 +184,7 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     assert solo["base"] is None and solo["total"]["ref"] == "430.00" and solo["total"]["var_pct"] is None
     # "mesmo período" desligado: a base é o ano cheio
     full = client.get("/api/v1/dashboard/breakdown?years=2026&same_period=false", headers=admin).json()
-    assert full["base_label"] == "2025 (ano cheio)" and full["total"]["base"] == "860.00"
+    assert full["base_label"] == "Realizado 2025 (ano cheio)" and full["total"]["base"] == "860.00"
 
     # gestor só enxerga o próprio CC
     client.post(
