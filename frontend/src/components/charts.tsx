@@ -57,7 +57,9 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
   const max = niceMax(Math.max(...values, 0));
   const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
   const slot = plotW / 12;
-  const barW = Math.min(16, (slot - 10) / 2);
+  // um ano só: barra única e larga no centro do mês; dois anos: duas barras lado a lado
+  const paired = prevYear !== null;
+  const barW = paired ? Math.min(22, (slot - 10) / 2) : Math.min(44, slot * 0.6);
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * max);
   const budgetPts = rows.map((r, i) => `${L + slot * i + slot / 2},${y(Number(r.budget))}`).join(" ");
   const h = hover !== null ? rows[hover] : null;
@@ -76,7 +78,10 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
           return (
             <g key={r.month}>
               {hover === i && <rect x={L + slot * i} y={T} width={slot} height={plotH} className="hover-band" />}
-              {[{ v: Number(r.prev), c: SERIES.prev, dx: -barW - 1 }, { v: Number(r.ref), c: SERIES.ref, dx: 1 }].map(
+              {(paired
+                ? [{ v: Number(r.prev), c: SERIES.prev, dx: -barW - 1 }, { v: Number(r.ref), c: SERIES.ref, dx: 1 }]
+                : [{ v: Number(r.ref), c: SERIES.ref, dx: -barW / 2 }]
+              ).map(
                 (b, j) =>
                   b.v > 0 && (
                     <path
@@ -145,6 +150,43 @@ function roundedTop(x: number, y: number, w: number, h: number, r = 4): string {
 interface CompareRow { label: string; prev: number; ref: number; note?: string }
 
 /** Barras horizontais pareadas (mesmo período nos dois anos) — ranking de pacotes/CCs. */
+export interface RankRow { label: string; sub?: string | null; value: number; prev?: number; note?: string }
+
+/** Ranking em barras horizontais, do maior para o menor, com degradê no tom da série
+ * (a maior barra em cor cheia, as menores esmaecendo em direção ao fundo). */
+export function TopBars({ rows, label, prevLabel }: { rows: RankRow[]; label: string; prevLabel?: string | null }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const max = niceMax(Math.max(...rows.flatMap((r) => [r.value, r.prev ?? 0]), 0));
+  const tone = (i: number) => `color-mix(in srgb, ${SERIES.ref} ${Math.round(100 - (i / Math.max(rows.length - 1, 1)) * 60)}%, transparent)`;
+  return (
+    <div className="paired" role="list" aria-label={label}>
+      {rows.map((r, i) => (
+        <div key={`${r.label}-${i}`} role="listitem" className={`paired-row ${hover === i ? "hover" : ""}`} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}>
+          <div className="paired-label" title={r.label}>
+            {r.label}
+            {r.sub && <span className="muted small mono"> {r.sub}</span>}
+          </div>
+          <div className="paired-bars">
+            <div className="top-bar" style={{ width: `${(Math.max(r.value, 0) / max) * 100}%`, background: tone(i) }} />
+            {prevLabel && r.prev !== undefined && <div className="top-bar-prev" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%` }} />}
+          </div>
+          <div className="paired-value">
+            <strong>{fmtCompact(r.value)}</strong>
+            {r.note && <span className={`delta ${r.note.startsWith("+") ? "up" : r.note.startsWith("-") ? "down" : ""}`}>{r.note}</span>}
+          </div>
+          {hover === i && (
+            <div className="tooltip tooltip-inline">
+              <strong>{r.label}</strong>
+              <span><i style={{ background: SERIES.ref }} />{label}: {fmtMoney(r.value)}</span>
+              {prevLabel && r.prev !== undefined && <span><i style={{ background: SERIES.prev }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PairedBars({ rows, prevLabel, refLabel }: { rows: CompareRow[]; prevLabel: string; refLabel: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const max = niceMax(Math.max(...rows.flatMap((r) => [r.prev, r.ref]), 0));

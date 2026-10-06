@@ -16,7 +16,7 @@ import {
 import { useAuth } from "../auth";
 import { BudgetProgressCard } from "../components/BudgetProgressCard";
 import { FilterBar } from "../components/FilterBar";
-import { DivergingBars, Heatmap, Legend, MonthlyChart, PairedBars, SERIES, Waterfall } from "../components/charts";
+import { DivergingBars, Heatmap, Legend, MonthlyChart, PairedBars, SERIES, TopBars, Waterfall } from "../components/charts";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import {
   CYCLE_STATUS,
@@ -53,34 +53,20 @@ function Delta({ pct, invert = false }: { pct: string | null; invert?: boolean }
   return <span className={`delta ${cls}`}>{n > 0 ? "▲" : n < 0 ? "▼" : "•"} {fmtPct(pct)}</span>;
 }
 
-function RankTable({ rows, refLabel, prevLabel, empty, showPrev }: { rows: Overview["top_accounts"]; refLabel: string; prevLabel: string; empty: string; showPrev: boolean }) {
+function RankChart({ rows, refLabel, prevLabel, empty, showPrev }: { rows: Overview["top_accounts"]; refLabel: string; prevLabel: string; empty: string; showPrev: boolean }) {
   if (!rows.length) return <Empty>{empty}</Empty>;
   return (
-    <div className="table-wrap">
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Código · descrição</th>
-            {showPrev && <th className="right">{prevLabel}</th>}
-            <th className="right">{refLabel}</th>
-            {showPrev && <th className="right">Var.</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id}>
-              <td>
-                <div>{r.name}</div>
-                <div className="muted small mono">{r.code}</div>
-              </td>
-              {showPrev && <td className="right nowrap" title={fmtMoney(r.prev_ytd)}>{fmtCompact(r.prev_ytd)}</td>}
-              <td className="right nowrap" title={fmtMoney(r.ref_ytd)}><strong>{fmtCompact(r.ref_ytd)}</strong></td>
-              {showPrev && <td className="right nowrap"><Delta pct={r.ytd_var_pct} /></td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <TopBars
+      label={refLabel}
+      prevLabel={showPrev ? prevLabel : null}
+      rows={rows.map((r) => ({
+        label: r.name ?? r.code ?? "—",
+        sub: r.code,
+        value: Number(r.ref_ytd),
+        prev: showPrev ? Number(r.prev_ytd) : undefined,
+        note: showPrev && r.ytd_var_pct !== null ? fmtPct(r.ytd_var_pct) : undefined,
+      }))}
+    />
   );
 }
 
@@ -130,6 +116,7 @@ export default function Home() {
   const prevLabel = o?.previous_year ? `${o.previous_year} até ${monthName ?? "—"}` : "";
   const refLabel = o ? `${o.reference_year} até ${monthName ?? "—"}` : "";
   const hasData = Boolean(o && (o.has_actual || o.has_budget));
+  const shownYears = years.length ? years : (o?.selected_years ?? []);
   const inv = inventory.data;
 
   return (
@@ -168,9 +155,9 @@ export default function Home() {
           },
         ]}
         extra={o && o.available_years.length > 1 && (
-          <div className="year-tabs" role="group" aria-label="Anos exibidos (um ano mostra só ele; dois comparam)">
-            {o.available_years.map((y) => {
-              const on = o.selected_years.includes(y);
+          <div className="year-tabs" role="group" aria-label="Anos exibidos (um ano mostra só ele; dois comparam)" aria-busy={overview.loading}>
+            {[...o.available_years].sort().map((y) => {
+              const on = shownYears.includes(y); // estado local: o chip responde ao clique antes da resposta do servidor
               return (
                 <button key={y} type="button" className={on ? "active" : ""} aria-pressed={on} onClick={() => toggleYear(y, o.selected_years)}>
                   {y}
@@ -190,7 +177,7 @@ export default function Home() {
           {isController && <> <Link className="link" to="/importacoes">Importar</Link> no layout da aba “Realizado”.</>} Abaixo, o que já existe na base.
         </Alert>
       ) : (
-        <>
+        <div className={overview.loading ? "is-loading" : undefined} aria-busy={overview.loading}>
           <div className="stats">
             {o.has_prev && (
               <>
@@ -371,15 +358,17 @@ export default function Home() {
             )}
           </div>
 
-          <div className="stack-lg">
+          <div className="grid-2">
             <Card title={`Maiores centros de custo · ${refLabel}`}>
-              <RankTable rows={o.top_cost_centers} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
+              {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
+              <RankChart rows={o.top_cost_centers} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
             </Card>
             <Card title={`Maiores contas · ${refLabel}`}>
-              <RankTable rows={o.top_accounts} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
+              {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
+              <RankChart rows={o.top_accounts} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
             </Card>
           </div>
-        </>
+        </div>
       )}
 
       {o?.budget_progress && o.budget_progress.total_cost_centers > 0 && <BudgetProgressCard progress={o.budget_progress} />}

@@ -219,6 +219,12 @@ input, select {
   font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 9px 12px; min-width: 0; min-height: 40px;
 }
+/* seta do select desenhada pelo app, afastada da borda (a nativa encosta no canto) */
+select {
+  appearance: none; -webkit-appearance: none; padding-right: 40px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23767676' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center; background-size: 14px;
+}
 label > input:not([type=checkbox]):not([type=radio]), label > select, .search { min-height: 48px; }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--text); outline-offset: -2px; }
 input[type=checkbox], input[type=radio] { min-height: 0; width: 18px; height: 18px; accent-color: var(--text); }
@@ -433,9 +439,15 @@ input:disabled, select:disabled { opacity: 0.6; }
 .btn-danger:disabled { background: var(--bad); }
 .btn-danger:hover:not(:disabled) { filter: brightness(0.92); background: var(--bad); }
 .btn.danger { color: var(--bad); }
-.year-tabs { display: inline-flex; gap: 6px; }
-.year-tabs button { border: 1px solid var(--border); border-radius: 9999px; background: transparent; color: var(--text); font: 600 14px/20px var(--font-body); padding: 7px 16px; cursor: pointer; }
-.year-tabs button.active { background: var(--text); border-color: var(--text); color: var(--bg); }
+/* chips de ano: mesma forma e altura dos selects dos filtros */
+.year-tabs { display: inline-flex; gap: 8px; }
+.year-tabs button { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: 500 14px/20px var(--font-body); padding: 9px 16px; min-height: 40px; cursor: pointer; }
+.year-tabs button.active { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+.year-tabs[aria-busy="true"] button { opacity: 0.7; cursor: progress; }
+.is-loading { opacity: 0.55; transition: opacity 150ms ease; }
+/* ranking em barras horizontais (maiores CCs e contas) */
+.top-bar { height: 14px; border-radius: 0 6px 6px 0; }
+.top-bar-prev { height: 5px; border-radius: 0 3px 3px 0; background: var(--series-2); opacity: 0.55; }
 .section-title { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 6px 0 -6px; }
 .indent { padding-left: 26px !important; color: var(--muted); }
 

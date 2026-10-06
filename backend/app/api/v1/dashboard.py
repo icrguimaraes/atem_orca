@@ -110,7 +110,7 @@ def overview(
     parâmetro, vale o ano mais recente com realizado comparado ao anterior, quando carregado."""
     actual_years = _loaded_years(db, "ACTUAL", 1)
     budget_years = _loaded_years(db, "REFERENCE_BUDGET", 2)
-    available = sorted(set(actual_years) | set(budget_years), reverse=True)
+    available = sorted(set(actual_years) | set(budget_years))  # crescente: 2025, 2026, …
     cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
     selected = sorted({int(y) for y in (years or "").split(",") if y.strip().isdigit()} & set(available), reverse=True)
     if selected:
