@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { Tone } from "../labels";
 
 export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
@@ -90,7 +91,9 @@ export function Modal({ title, onClose, children, footer, wide }: { title: strin
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-  return (
+  // Portal: o modal sai da árvore do componente que o abriu (ex.: sidebar sticky, que cria contexto de
+  // empilhamento próprio) e fica acima de qualquer gráfico/tabela da página.
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal ${wide ? "modal-wide" : ""}`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal-head">
@@ -100,6 +103,7 @@ export function Modal({ title, onClose, children, footer, wide }: { title: strin
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

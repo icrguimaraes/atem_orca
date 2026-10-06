@@ -79,6 +79,7 @@ export default function Users() {
         {!data ? (
           <Loading />
         ) : (
+          <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
@@ -100,7 +101,7 @@ export default function Users() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         )}
       </Card>
     </>

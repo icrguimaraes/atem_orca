@@ -446,3 +446,84 @@ def account_variations(rows: list[Row], ref: Reference, ctx: Context) -> list[di
             }
         )
     return sorted(out, key=lambda r: -abs(Decimal(r["variation"])))
+
+
+# ------------------------------------------------------------------ comparação entre versões
+
+
+def compare_versions(
+    db: Session, ctx: Context, from_version: BudgetVersion, to_version: BudgetVersion, cc_ids: set[int] | None
+) -> dict:
+    """O que mudou de uma versão para outra: por módulo, por CC e por conta (chave CC × conta)."""
+    a = rows_for(db, ctx, from_version, cc_ids)
+    b = rows_for(db, ctx, to_version, cc_ids)
+
+    def by(rows: list[Row], key) -> dict:
+        out: dict = defaultdict(lambda: ZERO)
+        for r in rows:
+            out[key(r)] += r.total
+        return out
+
+    def diff_table(ka: dict, kb: dict, label) -> list[dict]:
+        items = []
+        for k in set(ka) | set(kb):
+            va, vb = ka.get(k, ZERO), kb.get(k, ZERO)
+            if va == vb:
+                continue
+            items.append(
+                {
+                    **label(k),
+                    "from": str(money(va)),
+                    "to": str(money(vb)),
+                    "difference": str(money(vb - va)),
+                    "difference_pct": str(((vb - va) / abs(va)).quantize(Decimal("0.0001"))) if va else None,
+                }
+            )
+        return sorted(items, key=lambda i: -abs(Decimal(i["difference"])))
+
+    names = {}
+    for r in a + b:
+        names[("cc", r.cost_center_id)] = (r.cost_center_code, r.cost_center_name)
+        names[("acc", r.account_code)] = r.account_name
+    modules = diff_table(
+        by(a, lambda r: r.module), by(b, lambda r: r.module), lambda k: {"module": k, "label": MODULE_LABELS[k]}
+    )
+    ccs = diff_table(
+        by(a, lambda r: r.cost_center_id),
+        by(b, lambda r: r.cost_center_id),
+        lambda k: {"cost_center_id": k, "code": names[("cc", k)][0], "label": names[("cc", k)][1]},
+    )
+    accounts = diff_table(
+        by(a, lambda r: (r.cost_center_id, r.module, r.account_code)),
+        by(b, lambda r: (r.cost_center_id, r.module, r.account_code)),
+        lambda k: {
+            "cost_center_id": k[0],
+            "cost_center": f"{names[('cc', k[0])][0]} · {names[('cc', k[0])][1]}",
+            "module": MODULE_LABELS[k[1]],
+            "account": k[2],
+            "label": names[("acc", k[2])],
+        },
+    )
+    total_a, total_b = sum((r.total for r in a), ZERO), sum((r.total for r in b), ZERO)
+    monthly = [str(money(sum((r.values[i] for r in b), ZERO) - sum((r.values[i] for r in a), ZERO))) for i in range(12)]
+    return {
+        "from": {
+            "id": from_version.id,
+            "label": from_version.label,
+            "status": from_version.status,
+            "total": str(money(total_a)),
+        },
+        "to": {
+            "id": to_version.id,
+            "label": to_version.label,
+            "status": to_version.status,
+            "total": str(money(total_b)),
+        },
+        "difference": str(money(total_b - total_a)),
+        "difference_pct": str(((total_b - total_a) / abs(total_a)).quantize(Decimal("0.0001"))) if total_a else None,
+        "monthly_difference": monthly,
+        "modules": modules,
+        "cost_centers": ccs,
+        "accounts": accounts[:300],
+        "changed_accounts": len(accounts),
+    }

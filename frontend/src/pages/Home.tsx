@@ -381,6 +381,7 @@ export default function Home() {
           </div>
           <div className="grid-2">
             <Card title="Por tipo de contrato">
+              <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr><th>Contrato</th><th className="right">Pessoas</th><th className="right">Folha mensal</th><th className="right">Multiplicador</th></tr>
@@ -395,9 +396,10 @@ export default function Home() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </Card>
             <Card title="Maiores centros de custo em pessoas">
+              <div className="table-wrap">
               <table className="table">
                 <thead>
                   <tr><th>Centro de custo</th><th className="right">Pessoas</th><th className="right">Folha mensal</th></tr>
@@ -411,7 +413,7 @@ export default function Home() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </Card>
           </div>
         </>
@@ -483,6 +485,7 @@ export default function Home() {
         <div className="grid-2">
           <Card title="Últimas importações" actions={<Link to="/importacoes" className="link">Ver todas</Link>}>
             {admin.data.imports.items.length ? (
+              <div className="table-wrap">
               <table className="table">
                 <tbody>
                   {admin.data.imports.items.map((b) => (
@@ -498,7 +501,7 @@ export default function Home() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             ) : (
               <Empty>Nenhum arquivo importado. <Link to="/importacoes" className="link">Importar agora</Link></Empty>
             )}

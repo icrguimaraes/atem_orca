@@ -292,6 +292,7 @@ export default function MasterData() {
 function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
   if (!rows.length) return <Empty>Nenhum registro encontrado.</Empty>;
   return (
+    <div className="table-wrap">
     <table className="table">
       <thead>
         <tr>
@@ -309,6 +310,6 @@ function Table({ head, rows }: { head: string[]; rows: ReactNode[][] }) {
           </tr>
         ))}
       </tbody>
-    </table>
+    </table></div>
   );
 }

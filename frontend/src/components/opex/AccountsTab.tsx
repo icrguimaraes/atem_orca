@@ -17,6 +17,7 @@ function Monthly({ submissionId, accountId, years }: { submissionId: number; acc
     [`${years.target} proposto`, "proposed"],
   ];
   return (
+    <div className="table-wrap">
     <table className="table table-compact monthly">
       <thead>
         <tr><th />{MONTHS.map((m) => <th key={m} className="right">{m}</th>)}</tr>
@@ -32,7 +33,7 @@ function Monthly({ submissionId, accountId, years }: { submissionId: number; acc
           </tr>
         ))}
       </tbody>
-    </table>
+    </table></div>
   );
 }
 

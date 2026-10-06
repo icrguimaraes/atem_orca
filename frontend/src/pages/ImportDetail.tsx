@@ -229,6 +229,7 @@ export default function ImportDetail() {
             </button>
           }
         >
+          <div className="table-wrap">
           <table className="table">
             <thead>
               <tr>
@@ -253,7 +254,7 @@ export default function ImportDetail() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </Card>
       )}
 

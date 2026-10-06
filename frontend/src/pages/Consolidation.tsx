@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, download, type AttentionPoint, type Company, type ConsolidationOverview } from "../api";
+import { api, download, type AttentionPoint, type Company, type ConsolidationOverview, type VersionCompare, type VersionInfo } from "../api";
 import { useAuth } from "../auth";
 import { DivergingBars, Legend, MonthlyBars, PairedBars, SERIES, StatusBar, Waterfall } from "../components/charts";
 import { Alert, Badge, Card, Empty, Loading, Modal, PageHeader, SearchBox, Stat, useLoad } from "../components/ui";
@@ -18,6 +18,67 @@ const SEVERITY: Record<string, { label: string; tone: "bad" | "warn" | "neutral"
 };
 
 const pct = (a: number, b: number) => (b ? fmtPct(String(a / b - 1)) : "—");
+
+/** O que mudou entre duas versões: total, por módulo, por CC e por conta. */
+function VersionCompareCard({ versions, companyId }: { versions: VersionInfo[]; companyId: string }) {
+  const [from, setFrom] = useState(String(versions[versions.length - 2].id));
+  const [to, setTo] = useState(String(versions[versions.length - 1].id));
+  const qs = `from_version_id=${from}&to_version_id=${to}${companyId ? `&company_id=${companyId}` : ""}`;
+  const { data, error } = useLoad(() => api<VersionCompare>(`/consolidation/compare?${qs}`), [qs]);
+  const label = (id: string) => versions.find((v) => String(v.id) === id)?.label ?? id;
+  return (
+    <Card
+      title="Comparação entre versões"
+      actions={
+        <div className="inline-controls">
+          <select value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Versão de origem">
+            {versions.map((v) => <option key={v.id} value={v.id}>Versão {v.label}</option>)}
+          </select>
+          <span className="muted">→</span>
+          <select value={to} onChange={(e) => setTo(e.target.value)} aria-label="Versão de destino">
+            {versions.map((v) => <option key={v.id} value={v.id}>Versão {v.label}</option>)}
+          </select>
+        </div>
+      }
+    >
+      {error ? <Alert>{error}</Alert> : !data ? <Loading /> : (
+        <div className="stack">
+          <div className="stats stats-compact">
+            <Stat label={`Versão ${data.from.label}`} value={fmtCompact(data.from.total)} />
+            <Stat label={`Versão ${data.to.label}`} value={fmtCompact(data.to.total)} />
+            <Stat label="Diferença" value={`${Number(data.difference) > 0 ? "+" : ""}${fmtCompact(data.difference)}`} tone={Number(data.difference) > 0 ? "bad" : Number(data.difference) < 0 ? "good" : undefined} hint={fmtPct(data.difference_pct)} />
+            <Stat label="Contas alteradas" value={fmtInt(data.changed_accounts)} hint="CC × módulo × conta" />
+          </div>
+          {data.monthly_difference.some((v) => Number(v)) && (
+            <>
+              <Legend items={[{ label: `Diferença por mês (${label(to)} − ${label(from)})`, color: SERIES.ref }]} />
+              <DivergingBars rows={data.monthly_difference.map((v, i) => ({ label: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"][i], delta: Number(v), from: 0, to: Number(v) })).filter((r) => r.delta)} />
+            </>
+          )}
+          {data.accounts.length === 0 ? <Empty>Nenhuma diferença entre as versões.</Empty> : (
+            <div className="table-wrap scroll-y">
+              <table className="table">
+                <thead><tr><th>Centro de custo</th><th>Módulo</th><th>Conta</th><th className="right">Versão {data.from.label}</th><th className="right">Versão {data.to.label}</th><th className="right">Diferença</th></tr></thead>
+                <tbody>
+                  {data.accounts.map((a, i) => (
+                    <tr key={i}>
+                      <td className="small">{a.cost_center}</td>
+                      <td>{a.module}</td>
+                      <td>{a.label ?? a.account}<div className="muted small mono">{a.account}</div></td>
+                      <td className="right">{fmtMoney(a.from)}</td>
+                      <td className="right">{fmtMoney(a.to)}</td>
+                      <td className="right nowrap"><strong>{fmtMoney(a.difference)}</strong><div className="muted small">{fmtPct(a.difference_pct)}</div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 export default function Consolidation() {
   const { can } = useAuth();
@@ -289,6 +350,8 @@ export default function Consolidation() {
           {data.personnel_accounts.severance?.code} ({data.personnel_accounts.severance?.name}) — configure em <Link className="link" to="/ciclo">Ciclo e parâmetros</Link>.
         </p>
       </Card>
+
+      {data.versions.length > 1 && <VersionCompareCard versions={data.versions} companyId={companyId} />}
 
       <Card title="Versões do orçamento">
         <div className="table-wrap">

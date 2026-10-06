@@ -191,6 +191,7 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
         </>
       )}
       {comparison.kind === "MASTER" && comparison.by_type && (
+        <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
@@ -210,7 +211,7 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
       {(comparison.kind === "EMPLOYEES" || comparison.kind === "MACRO") && (
         <dl className="kv">

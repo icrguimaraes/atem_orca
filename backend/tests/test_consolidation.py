@@ -184,3 +184,32 @@ def test_delete_all_with_two_revisions(client, admin, run_worker):
     assert [v["label"] for v in client.get("/api/v1/consolidation/overview", headers=admin).json()["versions"]] == [
         "1.0"
     ]
+
+
+def test_compare_versions(client, admin, run_worker):
+    cc, _, line = _setup(client, admin, run_worker)
+    client.post("/api/v1/consolidation/freeze", headers=admin, json={})
+    rv = client.post("/api/v1/consolidation/revise", headers=admin, json={"reason": "ajuste"}).json()
+    v10, v11 = (next(v["id"] for v in rv["versions"] if v["label"] == lb) for lb in ("1.0", "1.1"))
+    head = client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=admin).json()
+    new_line = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()[0]
+    client.patch(f"/api/v1/opex/lines/{new_line['id']}", headers=admin, json={"values": {"1": 1450}})  # +1.000 em JAN
+    r = client.get(f"/api/v1/consolidation/compare?from_version_id={v10}&to_version_id={v11}", headers=admin).json()
+    assert r["difference"] == "1000.00" and r["monthly_difference"][0] == "1000.00"
+    assert r["modules"] == [
+        {
+            "module": "OPEX",
+            "label": "OPEX",
+            "from": "5400.00",
+            "to": "6400.00",
+            "difference": "1000.00",
+            "difference_pct": "0.1852",
+        }
+    ]
+    assert r["accounts"][0]["account"] == "6010301002" and r["changed_accounts"] == 1
+    assert (
+        client.get(
+            f"/api/v1/consolidation/compare?from_version_id={v10}&to_version_id={v10}", headers=admin
+        ).status_code
+        == 422
+    )

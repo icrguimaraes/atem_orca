@@ -51,6 +51,12 @@ def _clear_failures(*keys: str) -> None:
             _failures.pop(key, None)
 
 
+def reset_rate_limit() -> None:
+    """Zera o limite de tentativas (usado pelos testes, que compartilham o processo)."""
+    with _lock:
+        _failures.clear()
+
+
 def _authenticate(db: Session, email: str, password: str, request: Request) -> Token:
     email = email.lower().strip()
     keys = (f"email:{email}", f"ip:{client_ip(request) or '-'}")

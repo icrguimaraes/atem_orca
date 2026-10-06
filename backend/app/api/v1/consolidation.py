@@ -366,3 +366,19 @@ def export_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
+
+
+@router.get("/compare", summary="O que mudou entre duas versões (módulo, CC e conta)")
+def compare(
+    from_version_id: int,
+    to_version_id: int,
+    company_id: int | None = None,
+    cost_center_id: int | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    ctx = _ctx(db)
+    a, b = _version(db, ctx, from_version_id), _version(db, ctx, to_version_id)
+    if a.id == b.id:
+        raise HTTPException(422, "Escolha duas versões diferentes")
+    return svc.compare_versions(db, ctx, a, b, _scope(db, user, company_id, cost_center_id))

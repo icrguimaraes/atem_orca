@@ -10,3 +10,7 @@ frontend/dist/
 *.xlsx
 *.xls
 *.tsbuildinfo
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/

@@ -11,6 +11,7 @@ os.environ["SECRET_KEY"] = "test-secret-key-with-at-least-32-bytes!!"
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app.api.v1.auth import reset_rate_limit  # noqa: E402
 from app.db import SessionLocal, engine  # noqa: E402
 from app.imports.pipeline import process_pending  # noqa: E402
 from app.main import app  # noqa: E402
@@ -25,6 +26,7 @@ def fresh_db():
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         seed(db)
+    reset_rate_limit()
     yield
 
 

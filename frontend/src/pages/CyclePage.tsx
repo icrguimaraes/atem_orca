@@ -137,6 +137,7 @@ export default function CyclePage() {
       </Card>
       <PackageManagersCard cycleId={cycle.id} editable={can()} />
       <Card title="Versões do orçamento">
+        <div className="table-wrap">
         <table className="table">
           <thead>
             <tr>
@@ -156,7 +157,7 @@ export default function CyclePage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </Card>
     </>
   );

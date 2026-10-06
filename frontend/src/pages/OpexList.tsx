@@ -73,6 +73,7 @@ export default function OpexList() {
           {!queue.data?.length ? (
             <Empty>Nada pendente.</Empty>
           ) : (
+            <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr><th>Centro de custo</th><th>Pacote</th><th className="right">Valor do pacote</th><th>Enviado em</th><th>Situação</th></tr>
@@ -88,7 +89,7 @@ export default function OpexList() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </Card>
       ) : (

@@ -421,3 +421,12 @@ export interface AttentionPoint {
   severity: "high" | "medium" | "low" | "info"; module: string; module_label: string; kind: string;
   cost_center_id: number | null; cost_center: string | null; message: string; link: string | null;
 }
+export interface VersionCompare {
+  from: { id: number; label: string; status: string; total: string };
+  to: { id: number; label: string; status: string; total: string };
+  difference: string; difference_pct: string | null; monthly_difference: string[];
+  modules: { module: string; label: string; from: string; to: string; difference: string; difference_pct: string | null }[];
+  cost_centers: { cost_center_id: number; code: string; label: string | null; from: string; to: string; difference: string; difference_pct: string | null }[];
+  accounts: { cost_center_id: number; cost_center: string; module: string; account: string; label: string | null; from: string; to: string; difference: string; difference_pct: string | null }[];
+  changed_accounts: number;
+}
