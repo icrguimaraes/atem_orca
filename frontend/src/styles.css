@@ -105,7 +105,7 @@ a { color: inherit; }
   display: grid; place-items: center; font: 800 18px/1 var(--font-display);
 }
 .brand-logo { display: block; width: auto; max-width: 160px; object-fit: contain; }
-.tabbar, .sheet-backdrop { display: none; }
+.tabbar, .sheet-backdrop, .mobile-only { display: none; }
 .brand-lg { color: var(--text); margin-bottom: 8px; }
 .brand-lg span:not(.brand-mark) { color: var(--muted); }
 .sidebar nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
@@ -254,6 +254,16 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
   .grid-2 { grid-template-columns: 1fr; }
   .filters { display: grid; grid-template-columns: 1fr; gap: 8px; }
   .filters select { max-width: none; width: 100%; }
+  /* cards de indicador: 2 por linha; o último, se sobrar sozinho, ocupa a linha inteira (sem "órfão") */
+  .stats, .stats-compact { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stats > .stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .stat { padding: 14px 14px; }
+  .stat-value { font-size: 24px; line-height: 30px; }
+  .stats-compact .stat-value { font-size: 20px; line-height: 26px; }
+  .plotly-chart { margin: 0 -8px; }  /* o gráfico usa a largura do card até a borda interna */
+  .card { padding: 18px 16px; }
+  .desktop-only { display: none; }
+  .mobile-only { display: inline; }
 
   .tabbar {
     display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;

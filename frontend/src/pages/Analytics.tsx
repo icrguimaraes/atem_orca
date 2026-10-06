@@ -240,7 +240,8 @@ export default function Analytics() {
       </Card>
       <p className="muted small">
         Versão {d.version.label}{d.version.status === "FROZEN" ? " (congelada: fotografia do congelamento)" : ""} · {fmtInt(d.cells)} combinações CC × conta × mês no escopo.{" "}
-        <Badge tone="neutral">Plotly</Badge> arraste para ampliar, clique na legenda para ocultar séries, duplo clique para voltar.
+        <span className="desktop-only"><Badge tone="neutral">Plotly</Badge> arraste para ampliar, clique na legenda para ocultar séries, duplo clique para voltar.</span>
+        <span className="mobile-only">Toque numa barra para detalhar; toque na legenda para ocultar séries.</span>
       </p>
     </>
   );
