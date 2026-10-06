@@ -451,31 +451,6 @@ def overview(
     for period, amount in f.sums(ReferenceBudgetEntry, P.years, "period"):
         monthly[int(period)]["budget"] = amount
 
-    # ---- por pacote (série principal × base)
-    packages = {p.id: p for p in db.scalars(select(BudgetPackage))}
-    pkg_main = dict(f.sums(main_model, P.years, "package_id"))
-    pkg_base = _base_sums(f, P, "package_id")
-    pkg_prev_full = dict(f.sums(ActualEntry, P.prev_years, "package_id")) if P.compare else {}
-    pkg_budget = dict(f.sums(ReferenceBudgetEntry, P.years, "package_id"))
-    package_rows = []
-    for pkg_id in set(pkg_main) | set(pkg_base) | set(pkg_budget):
-        p = packages.get(pkg_id)
-        cur, base = pkg_main.get(pkg_id, ZERO), pkg_base.get(pkg_id, ZERO)
-        package_rows.append(
-            {
-                "package_id": pkg_id,
-                "package": p.name if p else "Sem pacote",
-                "package_type": p.package_type if p else None,
-                "prev_total": _money(pkg_prev_full.get(pkg_id)),
-                "prev_ytd": _money(base),  # base de comparação
-                "ref_ytd": _money(cur),  # série principal
-                "ref_annualized": _money(cur * 12 / P.closed if annualizable else ZERO),
-                "budget": _money(pkg_budget.get(pkg_id)),
-                "ytd_var_pct": _pct(cur, base) if P.base_kind else None,
-            }
-        )
-    package_rows.sort(key=lambda r: Decimal(r["ref_ytd"]) + Decimal(r["prev_ytd"]), reverse=True)
-
     # ---- rankings (CC e conta): série principal, com a base quando houver
     def ranking(key, label_model, label_attrs):
         cur = dict(f.sums(main_model, P.years, key))
@@ -524,11 +499,9 @@ def overview(
             "budget_consumption_pct": _pct(actual_total, budget_cmp) if (P.main == "actual" and budget_cmp) else None,
         },
         "monthly": [{k: (_money(v) if k != "month" else v) for k, v in row.items()} for row in monthly.values()],
-        "by_package": package_rows,
         "top_cost_centers": ranking("cost_center_id", CostCenter, ("code", "name")),
         "top_accounts": ranking("account_id", Account, ("code", "name")),
         "heatmap": _heatmap(db, f, main_model, P.years),
-        "account_deltas": _account_deltas(db, f, P) if P.base_kind else [],
         "budget_progress": budget_progress(db, user, company_id, cost_center_id, package_id),
     }
     if figures:
@@ -873,28 +846,6 @@ def _heatmap(db: Session, f: Facts, model, years: list[int], limit: int = 12) ->
             for cc_id in top
         ],
     }
-
-
-def _account_deltas(db: Session, f: Facts, P: Period, limit: int = 8) -> list[dict]:
-    """Maiores aumentos e reduções por conta: série principal do período × base de comparação."""
-    cur = dict(f.sums(_main_model(P), P.years, "account_id"))
-    base = _base_sums(f, P, "account_id")
-    deltas = {k: cur.get(k, ZERO) - base.get(k, ZERO) for k in (set(cur) | set(base)) if k is not None}
-    ups = sorted((k for k in deltas if deltas[k] > 0), key=lambda k: deltas[k], reverse=True)[:limit]
-    downs = sorted((k for k in deltas if deltas[k] < 0), key=lambda k: deltas[k])[:limit]
-    ids = ups + downs
-    accounts = {a.id: a for a in db.scalars(select(Account).where(Account.id.in_(ids)))} if ids else {}
-    return [
-        {
-            "id": k,
-            "code": accounts[k].code if k in accounts else None,
-            "name": accounts[k].name if k in accounts else "—",
-            "prev_ytd": _money(base.get(k)),
-            "ref_ytd": _money(cur.get(k)),
-            "delta": _money(deltas[k]),
-        }
-        for k in ids
-    ]
 
 
 def budget_progress(

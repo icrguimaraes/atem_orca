@@ -122,15 +122,13 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     assert data["kpis"]["ytd_var_pct"] == "-0.5000"
     assert data["kpis"]["ref_annualized"] == "645.00"
     assert data["monthly"][0] == {"month": 1, "prev": "220.00", "ref": "110.00", "budget": "0.00"}
-    packages = {p["package"]: p for p in data["by_package"]}
-    assert packages["Viagens"]["ref_ytd"] == "350.00" and packages["DTI"]["prev_total"] == "160.00"
     assert [c["code"] for c in data["top_cost_centers"]] == ["1050101011", "1050101012"]
     assert 2027 in data["available_years"] and data["target_year"] == 2027  # ano do ciclo (orçamento proposto)
 
     # comparação desligada: nada do ano anterior entra
     off = client.get("/api/v1/dashboard/overview?years=2026&compare=false", headers=admin).json()
     assert off["previous_year"] is None and off["has_prev"] is False and off["kpis"]["prev_ytd"] == "0.00"
-    assert off["kpis"]["ytd_var_pct"] is None and off["account_deltas"] == []
+    assert off["kpis"]["ytd_var_pct"] is None
     # 2025 sozinho: 2024 não existe, então não há comparação; o ano fecha em AGO
     only = client.get("/api/v1/dashboard/overview?years=2025", headers=admin).json()
     assert (only["reference_year"], only["previous_year"], only["selected_years"]) == (2025, None, [2025])
@@ -185,6 +183,7 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     # "mesmo período" desligado: a base é o ano cheio
     full = client.get("/api/v1/dashboard/breakdown?years=2026&same_period=false", headers=admin).json()
     assert full["base_label"] == "Realizado 2025 (ano cheio)" and full["total"]["base"] == "860.00"
+    assert next(r for r in full["rows"] if r["name"] == "DTI")["base"] == "160.00"  # DTI 2025, ano cheio
 
     # gestor só enxerga o próprio CC
     client.post(
@@ -214,9 +213,6 @@ def test_painel2_figures(client, admin, run_worker):
         "cumulative",
         "top_cost_centers",
         "top_accounts",
-        "packages",
-        "package_variation",
-        "account_deltas",
     }
     assert expected <= set(figs)
     monthly = {t["name"]: t for t in figs["monthly"]["data"]}

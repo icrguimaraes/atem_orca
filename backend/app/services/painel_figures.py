@@ -14,7 +14,6 @@ from app.services.analytics import _fig, _layout, _money_axis, fmt_compact, fmt_
 
 MONTHS = ("JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ")
 REALIZADO, ORCADO, ANTERIOR = "#4472c4", "#4fa894", "#8b95a7"
-AUMENTO, REDUCAO = "#e34948", "#2a78d6"  # barras de variação (em despesa, subir é pior)
 TXT_UP, TXT_DOWN, TXT_FLAT = "#c13515", "#008a05", "#767676"  # percentual no texto, como no Painel
 
 
@@ -254,52 +253,6 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool) -> dict:
     return _fig(data, layout)
 
 
-def fig_diverging(rows: list[dict], from_label: str, to_label: str) -> dict:
-    """Aumentos (vermelho) e reduções (azul) em barras horizontais a partir do zero."""
-    rows = [r for r in rows if abs(r["delta"]) > 0.5]
-    cats = [_category(r["name"], r.get("code")) for r in rows]
-    deltas = [r["delta"] for r in rows]
-    pcts = [fmt_pct(r["delta"] / r["from"]) if r["from"] else "—" for r in rows]
-    bar = go.Bar(
-        orientation="h",
-        x=deltas,
-        y=cats,
-        width=0.6,
-        marker={"color": [AUMENTO if d > 0 else REDUCAO for d in deltas], "cornerradius": 4},
-        text=[("+" if d > 0 else "−") + fmt_compact(abs(d)) for d in deltas],
-        textposition="outside",
-        cliponaxis=False,
-        textfont={"size": 12, "color": [TXT_UP if d > 0 else REDUCAO for d in deltas]},
-        customdata=[
-            [fmt_money(r["from"]), fmt_money(r["to"]), fmt_money(r["delta"]), p]
-            for r, p in zip(rows, pcts, strict=True)
-        ],
-        hovertemplate=(
-            "<b>%{y}</b><br>"
-            + from_label
-            + ": %{customdata[0]}<br>"
-            + to_label
-            + ": %{customdata[1]}<br>Variação: %{customdata[2]} (%{customdata[3]})<extra></extra>"
-        ),
-    )
-    edge = max([abs(d) for d in deltas] + [1.0])
-    layout = _layout(
-        showlegend=False,
-        height=max(200, 40 * len(rows) + 30),
-        xaxis={
-            "showticklabels": False,
-            "showgrid": False,
-            "zeroline": True,
-            "zerolinecolor": "rgba(128,128,128,0.45)",
-            "range": [-edge * 1.45, edge * 1.45],
-            "fixedrange": True,
-        },
-        yaxis={"autorange": "reversed", "automargin": True, "tickfont": {"size": 12}, "fixedrange": True},
-        margin={"l": 8, "r": 8, "t": 8, "b": 8},
-    )
-    return _fig([bar], layout)
-
-
 def build(o: dict) -> dict:
     """Todas as figuras do Painel 2 a partir da resposta de `/dashboard/overview`."""
     lb = _labels(o)
@@ -318,48 +271,10 @@ def build(o: dict) -> dict:
             for r in rows
         ]
 
-    packages = sorted(o["by_package"], key=lambda p: -_num(p["ref_ytd"]))
-    package_rows = [
-        {
-            "id": p["package_id"],
-            "code": None,
-            "name": p["package"],
-            "value": p["ref_ytd"],
-            "base": p["prev_ytd"],
-            "var_pct": p["ytd_var_pct"],
-        }
-        for p in packages
-    ]
     figures = {
         "monthly": fig_monthly(o),
         "cumulative": fig_cumulative(o),
         "top_cost_centers": fig_rank(ranked(o["top_cost_centers"]), lb, show_base),
         "top_accounts": fig_rank(ranked(o["top_accounts"]), lb, show_base),
-        "packages": fig_rank(package_rows, lb, show_base),
     }
-    if show_base:
-        variation = [
-            {
-                "name": p["package"],
-                "code": None,
-                "delta": _num(p["ref_ytd"]) - _num(p["prev_ytd"]),
-                "from": _num(p["prev_ytd"]),
-                "to": _num(p["ref_ytd"]),
-            }
-            for p in o["by_package"]
-        ]
-        figures["package_variation"] = fig_diverging(
-            sorted(variation, key=lambda r: -abs(r["delta"])), lb["base"], lb["main"]
-        )
-        deltas = [
-            {
-                "name": d["name"],
-                "code": d["code"],
-                "delta": _num(d["delta"]),
-                "from": _num(d["prev_ytd"]),
-                "to": _num(d["ref_ytd"]),
-            }
-            for d in o["account_deltas"]
-        ]
-        figures["account_deltas"] = fig_diverging(deltas, lb["base"], lb["main"])
     return figures

@@ -12,7 +12,7 @@ import { MONTHS, fmtCompact, fmtMoney, fmtPct } from "../labels";
 /**
  * Painel 2: o mesmo Painel (filtros, números, blocos e tabela), com os gráficos em Plotly montados no backend
  * (`services/painel_figures.py`, a partir de `/dashboard/overview?figures=true`). Existe para comparação com o
- * Painel em SVG; depois da escolha, uma das duas versões sai. Clique em mês, centro de custo ou pacote filtra.
+ * Painel em SVG; depois da escolha, uma das duas versões sai. Clique em mês ou centro de custo filtra.
  */
 type OverviewWithFigures = Overview & { figures: Record<string, Figure> };
 
@@ -28,8 +28,6 @@ const SECTIONS = [
   { key: "table", label: "Tabela por pacote, conta e centro de custo" },
   { key: "cumulative", label: "Total acumulado" },
   { key: "top", label: "Maiores centros de custo e contas" },
-  { key: "packages", label: "Pacotes GMD e variação por pacote" },
-  { key: "bridge", label: "Maiores aumentos e reduções por conta" },
   { key: "heatmap", label: "Mapa de calor" },
 ];
 
@@ -142,10 +140,6 @@ export default function Painel2() {
   const onCostCenter = useCallback((cd: unknown) => {
     const id = pick(cd, 3);
     if (id) setFilters((f) => ({ ...f, cost_center_id: String(id) }));
-  }, []);
-  const onPackage = useCallback((cd: unknown) => {
-    const id = pick(cd, 3);
-    if (id) setFilters((f) => ({ ...f, package_id: String(id) }));
   }, []);
 
   const base = useLoad(async () => {
@@ -286,7 +280,7 @@ export default function Painel2() {
             <div className="inline-controls">
               <span className="selection-note">
                 Selecionado: {mainLabel}{typesTxt}
-                {hasBase ? ` · base: ${baseLabel}` : ""} · clique num mês, centro de custo ou pacote para filtrar
+                {hasBase ? ` · base: ${baseLabel}` : ""} · clique num mês ou centro de custo para filtrar
               </span>
               <button type="button" className="btn btn-ghost btn-sm" aria-pressed={organizing} onClick={() => setOrganizing(!organizing)}>
                 {organizing ? "Concluir" : "Organizar painel"}
@@ -369,33 +363,6 @@ export default function Painel2() {
                   {o.top_accounts.length ? <PlotlyChart figure={f.top_accounts} ariaLabel="Maiores contas" /> : <Empty>Sem dados.</Empty>}
                 </Card>
               </div>,
-            )}
-
-            {shell("packages",
-              <div className="grid-2">
-                <Card title={`Por pacote GMD · ${mainLabel}`}>
-                  {hasBase && <p className="muted small">Barra fina: {baseLabel}. Clique num pacote para filtrar.</p>}
-                  {o.by_package.some((p) => Number(p.ref_ytd) || Number(p.prev_ytd)) ? (
-                    <PlotlyChart figure={f.packages} onClick={onPackage} ariaLabel="Por pacote GMD" />
-                  ) : (
-                    <Empty>Sem dados.</Empty>
-                  )}
-                </Card>
-                {hasBase && f.package_variation && (
-                  <Card title={`Variação por pacote · vs ${baseLabel}`}>
-                    <p className="muted small">
-                      De {fmtMoney(o.kpis.prev_ytd)} para {fmtMoney(o.kpis.ref_ytd)}: aumento em vermelho, redução em azul.
-                    </p>
-                    <PlotlyChart figure={f.package_variation} ariaLabel="Variação por pacote" />
-                  </Card>
-                )}
-              </div>,
-            )}
-
-            {hasBase && o.account_deltas.length > 0 && f.account_deltas && shell("bridge",
-              <Card title={`Maiores aumentos e reduções por conta · vs ${baseLabel}`}>
-                <PlotlyChart figure={f.account_deltas} ariaLabel="Maiores aumentos e reduções por conta" />
-              </Card>,
             )}
 
             {o.heatmap.rows.length > 0 && shell("heatmap",

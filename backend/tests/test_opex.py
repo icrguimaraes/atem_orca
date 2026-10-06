@@ -204,7 +204,8 @@ def test_chart_data(client, admin, run_worker):
 
     data = client.get("/api/v1/dashboard/overview", headers=admin).json()
     assert data["heatmap"]["year"] == 2026 and data["heatmap"]["rows"][0]["values"][0] == "1500.00"
-    deltas = {d["code"]: d["delta"] for d in data["account_deltas"]}
+    accounts = client.get("/api/v1/dashboard/breakdown?group_by=account", headers=admin).json()
+    deltas = {r["code"]: r["var"] for r in accounts["rows"]}
     assert deltas["6010301001"] == "800.00"  # 8×1000 (2026) − 8×900 (2025 até ago)
     progress = data["budget_progress"]
     assert progress["started_cost_centers"] == 1 and progress["status_counts"]["IN_PROGRESS"] == 1

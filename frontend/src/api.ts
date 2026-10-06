@@ -169,11 +169,9 @@ export interface Overview {
     annualized_vs_prev_pct: string | null; budget_total: string; budget_ytd: string; budget_consumption_pct: string | null;
   };
   monthly: { month: number; prev: string; ref: string; budget: string }[];
-  by_package: PackageRow[];
   top_cost_centers: Ranked[];
   top_accounts: Ranked[];
   heatmap: { year: number; years: number[]; rows: { id: number; code: string | null; name: string; values: string[]; total: string }[] };
-  account_deltas: { id: number; code: string | null; name: string; prev_ytd: string; ref_ytd: string; delta: string }[];
   budget_progress: BudgetProgress | null;
 }
 

@@ -17,7 +17,7 @@ import {
 import { useAuth } from "../auth";
 import { BudgetProgressCard } from "../components/BudgetProgressCard";
 import { FilterBar } from "../components/FilterBar";
-import { CumulativeChart, DivergingBars, Heatmap, Legend, MonthlyChart, SERIES, TopBars } from "../components/charts";
+import { CumulativeChart, Heatmap, Legend, MonthlyChart, SERIES, TopBars } from "../components/charts";
 import { DrillTable } from "../components/DrillTable";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import {
@@ -85,8 +85,6 @@ const SECTIONS = [
   { key: "table", label: "Tabela por pacote, conta e centro de custo" },
   { key: "cumulative", label: "Total acumulado" },
   { key: "top", label: "Maiores centros de custo e contas" },
-  { key: "packages", label: "Pacotes GMD e variação por pacote" },
-  { key: "bridge", label: "Maiores aumentos e reduções por conta" },
   { key: "heatmap", label: "Mapa de calor" },
 ];
 
@@ -511,58 +509,6 @@ export default function Home() {
               <RankChart rows={o.top_accounts} label={mainLabel} baseLabel={hasBase ? baseLabel : null} color={mainColor} baseColor={baseColor} />
             </Card>
           </div>,
-          )}
-
-          {shell("packages",
-          <div className="grid-2">
-            <Card title={`Por pacote GMD · ${mainLabel}`}>
-              {hasBase && <p className="muted small">Barra fina: {baseLabel}. Percentual: variação em relação à base.</p>}
-              {o.by_package.filter((p) => Number(p.ref_ytd) || Number(p.prev_ytd)).length ? (
-                <TopBars
-                  label={mainLabel}
-                  color={mainColor}
-                  prevColor={baseColor}
-                  prevLabel={hasBase ? baseLabel : null}
-                  rows={o.by_package
-                    .filter((p) => Number(p.ref_ytd) || Number(p.prev_ytd))
-                    .sort((a, b) => Number(b.ref_ytd) - Number(a.ref_ytd))
-                    .map((p) => ({
-                      label: p.package,
-                      value: Number(p.ref_ytd),
-                      prev: hasBase ? Number(p.prev_ytd) : undefined,
-                      note: hasBase && p.ytd_var_pct !== null ? fmtPct(p.ytd_var_pct) : undefined,
-                    }))}
-                />
-              ) : (
-                <Empty>Sem dados.</Empty>
-              )}
-            </Card>
-            {hasBase && o.by_package.length > 0 && (
-              <Card title={`Variação por pacote · vs ${baseLabel}`}>
-                <p className="muted small">
-                  De {fmtMoney(o.kpis.prev_ytd)} para {fmtMoney(o.kpis.ref_ytd)}: cada barra é o aumento (vermelho) ou a redução (azul) do pacote.
-                </p>
-                <DivergingBars
-                  fromLabel={baseLabel}
-                  toLabel={mainLabel}
-                  rows={o.by_package
-                    .map((p) => ({ label: p.package, delta: Number(p.ref_ytd) - Number(p.prev_ytd), from: Number(p.prev_ytd), to: Number(p.ref_ytd) }))
-                    .filter((p) => Math.abs(p.delta) > 0.5)
-                    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))}
-                />
-              </Card>
-            )}
-          </div>,
-          )}
-
-          {hasBase && o.account_deltas.length > 0 && shell("bridge",
-            <Card title={`Maiores aumentos e reduções por conta · vs ${baseLabel}`}>
-              <DivergingBars
-                fromLabel={baseLabel}
-                toLabel={mainLabel}
-                rows={o.account_deltas.map((d) => ({ label: d.name, sub: d.code, delta: Number(d.delta), from: Number(d.prev_ytd), to: Number(d.ref_ytd) }))}
-              />
-            </Card>,
           )}
 
           {o.heatmap.rows.length > 0 && shell("heatmap",
