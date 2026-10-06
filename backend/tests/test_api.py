@@ -118,3 +118,35 @@ def test_rule_endpoints(client, admin):
     ).json()
     assert what_if["current_annual"] == "336000.00" and what_if["projected_annual"] == "360000.00"
     assert what_if["ignored_multiplier_for"] == ["PJ"]
+
+
+def test_change_password_and_login_rate_limit(client, admin):
+    from tests.conftest import login
+
+    created = client.post(
+        "/api/v1/users",
+        headers=admin,
+        json={"email": "x@t.com", "name": "Usuário X", "password": "Senha@123", "roles": ["VIEWER"]},
+    )
+    assert created.status_code == 201, created.text
+    h = login(client, "x@t.com", "Senha@123")
+    bad = client.post(
+        "/api/v1/auth/change-password", headers=h, json={"current_password": "errada", "new_password": "NovaSenha@1"}
+    )
+    assert bad.status_code == 400
+    short = client.post(
+        "/api/v1/auth/change-password", headers=h, json={"current_password": "Senha@123", "new_password": "curta"}
+    )
+    assert short.status_code == 422
+    ok = client.post(
+        "/api/v1/auth/change-password", headers=h, json={"current_password": "Senha@123", "new_password": "NovaSenha@1"}
+    )
+    assert ok.status_code == 204
+    assert client.post("/api/v1/auth/login", json={"email": "x@t.com", "password": "Senha@123"}).status_code == 401
+    assert client.post("/api/v1/auth/login", json={"email": "x@t.com", "password": "NovaSenha@1"}).status_code == 200
+    # 5 falhas bloqueiam a 6ª tentativa, mesmo com a senha certa
+    for _ in range(5):
+        client.post("/api/v1/auth/login", json={"email": "bloq@t.com", "password": "x"})
+    assert client.post("/api/v1/auth/login", json={"email": "bloq@t.com", "password": "x"}).status_code == 429
+    r = client.get("/api/v1/auth/me", headers=h)
+    assert r.headers.get("x-content-type-options") == "nosniff" and r.headers.get("x-frame-options") == "DENY"

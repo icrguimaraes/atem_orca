@@ -60,6 +60,8 @@ ruff check . && ruff format --check .
 
 1. **New Project → Deploy from GitHub repo** apontando para este repositório (o `railway.json` usa o `Dockerfile` da raiz).
 2. **+ New → Database → PostgreSQL** no mesmo projeto.
+   O CI (`.github/workflows/ci.yml`) roda ruff, pytest (com PostgreSQL), verificação das migrações e o build do frontend a
+   cada push; configure o Railway para publicar só após o CI verde (*Settings → Deploy → Wait for CI*).
 3. No serviço da aplicação, em **Variables**:
 
 | Variável | Valor |
@@ -71,6 +73,17 @@ ruff check . && ruff format --check .
 
 4. **Volume**: em *Settings → Volumes*, monte um volume em `/data` (arquivos enviados ficam em `/data/uploads`).
 5. *Settings → Networking → Generate Domain*. O start executa `alembic upgrade head`, o seed e sobe o Uvicorn; healthcheck em `/api/health`.
+
+### Backup e restauração
+
+- **Banco**: o PostgreSQL do Railway tem backups automáticos (*Database → Backups*); para um backup manual use
+  `railway connect Postgres` e `pg_dump -Fc -f atem.dump`; restauração com `pg_restore -d $PGDATABASE --clean atem.dump`.
+- **Arquivos enviados** (`/data/uploads`): são os `.xlsx` importados, guardados para auditoria. O banco não depende deles
+  para funcionar (as linhas lidas ficam em `import_rows`). Para copiar: `railway ssh` → `tar czf - /data/uploads > uploads.tgz`.
+- **Teste de restauração**: suba um banco vazio, `pg_restore`, inicie o app (as migrações não alteram nada se já estiver
+  no `head`) e confira `/api/health` e o painel. Faça isso uma vez antes do fechamento do orçamento.
+
+### Worker de importação em serviço separado
 
 O worker de importação roda em thread no mesmo container. Para separar: crie um segundo serviço com a mesma imagem,
 comando `python -m app.worker`, e defina `RUN_IMPORT_WORKER=false` no serviço web.
