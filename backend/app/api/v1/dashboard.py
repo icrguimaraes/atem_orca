@@ -5,7 +5,7 @@ anteriores ficam no banco para auditoria, mas nunca somam no painel.
 """
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
@@ -448,37 +448,6 @@ def overview(
     annualizable = P.main == "actual" and len(P.years) == 1 and bool(ytd_cap)
     annualized = (actual_total * 12 / P.closed) if annualizable else None
 
-    # ---- série mensal (anos escolhidos somados mês a mês)
-    monthly = {m: {"month": m, "prev": ZERO, "ref": ZERO, "budget": ZERO} for m in range(1, 13)}
-    if P.compare:
-        for period, amount in f.sums(ActualEntry, P.prev_years, "period", max_period=P.base_cap):
-            monthly[int(period)]["prev"] = amount
-    for period, amount in f.sums(ActualEntry, P.years, "period"):
-        monthly[int(period)]["ref"] = amount
-    for period, amount in f.sums(ReferenceBudgetEntry, P.years, "period"):
-        monthly[int(period)]["budget"] = amount
-
-    # ---- rankings (CC e conta): série principal, com a base quando houver
-    def ranking(key, label_model, label_attrs):
-        cur = dict(f.sums(main_model, P.years, key))
-        base = _base_sums(f, P, key)
-        ids = sorted((k for k in cur if k is not None), key=lambda k: cur[k], reverse=True)[:10]
-        objs = {o.id: o for o in db.scalars(select(label_model).where(label_model.id.in_(ids)))} if ids else {}
-        rows = []
-        for i in ids:
-            o = objs.get(i)
-            rows.append(
-                {
-                    "id": i,
-                    "code": getattr(o, label_attrs[0], None),
-                    "name": getattr(o, label_attrs[1], None),
-                    "ref_ytd": _money(cur[i]),
-                    "prev_ytd": _money(base.get(i)),
-                    "ytd_var_pct": _pct(cur[i], base.get(i, ZERO)) if P.base_kind else None,
-                }
-            )
-        return rows
-
     data = {
         "reference_year": max(P.years),
         "previous_year": P.prev_years[0] if P.compare else None,
@@ -505,15 +474,61 @@ def overview(
             "budget_ytd": _money(budget_cmp),
             "budget_consumption_pct": _pct(actual_total, budget_cmp) if (P.main == "actual" and budget_cmp) else None,
         },
-        "monthly": [{k: (_money(v) if k != "month" else v) for k, v in row.items()} for row in monthly.values()],
-        "top_cost_centers": ranking("cost_center_id", CostCenter, ("code", "name")),
-        "top_accounts": ranking("account_id", Account, ("code", "name")),
+        "monthly": _monthly(f, P),
+        "top_cost_centers": _ranking(db, f, P, "cost_center_id", CostCenter),
+        "top_accounts": _ranking(db, f, P, "account_id", Account),
         "heatmap": _heatmap(db, f, main_model, P.years),
         "budget_progress": budget_progress(db, user, company_id, cost_center_id, package_id),
     }
     if figures:
-        data["figures"] = painel_figures.build(data)
+        # Painel 2, como o Power BI: o visual em que se clicou não é filtrado pela própria seleção — mostra todos
+        # os itens, com o escolhido em destaque (e clicável de novo para desmarcar); os outros visuais filtram.
+        all_months = replace(P, months=None)
+        f_months = Facts(db, user, company_id, cost_center_id, package_id, all_months, account_id=account_id)
+        f_ccs = Facts(db, user, company_id, None, package_id, P, account_id=account_id)
+        f_accounts = Facts(db, user, company_id, cost_center_id, package_id, P)
+        f_heat = Facts(db, user, company_id, None, package_id, all_months, account_id=account_id)
+        data["heatmap_all"] = _heatmap(db, f_heat, main_model, P.years)
+        data["figures"] = painel_figures.build(
+            data,
+            monthly=_monthly(f_months, all_months),
+            top_cost_centers=_ranking(db, f_ccs, P, "cost_center_id", CostCenter),
+            top_accounts=_ranking(db, f_accounts, P, "account_id", Account),
+            selected={"months": sorted(P.months or []), "cost_center_id": cost_center_id, "account_id": account_id},
+        )
     return data
+
+
+def _monthly(f: Facts, P: Period) -> list[dict]:
+    """Série mensal (anos escolhidos somados mês a mês): ano anterior (base), realizado e orçado."""
+    monthly = {m: {"month": m, "prev": ZERO, "ref": ZERO, "budget": ZERO} for m in range(1, 13)}
+    if P.compare:
+        for period, amount in f.sums(ActualEntry, P.prev_years, "period", max_period=P.base_cap):
+            monthly[int(period)]["prev"] = amount
+    for period, amount in f.sums(ActualEntry, P.years, "period"):
+        monthly[int(period)]["ref"] = amount
+    for period, amount in f.sums(ReferenceBudgetEntry, P.years, "period"):
+        monthly[int(period)]["budget"] = amount
+    return [{k: (_money(v) if k != "month" else v) for k, v in row.items()} for row in monthly.values()]
+
+
+def _ranking(db: Session, f: Facts, P: Period, key: str, label_model, limit: int = 10) -> list[dict]:
+    """Maiores itens (CC ou conta) na série principal, com a base de comparação quando houver."""
+    cur = dict(f.sums(_main_model(P), P.years, key))
+    base = _base_sums(f, P, key)
+    ids = sorted((k for k in cur if k is not None), key=lambda k: cur[k], reverse=True)[:limit]
+    objs = {o.id: o for o in db.scalars(select(label_model).where(label_model.id.in_(ids)))} if ids else {}
+    return [
+        {
+            "id": i,
+            "code": getattr(objs.get(i), "code", None),
+            "name": getattr(objs.get(i), "name", None),
+            "ref_ytd": _money(cur[i]),
+            "prev_ytd": _money(base.get(i)),
+            "ytd_var_pct": _pct(cur[i], base.get(i, ZERO)) if P.base_kind else None,
+        }
+        for i in ids
+    ]
 
 
 @router.get("/breakdown", summary="Tabela do painel com drill-down: pacote GMD → conta → centro de custo")

@@ -38,7 +38,8 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   barras, linhas e pizza; carregado só na Análise e no Painel 2). Novos gráficos: nova função `fig_*` + chave em `dashboard()['figures']`.
 - Painel 2 (`pages/Painel2.tsx`, `/painel-2`): o Painel em Plotly para comparação — mesmos números de `/dashboard/overview`,
   figuras em `services/painel_figures.py` (`overview?figures=true`, filtro extra `account_id`); tooltip próprio via `meta.tooltip`
-  + linhas no fim do `customdata`; clique nos visuais filtra e "Limpar filtros" reseta. Depois da escolha, uma versão sai.
+  + linhas no fim do `customdata`; clique nos visuais filtra (o visual clicado destaca em vez de se filtrar — séries sem o
+  próprio filtro e `heatmap_all`; novo clique desmarca) e "Limpar filtros" reseta. Depois da escolha, uma versão sai.
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

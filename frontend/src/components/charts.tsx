@@ -456,10 +456,14 @@ export function Waterfall({
 }
 
 /** Mapa de calor (linhas × 12 meses), escala sequencial de um só tom. */
-export function Heatmap({ rows, budget = false, onSelect }: {
+export function Heatmap({ rows, budget = false, onSelect, selectedRow = null, selectedMonths = [] }: {
   rows: { label: string; sub?: string | null; values: number[]; total: number }[]; budget?: boolean;
   onSelect?: (row: number, month: number | null) => void;
+  /** destaque (Painel 2): linha e meses escolhidos em cor cheia, o resto esmaecido */
+  selectedRow?: number | null; selectedMonths?: number[];
 }) {
+  const faded = (ri: number, month: number | null) =>
+    (selectedRow !== null && ri !== selectedRow) || (month !== null && selectedMonths.length > 0 && !selectedMonths.includes(month));
   const max = Math.max(1, ...rows.flatMap((r) => r.values));
   const [lo, hi] = budget ? ["var(--seqg-lo)", "var(--seqg-hi)"] : ["var(--seq-lo)", "var(--seq-hi)"]; // verde = orçamento
   const shade = (v: number) =>
@@ -477,12 +481,13 @@ export function Heatmap({ rows, budget = false, onSelect }: {
         <tbody>
           {rows.map((r, ri) => (
             <tr key={r.label + (r.sub ?? "")}>
-              <th className="hm-label" title={onSelect ? `Filtrar por ${r.label}` : r.label} onClick={onSelect ? () => onSelect(ri, null) : undefined}>
+              <th className="hm-label" title={onSelect ? `Filtrar por ${r.label}` : r.label} onClick={onSelect ? () => onSelect(ri, null) : undefined}
+                  style={faded(ri, null) ? { opacity: 0.45 } : undefined}>
                 <span>{r.label}</span>
                 {r.sub && <span className="muted small mono">{r.sub}</span>}
               </th>
               {r.values.map((v, i) => (
-                <td key={i} style={{ background: shade(v), color: v / max > 0.55 ? "var(--seq-ink-strong)" : "var(--text)" }}
+                <td key={i} style={{ background: shade(v), color: v / max > 0.55 ? "var(--seq-ink-strong)" : "var(--text)", opacity: faded(ri, i + 1) ? 0.3 : 1 }}
                     title={`${r.label} · ${MONTHS[i]}: ${fmtMoney(v)}`} onClick={onSelect ? () => onSelect(ri, i + 1) : undefined}>
                   {v > 0 ? fmtCompact(v).replace("R$ ", "") : ""}
                 </td>

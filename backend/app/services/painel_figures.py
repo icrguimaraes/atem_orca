@@ -65,7 +65,7 @@ def _labels(o: dict) -> dict:
     }
 
 
-def fig_monthly(o: dict) -> dict:
+def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | None = None) -> dict:
     """Comparativo mensal: colunas lado a lado (ano anterior, realizado, orçado) em cor sólida, com o valor em cada
     coluna quando cabe. customdata = [valor, mês (o clique filtra), linhas do tooltip]."""
     lb = _labels(o)
@@ -76,7 +76,10 @@ def fig_monthly(o: dict) -> dict:
         series.append(("ref", lb["actual"], REALIZADO))
     if o["has_budget"]:
         series.append(("budget", lb["budget"], ORCADO))
-    values_by = {key: [_num(r[key]) for r in o["monthly"]] for key, _, _ in series}
+    rows = monthly or o["monthly"]
+    picked = set(months or [])
+    opacity = [1.0 if (not picked or m in picked) else 0.3 for m in range(1, 13)]
+    values_by = {key: [_num(r[key]) for r in rows] for key, _, _ in series}
     zeros = [0.0] * 12
     data, everything = [], []
     for key, name, color in series:
@@ -97,11 +100,11 @@ def fig_monthly(o: dict) -> dict:
                 x=list(MONTHS),
                 y=values,
                 name=name,
-                marker={"color": color, "cornerradius": 4},
+                marker={"color": color, "cornerradius": 4, "opacity": opacity},
                 text=[_short(v) if v > 0 else "" for v in values],
                 textposition="outside",
                 cliponaxis=False,
-                textfont={"size": 11, "color": INK[color]},
+                textfont={"size": 11, "color": [INK[color] if a == 1.0 else _rgba(INK[color], 0.4) for a in opacity]},
                 customdata=[[fmt_money(v), m, t] for m, (v, t) in enumerate(zip(values, tips, strict=True), start=1)],
                 hovertemplate=name + ": <b>%{customdata[0]}</b><extra></extra>",
             )
@@ -207,7 +210,7 @@ def fig_cumulative(o: dict) -> dict:
     return _fig(data, layout) | {"meta": {"tooltip": "unified"}}
 
 
-def fig_rank(rows: list[dict], lb: dict, show_base: bool) -> dict:
+def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None = None) -> dict:
     """Barras horizontais do maior para o menor, em cor sólida; com base, barra fina abaixo de cada barra e a variação
     % no texto. As barras usam a largura útil inteira (valor e variação ficam na margem direita).
     customdata = [valor, base, variação, id (o clique filtra), linhas do tooltip]; a barra fina usa o mesmo."""
@@ -216,6 +219,7 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool) -> dict:
     values = [_num(r["value"]) for r in rows]
     bases = [_num(r.get("base")) for r in rows]
     variations = [fmt_pct(r["var_pct"]) if r.get("var_pct") is not None else "—" for r in rows]
+    opacity = [1.0 if (selected is None or r.get("id") == selected) else 0.3 for r in rows]
 
     def text(value: float, var) -> str:
         out = f"<b>{fmt_compact(value)}</b>"
@@ -246,7 +250,7 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool) -> dict:
             name=lb["main"],
             width=0.6,
             offset=-0.42 if show_base else -0.3,
-            marker={"color": lb["main_color"], "cornerradius": 4},
+            marker={"color": lb["main_color"], "cornerradius": 4, "opacity": opacity},
             text=[text(v, r.get("var_pct")) for v, r in zip(values, rows, strict=True)],
             textposition="outside",
             cliponaxis=False,
@@ -264,7 +268,7 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool) -> dict:
                 name=lb["base"],
                 width=0.16,
                 offset=0.24,
-                marker={"color": lb["base_color"], "cornerradius": 3},
+                marker={"color": lb["base_color"], "cornerradius": 3, "opacity": opacity},
                 customdata=customdata,
                 hovertemplate=hover + "<extra></extra>",
             )
@@ -273,7 +277,7 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool) -> dict:
     layout = _layout(
         barmode="overlay",
         showlegend=False,
-        height=max(220, 44 * len(rows) + 30),
+        height=max(120, 44 * len(rows) + 30),
         xaxis={
             "showticklabels": False,
             "showgrid": False,
@@ -287,8 +291,17 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool) -> dict:
     return _fig(data, layout) | {"meta": {"tooltip": "point"}}
 
 
-def build(o: dict) -> dict:
-    """Todas as figuras do Painel 2 a partir da resposta de `/dashboard/overview`."""
+def build(
+    o: dict,
+    monthly: list[dict] | None = None,
+    top_cost_centers: list[dict] | None = None,
+    top_accounts: list[dict] | None = None,
+    selected: dict | None = None,
+) -> dict:
+    """Todas as figuras do Painel 2 a partir da resposta de `/dashboard/overview`. `monthly`, `top_cost_centers` e
+    `top_accounts` podem vir sem o filtro do próprio visual (mês, CC, conta): aí o visual mostra todos os itens e
+    `selected` diz quais destacar."""
+    selected = selected or {}
     lb = _labels(o)
     show_base = bool(o["period"]["base_kind"])
 
@@ -306,9 +319,19 @@ def build(o: dict) -> dict:
         ]
 
     figures = {
-        "monthly": fig_monthly(o),
+        "monthly": fig_monthly(o, monthly, selected.get("months")),
         "cumulative": fig_cumulative(o),
-        "top_cost_centers": fig_rank(ranked(o["top_cost_centers"]), lb, show_base),
-        "top_accounts": fig_rank(ranked(o["top_accounts"]), lb, show_base),
+        "top_cost_centers": fig_rank(
+            ranked(o["top_cost_centers"] if top_cost_centers is None else top_cost_centers),
+            lb,
+            show_base,
+            selected.get("cost_center_id"),
+        ),
+        "top_accounts": fig_rank(
+            ranked(o["top_accounts"] if top_accounts is None else top_accounts),
+            lb,
+            show_base,
+            selected.get("account_id"),
+        ),
     }
     return figures

@@ -14,7 +14,8 @@ import { MONTHS, fmtCompact, fmtMoney, fmtPct } from "../labels";
  * (`services/painel_figures.py`, a partir de `/dashboard/overview?figures=true`). Existe para comparação com o
  * Painel em SVG; depois da escolha, uma das duas versões sai. Clique nos gráficos e na tabela filtra; "Limpar filtros" volta ao início.
  */
-type OverviewWithFigures = Overview & { figures: Record<string, Figure> };
+// heatmap_all: mapa sem o filtro de CC e mês (o próprio visual destaca a seleção em vez de se filtrar)
+type OverviewWithFigures = Overview & { figures: Record<string, Figure>; heatmap_all?: Overview["heatmap"] };
 
 const ORDER_KEY = "atem.painel2.order";
 const MONTH_FULL = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
@@ -140,19 +141,24 @@ export default function Painel2() {
     const m = pick(cd, 1);
     if (m && m >= 1 && m <= 12) toggleMonth(m);
   }, [toggleMonth]);
+  // clicar de novo no item escolhido desmarca (como no Power BI)
+  const toggleCostCenter = useCallback((id: number) => {
+    setFilters((f) => ({ ...f, cost_center_id: f.cost_center_id === String(id) ? "" : String(id) }));
+  }, []);
   const onCostCenter = useCallback((cd: unknown) => {
     const id = pick(cd, 3);
-    if (id) setFilters((f) => ({ ...f, cost_center_id: String(id) }));
-  }, []);
+    if (id) toggleCostCenter(id);
+  }, [toggleCostCenter]);
   const onAccount = useCallback((cd: unknown, label: string) => {
     const id = pick(cd, 3);
-    if (id) setAccount({ id, label });
+    if (id) setAccount((a) => (a?.id === id ? null : { id, label }));
   }, []);
   function onTableRow(level: number, row: BreakdownRow) {
     if (row.id === null) return;
-    if (level === 0) setFilters((f) => ({ ...f, package_id: String(row.id) }));
-    else if (level === 1) setAccount({ id: row.id, label: row.code ? `${row.name} · ${row.code}` : row.name });
-    else setFilters((f) => ({ ...f, cost_center_id: String(row.id) }));
+    const id = row.id;
+    if (level === 0) setFilters((f) => ({ ...f, package_id: f.package_id === String(id) ? "" : String(id) }));
+    else if (level === 1) setAccount((a) => (a?.id === id ? null : { id, label: row.code ? `${row.name} · ${row.code}` : row.name }));
+    else toggleCostCenter(id);
   }
   function clearAll() {
     setFilters({ company_id: "", cost_center_id: "", package_id: "" });
@@ -202,10 +208,18 @@ export default function Painel2() {
   const hasData = Boolean(o && (o.has_actual || o.has_budget));
   const shownYears = years.length ? years : (o?.selected_years ?? []);
   const filtered = Boolean(filters.company_id || filters.cost_center_id || filters.package_id || account || modules.length);
-  // os dois rankings lado a lado com a mesma altura: o de menos linhas usa o card inteiro
-  const rankHeight = f
+  // os dois rankings lado a lado com a mesma altura quando têm tamanhos parecidos (o menor ocupa o card inteiro);
+  // com tamanhos muito diferentes, cada um fica com a sua altura (uma linha não vira uma barra gigante)
+  const rows = (fig?: Figure) => ((fig?.data[0] as { y?: unknown[] } | undefined)?.y ?? []).length;
+  const [rowsCC, rowsAcc] = [rows(f?.top_cost_centers), rows(f?.top_accounts)];
+  const rankHeight = f && Math.min(rowsCC, rowsAcc) >= 0.6 * Math.max(rowsCC, rowsAcc)
     ? Math.max(Number(f.top_cost_centers?.layout.height ?? 0), Number(f.top_accounts?.layout.height ?? 0)) || undefined
     : undefined;
+  const heat = o?.heatmap_all ?? o?.heatmap;
+  const heatSelected = heat && filters.cost_center_id ? heat.rows.findIndex((r) => String(r.id) === filters.cost_center_id) : -1;
+  const unpick = (label: string, clear: () => void) => (
+    <button type="button" className="btn btn-ghost btn-sm" onClick={clear}>{label}</button>
+  );
 
   return (
     <>
@@ -380,35 +394,43 @@ export default function Painel2() {
 
           <div className="section-stack">
             {shell("monthly",
-              <Card title="Comparativo mensal">
+              <Card title="Comparativo mensal" actions={months.length ? unpick("Desmarcar meses", () => setMonths([])) : undefined}>
                 <PlotlyChart figure={f.monthly} height={360} onClick={onMonth} ariaLabel="Comparativo mensal" />
               </Card>,
             )}
 
             {shell("table",
-              <Card title={`Por pacote GMD, conta e centro de custo · ${mainLabel}${typesTxt}`}>
+              <Card
+                title={`Por pacote GMD, conta e centro de custo · ${mainLabel}${typesTxt}`}
+                actions={filters.package_id || account || filters.cost_center_id
+                  ? unpick("Desmarcar", () => { setFilters((cur) => ({ ...cur, package_id: "", cost_center_id: "" })); setAccount(null); })
+                  : undefined}
+              >
                 <DrillTable query={query} refLabel={mainLabel} onSelect={onTableRow} />
               </Card>,
             )}
 
             {shell("cumulative",
-              <Card title={`Total acumulado · ${mainLabel}`}>
+              <Card title={`Total acumulado · ${mainLabel}`} actions={months.length ? unpick("Desmarcar meses", () => setMonths([])) : undefined}>
                 <PlotlyChart figure={f.cumulative} height={340} onClick={onMonth} ariaLabel="Total acumulado" />
               </Card>,
             )}
 
             {shell("top",
               <div className="grid-2">
-                <Card title={`Maiores centros de custo · ${mainLabel}`}>
-                  <p className="muted small">{hasBase ? `Barra fina: ${baseLabel}. ` : ""}Clique num centro de custo para filtrar.</p>
+                <Card
+                  title={`Maiores centros de custo · ${mainLabel}`}
+                  actions={filters.cost_center_id ? unpick("Desmarcar", () => setFilters((cur) => ({ ...cur, cost_center_id: "" }))) : undefined}
+                >
+                  <p className="muted small">{hasBase ? `Barra fina: ${baseLabel}. ` : ""}Clique num centro de custo para filtrar; de novo para desmarcar.</p>
                   {o.top_cost_centers.length ? (
                     <PlotlyChart figure={f.top_cost_centers} height={rankHeight} onClick={onCostCenter} ariaLabel="Maiores centros de custo" />
                   ) : (
                     <Empty>Sem dados.</Empty>
                   )}
                 </Card>
-                <Card title={`Maiores contas · ${mainLabel}`}>
-                  <p className="muted small">{hasBase ? `Barra fina: ${baseLabel}. ` : ""}Clique numa conta para filtrar.</p>
+                <Card title={`Maiores contas · ${mainLabel}`} actions={account ? unpick("Desmarcar", () => setAccount(null)) : undefined}>
+                  <p className="muted small">{hasBase ? `Barra fina: ${baseLabel}. ` : ""}Clique numa conta para filtrar; de novo para desmarcar.</p>
                   {o.top_accounts.length ? (
                     <PlotlyChart figure={f.top_accounts} height={rankHeight} onClick={onAccount} ariaLabel="Maiores contas" />
                   ) : (
@@ -418,16 +440,27 @@ export default function Painel2() {
               </div>,
             )}
 
-            {o.heatmap.rows.length > 0 && shell("heatmap",
-              <Card title={`Mapa de calor · maiores centros de custo × mês (${mainLabel})`}>
-                <p className="muted small">Clique numa célula para filtrar por centro de custo e mês; no nome, só pelo centro de custo.</p>
+            {heat && heat.rows.length > 0 && shell("heatmap",
+              <Card
+                title={`Mapa de calor · maiores centros de custo × mês (${mainLabel})`}
+                actions={filters.cost_center_id || months.length
+                  ? unpick("Desmarcar", () => { setFilters((cur) => ({ ...cur, cost_center_id: "" })); setMonths([]); })
+                  : undefined}
+              >
+                <p className="muted small">Clique numa célula para filtrar por centro de custo e mês; no nome, só pelo centro de custo. De novo para desmarcar.</p>
                 <Heatmap
                   budget={isBudgetMain}
-                  rows={o.heatmap.rows.map((r) => ({ label: r.name, sub: r.code, values: r.values.map(Number), total: Number(r.total) }))}
+                  rows={heat.rows.map((r) => ({ label: r.name, sub: r.code, values: r.values.map(Number), total: Number(r.total) }))}
+                  selectedRow={heatSelected >= 0 ? heatSelected : null}
+                  selectedMonths={months}
                   onSelect={(ri, m) => {
-                    const row = o.heatmap.rows[ri];
-                    if (row) setFilters((cur) => ({ ...cur, cost_center_id: String(row.id) }));
-                    if (m) toggleMonth(m);
+                    const row = heat.rows[ri];
+                    if (!row) return;
+                    if (m === null) toggleCostCenter(row.id);  // nome: marca/desmarca o CC
+                    else {
+                      setFilters((cur) => ({ ...cur, cost_center_id: String(row.id) }));
+                      toggleMonth(m);
+                    }
                   }}
                 />
               </Card>,

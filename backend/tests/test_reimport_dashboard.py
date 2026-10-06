@@ -238,6 +238,23 @@ def test_painel2_figures(client, admin, run_worker):
     cumulative = {t["name"]: t for t in figs["cumulative"]["data"]}
     assert cumulative["Realizado 2026 até AGO"]["y"][-1] == 430.0
 
+    # destaque estilo Power BI: com um CC escolhido, os números seguem filtrados, mas o ranking de CCs mostra todos,
+    # com os outros esmaecidos (o escolhido continua clicável para desmarcar)
+    cc_b = next(c for c in client.get("/api/v1/cost-centers", headers=admin).json() if c["code"] == "1050101012")
+    picked = client.get(
+        f"/api/v1/dashboard/overview?years=2026&figures=true&cost_center_id={cc_b['id']}", headers=admin
+    )
+    picked = picked.json()
+    assert picked["kpis"]["ref_ytd"] == "80.00"
+    ranking = picked["figures"]["top_cost_centers"]["data"][0]
+    assert len(ranking["y"]) == 2 and ranking["marker"]["opacity"] == [0.3, 1.0]
+    assert [r["code"] for r in picked["heatmap_all"]["rows"]] == ["1050101011", "1050101012"]
+    # com um mês escolhido, o comparativo mensal mostra os 12 meses e esmaece os outros
+    jan = client.get("/api/v1/dashboard/overview?years=2026&figures=true&months=1", headers=admin).json()
+    assert jan["kpis"]["ref_ytd"] == "110.00"
+    real_jan = next(t for t in jan["figures"]["monthly"]["data"] if t["name"] == "Realizado 2026")
+    assert real_jan["y"][1] == 210.0 and real_jan["marker"]["opacity"][:2] == [1.0, 0.3]
+
 
 def test_breakdown_drills_into_accounts_without_package(client, admin, run_worker):
     """A linha "Sem pacote" da tabela do painel também abre (contas sem pacote → centros de custo)."""
