@@ -18,6 +18,7 @@ test("análise: filtros, drill-down e controles dos gráficos", async ({ page })
     const b = await bars.nth(i).boundingBox();
     if (b && b.height > 2) box = b;
   }
+  test.skip(!box, "sem barras com valor no comparativo (base sem orçamento lançado)");
   if (box) {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
@@ -35,6 +36,7 @@ test("consolidação: exportar Excel e abrir o CC a partir da matriz", async ({ 
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("text=Exportar Excel")]);
   expect(download.suggestedFilename()).toMatch(/^Orcamento_\d{4}_v.+\.xlsx$/);
   const first = page.locator(".table a .badge").first(); // matriz CC × módulos (links para o CC)
+  test.skip(!(await first.isVisible()), "matriz CC × módulos vazia (sem centros de custo)");
   if (await first.isVisible()) {
     await first.scrollIntoViewIfNeeded();
     await first.click();
@@ -60,7 +62,7 @@ test("orçamento OPEX: baixar o template preenchido do CC", async ({ page }) => 
   await login(page);
   await page.goto("/orcamento");
   const first = page.locator(".table a").first();
-  if (!(await first.isVisible())) return; // sem CC carregado
+  test.skip(!(await first.isVisible()), "lista OPEX vazia (sem centros de custo)");
   await first.click();
   await expect(page).toHaveURL(/\/orcamento\/\d+/);
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("button:has-text('Baixar template (Excel)')")]);

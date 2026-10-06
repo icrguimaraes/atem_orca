@@ -202,8 +202,9 @@ def build(db: Session, ctx: Context, version: BudgetVersion, visible: set[int] |
         scope &= visible
     if f.company_id:
         scope &= {c.id for c in ccs.values() if c.company_id == f.company_id}
-    if f.department_id:
-        scope &= {c.id for c in ccs.values() if c.department_id == f.department_id}
+    if f.department_id:  # -1 = centros de custo sem diretoria
+        wanted = None if f.department_id == -1 else f.department_id
+        scope &= {c.id for c in ccs.values() if c.department_id == wanted}
     if f.cost_center_id:
         scope &= {f.cost_center_id}
     package_accounts = {a.code for a in accounts.values() if a.package_id == f.package_id} if f.package_id else None
@@ -290,7 +291,7 @@ def group(base: Base, dim: str) -> list[dict]:
         if dim == "company":
             key, label = c.company_id, c.company
         elif dim == "department":
-            key, label = c.department_id or 0, c.department
+            key, label = c.department_id or -1, c.department
         elif dim == "cost_center":
             key, label = c.cost_center_id, f"{c.cc_name}"
         elif dim == "account":

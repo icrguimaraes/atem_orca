@@ -21,8 +21,8 @@ from app.imports.base import (
     Sheet,
     clean_code,
     clean_str,
-    is_system_export,
     norm,
+    system_export,
     to_decimal,
 )
 from app.imports.parsers.financial import parse_wide
@@ -33,6 +33,9 @@ KEY = re.compile(r"^(\d{3,10})-(\d*)-(\d{3,20})-(\d{4,20})$")
 DESCRIPTION_HEADERS = ("detalhamento", "objetivo da viagem", "objetivo do evento")
 SUPPLIER_HEADERS = ("fornecedor",)
 NOTE_HEADERS = ("justificativa", "observacoes", "finalidade")
+CONTRACT_MANAGER_HEADERS = ("gestor do contrato",)
+DETAIL_HEADERS = ("produto/servico", "produto / servico", "detalhamento da conta")
+ASSUMPTION_HEADERS = ("premissa",)
 
 
 def is_opex_template(sheets: list[Sheet]) -> bool:
@@ -71,6 +74,13 @@ def _header(sheet: Sheet) -> tuple[int, dict[int, int], int, dict[str, int], boo
 
 
 def _find(others: dict[str, int], prefixes: tuple[str, ...], before: int) -> int | None:
+    for text, col in others.items():
+        if col < before and any(text.startswith(p) for p in prefixes) and not text.startswith("detalhamento da conta"):
+            return col
+    return None
+
+
+def _find_exact(others: dict[str, int], prefixes: tuple[str, ...], before: int) -> int | None:
     for text, col in others.items():
         if col < before and any(text.startswith(p) for p in prefixes):
             return col
@@ -112,6 +122,7 @@ def _travel_header(sheet: Sheet) -> tuple[int, dict[str, int]] | None:
                     cols[key] = col
                     break
         if {"purpose", "departure_month", "lodging"} <= set(cols):
+            cols["_keys"] = [c for c, t in enumerate(texts, start=1) if t == "chave"]  # type: ignore[assignment]
             return idx, cols
     return None
 
@@ -154,8 +165,14 @@ def parse_travel_rows(sheet: Sheet, result: ParseResult) -> int:
         days = to_decimal_safe(get(row, "days"))
         cc = clean_code(get(row, "cost_center"))
         branch = clean_code(get(row, "branch"), 4)
+        company = "1001"
+        for key_col in cols.get("_keys") or []:  # empresa vem da CHAVE (empresa-filial-cc-conta), se resolvida
+            m = KEY.match(clean_str(row[key_col - 1]) or "") if key_col - 1 < len(row) else None
+            if m:
+                company = m.group(1)
+                break
         rec.data = {
-            "company": "1001",
+            "company": company,
             "branch": branch if branch and branch.strip("0") else None,
             "branch_name": clean_str(get(row, "branch_name")),
             "cost_center": cc if cc and cc.strip("0") else None,
@@ -232,6 +249,9 @@ def parse_package_sheet(sheet: Sheet, result: ParseResult) -> int:
     desc_col = _find(others, DESCRIPTION_HEADERS, first_month)
     supplier_col = _find(others, SUPPLIER_HEADERS, first_month)
     note_col = _find(others, NOTE_HEADERS, first_month)
+    manager_col = _find(others, CONTRACT_MANAGER_HEADERS, first_month)
+    detail_col = _find_exact(others, DETAIL_HEADERS, first_month)
+    assumption_col = _find(others, ASSUMPTION_HEADERS, first_month)
     match = PACKAGE_SHEET.match(sheet.name)
     package_hint = match.group(2).strip() if match else sheet.name
 
@@ -273,6 +293,9 @@ def parse_package_sheet(sheet: Sheet, result: ParseResult) -> int:
             "description": clean_str(get(row, desc_col)) if desc_col else None,
             "supplier": clean_str(get(row, supplier_col)) if supplier_col else None,
             "justification": clean_str(get(row, note_col)) if note_col else None,
+            "contract_manager": clean_str(get(row, manager_col)) if manager_col else None,
+            "account_detail": clean_str(get(row, detail_col)) if detail_col else None,
+            "assumption": clean_str(get(row, assumption_col)) if assumption_col else None,
             "package_hint": package_hint,
             "values": values,
         }
@@ -350,7 +373,7 @@ def parse_opex_template(sheets: list[Sheet], options: dict) -> ParseResult:
         },
         "budget_by_sheet": {k: v for k, v in per_sheet.items() if v},
         "actual_year": actual.meta.get("year"),
-        "system_export": is_system_export(sheets),
+        "system_export": system_export(sheets),
     }
     if not per_sheet or not any(per_sheet.values()):
         result.structural.append(

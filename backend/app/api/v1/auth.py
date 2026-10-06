@@ -18,10 +18,15 @@ from app.services import audit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Limite de tentativas de login: 5 falhas por e-mail ou IP em 15 min → bloqueio de 15 min (em memória, por processo)
-MAX_FAILURES, WINDOW_SECONDS = 5, 15 * 60
+# Limite de tentativas de login (em memória, por processo): 5 falhas por e-mail em 15 min bloqueiam o e-mail;
+# por IP o limite é bem maior (escritórios atrás de um único NAT) e serve só contra varredura em massa.
+MAX_FAILURES, MAX_FAILURES_PER_IP, WINDOW_SECONDS, MAX_KEYS = 5, 50, 15 * 60, 10_000
 _failures: dict[str, deque[float]] = {}
 _lock = threading.Lock()
+
+
+def _limit(key: str) -> int:
+    return MAX_FAILURES_PER_IP if key.startswith("ip:") else MAX_FAILURES
 
 
 def _blocked(*keys: str) -> bool:
@@ -33,7 +38,7 @@ def _blocked(*keys: str) -> bool:
                 continue
             while q and now - q[0] > WINDOW_SECONDS:
                 q.popleft()
-            if len(q) >= MAX_FAILURES:
+            if len(q) >= _limit(key):
                 return True
     return False
 
@@ -43,6 +48,11 @@ def _register_failure(*keys: str) -> None:
     with _lock:
         for key in keys:
             _failures.setdefault(key, deque()).append(now)
+        if len(_failures) > MAX_KEYS:  # poda: fora da janela primeiro, depois as chaves mais antigas
+            for key in [k for k, q in _failures.items() if not q or now - q[-1] > WINDOW_SECONDS]:
+                _failures.pop(key, None)
+            for key in list(_failures)[: max(0, len(_failures) - MAX_KEYS)]:
+                _failures.pop(key, None)
 
 
 def _clear_failures(*keys: str) -> None:

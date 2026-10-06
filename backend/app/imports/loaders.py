@@ -586,9 +586,25 @@ def load_macro(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
     return {"assumptions": len(payload)}
 
 
-def _full_replace(batch: ImportBatch) -> bool:
-    """Planilha exportada pelo sistema: substitui todos os lançamentos do CC (não só os de template)."""
-    return bool(((batch.summary or {}).get("meta") or {}).get("system_export"))
+def _detail_id(db: Session, account_id: int, name: str | None) -> int | None:
+    if not name:
+        return None
+    from app.models import AccountDetail
+
+    return db.scalar(select(AccountDetail.id).where(AccountDetail.account_id == account_id, AccountDetail.name == name))
+
+
+def _has_errors(db: Session, batch_id: int, cc_code: str) -> bool:
+    rows = db.scalars(select(ImportRow).where(ImportRow.batch_id == batch_id, ImportRow.status == "ERROR")).all()
+    return any((r.data or {}).get("cost_center") == cc_code for r in rows)
+
+
+def _full_replace(batch: ImportBatch, cc_code: str) -> bool:
+    """Planilha exportada pelo sistema: substitui todos os lançamentos do CC exportado (não só os de
+    template). A prévia (`compare._full_replace_ok`) já barrou erros e versão divergente; aqui só se confere
+    que o CC é o do marcador e que nenhuma linha dele ficou em erro."""
+    export = ((batch.summary or {}).get("meta") or {}).get("system_export") or {}
+    return export.get("cost_center") == cc_code
 
 
 def load_opex_template(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
@@ -611,7 +627,6 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
     rows = _rows(db, batch.id, "BUDGET_LINE") + _rows(db, batch.id, "TRAVEL")
     if not rows:
         return {}
-    full_replace = _full_replace(batch)
     ctx = opex_svc.context(db)
     if ctx.frozen:
         return {"skipped": f"versão {ctx.version.label} congelada"}
@@ -627,8 +642,11 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
         if sub.status not in EDITABLE or ctx.frozen:
             stats["cost_centers_locked"] += 1
             continue
+        full_replace = _full_replace(batch, cc_code) and not _has_errors(db, batch.id, cc_code)
         for old in db.scalars(select(BudgetLine).where(BudgetLine.submission_id == sub.id)):
-            if full_replace or (old.attributes or {}).get("source") == "TEMPLATE":
+            # exportação do sistema: substitui lançamentos e viagens; eventos (calculados) ficam, porque a
+            # planilha os traz só para leitura (aba "Eventos (leitura)")
+            if (full_replace and old.line_type != "EVENT") or (old.attributes or {}).get("source") == "TEMPLATE":
                 db.delete(old)
                 stats["lines_replaced"] += 1
         total = Decimal("0")
@@ -658,6 +676,9 @@ def load_budget_lines(db: Session, batch: ImportBatch, user_id: int | None) -> d
                 description=d.get("description"),
                 supplier=d.get("supplier"),
                 justification=d.get("justification"),
+                contract_manager=d.get("contract_manager"),
+                assumption=d.get("assumption"),
+                account_detail_id=_detail_id(db, acc.id, d.get("account_detail")),
                 attributes={"source": "TEMPLATE", "sheet": row.sheet, "row": row.row_number, "import_batch": batch.id},
                 created_by=user_id,
                 updated_by=user_id,
@@ -733,7 +754,6 @@ def load_capex_items(db: Session, batch: ImportBatch, user_id: int | None) -> di
     ctx = opex_svc.context(db)
     if ctx.frozen:
         return {"skipped": f"versão {ctx.version.label} congelada"}
-    full_replace = _full_replace(batch)
     companies = {c.code: c.id for c in db.scalars(select(Company))}
     accounts = {a.code: a.id for a in db.scalars(select(Account))}
     assets = {i.name.upper(): i.id for i in db.scalars(select(AssetItem))}
@@ -748,6 +768,7 @@ def load_capex_items(db: Session, batch: ImportBatch, user_id: int | None) -> di
         if sub.status not in EDITABLE or ctx.frozen:
             stats["cost_centers_locked"] += 1
             continue
+        full_replace = _full_replace(batch, cc_code) and not _has_errors(db, batch.id, cc_code)
         for old in db.scalars(select(CapexProject).where(CapexProject.submission_id == sub.id)):
             if full_replace or (old.attributes or {}).get("source") == "TEMPLATE":
                 db.delete(old)
@@ -756,11 +777,12 @@ def load_capex_items(db: Session, batch: ImportBatch, user_id: int | None) -> di
         groups: dict[tuple, list[ImportRow]] = defaultdict(list)
         for row in cc_rows:
             d = row.data
-            key = (
-                ("P", d.get("branch"), d.get("project_type"), (d.get("justification") or "").strip().upper())
-                if d["is_project"]
-                else ("A", row.row_number)
-            )
+            if d.get("request"):  # planilha exportada pelo sistema: a coluna SOLICITAÇÃO preserva o agrupamento
+                key = ("R", d["request"].strip().upper())
+            elif d["is_project"]:
+                key = ("P", d.get("branch"), d.get("project_type"), (d.get("justification") or "").strip().upper())
+            else:
+                key = ("A", row.row_number)
             groups[key].append(row)
         total = Decimal("0")
         for group in groups.values():
@@ -770,7 +792,7 @@ def load_capex_items(db: Session, batch: ImportBatch, user_id: int | None) -> di
                 branch_id = db.scalar(
                     select(Branch.id).where(Branch.company_id == company_id, Branch.code == first["branch"])
                 )
-            title = first.get("description") or first["item"]
+            title = (first.get("request") or "").split(" · ", 1)[-1] or first.get("description") or first["item"]
             project = capex_svc.create_project(
                 db,
                 ctx,

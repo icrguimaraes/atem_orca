@@ -68,6 +68,7 @@ def options(db: Session = Depends(get_db), user: User = Depends(get_current_user
     dept_ids = {c.department_id for c in ccs if c.department_id}
     departments = db.scalars(select(Department).where(Department.id.in_(dept_ids or {-1})).order_by(Department.name))
     accounts = db.scalars(select(Account).where(Account.is_active).order_by(Account.code))
+    ctx = _ctx(db)
     return {
         "cost_centers": [
             {"id": c.id, "code": c.code, "name": c.name, "company_id": c.company_id, "department_id": c.department_id}
@@ -78,10 +79,10 @@ def options(db: Session = Depends(get_db), user: User = Depends(get_current_user
             {"code": a.code, "name": a.name, "nature": a.nature, "package_id": a.package_id} for a in accounts
         ],
         "versions": [
-            {"id": v.id, "label": v.label, "status": v.status, "current": v.id == _ctx(db).version.id}
+            {"id": v.id, "label": v.label, "status": v.status, "current": v.id == ctx.version.id}
             for v in db.scalars(
                 select(BudgetVersion)
-                .where(BudgetVersion.cycle_id == _ctx(db).cycle.id)
+                .where(BudgetVersion.cycle_id == ctx.cycle.id)
                 .order_by(BudgetVersion.major, BudgetVersion.minor)
             )
         ],

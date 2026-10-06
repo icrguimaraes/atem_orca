@@ -55,6 +55,9 @@ function VersionCompareCard({ versions, companyId }: { versions: VersionInfo[]; 
               <DivergingBars rows={data.monthly_difference.map((v, i) => ({ label: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"][i], delta: Number(v), from: 0, to: Number(v) })).filter((r) => r.delta)} />
             </>
           )}
+          {data.changed_accounts > data.accounts.length && (
+            <p className="muted small">Mostrando as {fmtInt(data.accounts.length)} maiores diferenças de {fmtInt(data.changed_accounts)} contas alteradas.</p>
+          )}
           {data.accounts.length === 0 ? <Empty>Nenhuma diferença entre as versões.</Empty> : (
             <div className="table-wrap scroll-y">
               <table className="table">

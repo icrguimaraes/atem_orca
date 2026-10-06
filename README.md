@@ -38,7 +38,7 @@ Rodam contra um app no ar (local ou Railway) com um usuário válido:
 cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=... npm run e2e
 ```
 
-`smoke.spec.ts` abre todas as páginas em desktop e 390px (sem erro de console nem rolagem horizontal);
+As credenciais não têm padrão no código (o teste falha sem `E2E_EMAIL`/`E2E_PASSWORD`). `smoke.spec.ts` abre todas as páginas em desktop e 390px (sem erro de console nem rolagem horizontal);
 `fluxos.spec.ts` cobre drill-down da análise, exportação da consolidação, download do template e alteração de senha.
 
 ## Rodando localmente

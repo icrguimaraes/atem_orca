@@ -8,7 +8,7 @@ from app.imports.base import load_sheets
 from app.imports.parsers.capex_template import parse_capex_template
 from app.imports.parsers.opex_template import parse_opex_template
 from tests import builders
-from tests.test_imports import import_and_load
+from tests.test_imports import import_and_load, status, upload
 from tests.test_opex import CC, _user
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -48,7 +48,7 @@ def test_opex_template_export_roundtrip(client, admin, run_worker):
     # o importador lê a planilha exportada como template OPEX e encontra os mesmos valores
     sheets = load_sheets(content, "export.xlsx")
     result = parse_opex_template(sheets, {})
-    assert result.meta["system_export"] is True
+    assert result.meta["system_export"] == {"module": "OPEX", "cost_center": CC, "version": "1.0"}
     assert result.meta["parts"]["budget_lines"] == 5  # 2 viagens + consultoria + DTI + linha digitada
     assert result.meta["consolidator_check"]["I - Viagens"]["ok"] is True
     budget = [r for r in result.records if r.record_type in ("BUDGET_LINE", "TRAVEL")]
@@ -58,6 +58,30 @@ def test_opex_template_export_roundtrip(client, admin, run_worker):
     consult = next(r for r in budget if r.data.get("supplier") == "KPMG")
     assert consult.data["account"] == "6010201003" and consult.data["justification"] == "Reajuste IPCA"
     assert consult.data["cost_center"] == CC and consult.data["branch"] == "0001"
+    assert consult.data["contract_manager"] == "Ana"  # colunas extras preservadas na ida e volta
+    travel = next(r for r in budget if r.record_type == "TRAVEL")
+    assert travel.data["company"] == "1001"  # empresa lida da CHAVE, não fixa
+
+    # evento calculado pelo sistema: vai para a aba de leitura e sobrevive à reimportação
+    ev_acc = next(
+        a for a in client.get("/api/v1/opex/options", headers=admin).json()["accounts"] if a["code"] == "6010501002"
+    )
+    ev = client.post(
+        f"/api/v1/opex/submissions/{sub}/lines",
+        headers=admin,
+        json={
+            "line_type": "EVENT",
+            "account_id": ev_acc["id"],
+            "description": "Confraternização",
+            "event": {"event_type": "Interno", "month": 12, "people": 10, "structure": 1000},
+        },
+    )
+    assert ev.status_code == 201, ev.text
+    content = client.get(f"/api/v1/opex/submissions/{sub}/template.xlsx", headers=admin).content
+    wb = load_workbook(io.BytesIO(content))
+    assert "Eventos (leitura)" in wb.sheetnames and wb["Eventos (leitura)"].cell(7, 4).value == "Confraternização"
+    result = parse_opex_template(load_sheets(content, "export.xlsx"), {})
+    assert result.meta["parts"]["budget_lines"] == 5  # o evento não entra como linha de template
 
     # reimportar a exportação substitui TODOS os lançamentos do CC (sem duplicar a linha digitada)
     final = import_and_load(client, admin, run_worker, content, "export.xlsx", force=True)
@@ -68,10 +92,28 @@ def test_opex_template_export_roundtrip(client, admin, run_worker):
         "trips": 2,
     }
     lines = client.get(f"/api/v1/opex/submissions/{sub}/lines", headers=admin).json()
-    assert len(lines) == 5
-    assert sum(Decimal(line["total"]) for line in lines) == Decimal("20500.00")
+    assert len(lines) == 6  # 5 reimportadas + evento preservado
+    event_line = next(line for line in lines if line["line_type"] == "EVENT")
+    assert event_line["description"] == "Confraternização"
+    assert sum(Decimal(line["total"]) for line in lines) == Decimal("20500.00") + Decimal(event_line["total"])
     typed = next(line for line in lines if line["supplier"] == "Loja")
     assert typed["description"] == "Digitada" and typed["values"]["1"] == "100.00"
+    consult_line = next(line for line in lines if line["supplier"] == "KPMG")
+    assert consult_line["contract_manager"] == "Ana"
+
+    # planilha exportada com uma linha inválida: nada do CC é substituído (senão a linha sumiria)
+    wb = load_workbook(io.BytesIO(content))
+    dti = wb["VI - DTI"]
+    dti.cell(7, 2).value = f"1001-0001-{CC}-9999999999"  # conta inexistente na linha de DTI (CHAVE e código)
+    dti.cell(7, 14).value = "9999999999"
+    broken = io.BytesIO()
+    wb.save(broken)
+    batch_id = upload(client, admin, broken.getvalue(), "quebrada.xlsx")
+    run_worker()
+    b = status(client, admin, batch_id)
+    codes = {e["code"] for e in client.get(f"/api/v1/imports/{batch_id}/errors", headers=admin).json()}
+    assert "EXPORT_HAS_ERRORS" in codes, (b["status"], codes)
+    assert b["summary"]["comparison"]["budget"][0]["replaces_lines"] == 0
 
     # gestor de outro CC não baixa
     _, other = _user(client, admin, "outro@t.com", ["MANAGER"])
@@ -93,7 +135,7 @@ def test_capex_template_export_roundtrip(client, admin, run_worker):
     assert resp.headers["content-disposition"].endswith(f'filename="Template_CAPEX_2027_{CC}_v1.0.xlsx"')
     content = resp.content
     result = parse_capex_template(load_sheets(content, "export.xlsx"), {})
-    assert result.meta["system_export"] is True and result.meta["parts"]["capex_items"] == n_items
+    assert result.meta["system_export"]["cost_center"] == CC and result.meta["parts"]["capex_items"] == n_items
     items = [r for r in result.records if r.record_type == "CAPEX_ITEM"]
     assert not any(r.issues for r in items), [r.issues for r in items]
     assert {r.data["item"] for r in items} == {"NOTEBOOK", "LICENÇA", "CADEIRA"}
@@ -106,4 +148,6 @@ def test_capex_template_export_roundtrip(client, admin, run_worker):
     assert load["items_created"] == n_items and load["requests_replaced"] == len(before["projects"])
     after = client.get(f"/api/v1/capex/submissions/{sub}/view", headers=admin).json()
     assert len(after["projects"]) == len(before["projects"])
+    assert {p["title"] for p in after["projects"]} == {p["title"] for p in before["projects"]}
+    assert result.meta["system_export"]["module"] == "CAPEX"
     assert after["totals"]["proposed"] == before["totals"]["proposed"] and Decimal(after["totals"]["proposed"]) > 0

@@ -19,7 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.rules.common import MONTH_LABELS
-from app.imports.base import EXPORT_MARKER
+from app.imports.base import export_marker
 from app.models import (
     Account,
     AccountDetail,
@@ -64,7 +64,7 @@ def _key(company: str, branch: str | None, cc: str, account: str) -> str:
 def _instructions(wb: Workbook, title: str, ctx: Context, cc: CostCenter, sub: BudgetSubmission, notes: list[str]):
     ws = wb.active
     ws.title = "Instruções"
-    ws["A1"] = f"{EXPORT_MARKER} {sub.module} · marcador do sistema: ao reimportar, substitui os lançamentos do CC"
+    ws["A1"] = export_marker(sub.module, cc.code, ctx.version.label)  # lido pelo importador; não alterar
     ws["A1"].font = Font(size=8, color="AAAAAA")
     ws["B2"], ws["B2"].font = title, TITLE_FONT
     ws["B3"] = f"Centro de custo {cc.company.code} · {cc.code} · {cc.name} · gestor {cc.manager_name or '—'}"
@@ -85,36 +85,40 @@ def _bd_sheet(db: Session, wb: Workbook, cc: CostCenter, accounts: list[Account]
     headers = {
         2: "Centro de Custo",
         3: "Denominação de centro de custos",
-        5: "Local de negócios",
-        6: "Filial",
-        8: "Descrição",
-        9: "Conta do Razão",
-        10: "Agrupamento DRE",
-        11: "Pacote GMD",
-        12: "Detalhamento",
+        4: "Empresa",
+        6: "Local de negócios",
+        7: "Filial",
+        8: "Empresa",
+        10: "Descrição",
+        11: "Conta do Razão",
+        12: "Agrupamento DRE",
+        13: "Pacote GMD",
+        14: "Detalhamento",
     }
     for col, text in headers.items():
         cell = ws.cell(tables_row, col, text)
         cell.fill, cell.font = HEADER_FILL, HEADER_FONT
     ws.cell(tables_row + 1, 2, cc.code)
     ws.cell(tables_row + 1, 3, cc.name)
+    ws.cell(tables_row + 1, 4, cc.company.code)
     branches = db.scalars(select(Branch).where(Branch.company_id == cc.company_id).order_by(Branch.code)).all()
     for i, b in enumerate(branches, start=tables_row + 1):
-        ws.cell(i, 5, b.code)
-        ws.cell(i, 6, b.name)
+        ws.cell(i, 6, b.code)
+        ws.cell(i, 7, b.name)
+        ws.cell(i, 8, cc.company.code)
     details = defaultdict(list)
     for d in db.scalars(select(AccountDetail)):
         details[d.account_id].append(d.name)
     row = tables_row + 1
     for acc in accounts:
         for detail in details.get(acc.id) or [None]:
-            ws.cell(row, 8, acc.name)
-            ws.cell(row, 9, acc.code)
-            ws.cell(row, 10, acc.dre_group)
-            ws.cell(row, 11, acc.package.name if acc.package else None)
-            ws.cell(row, 12, detail or 0)
+            ws.cell(row, 10, acc.name)
+            ws.cell(row, 11, acc.code)
+            ws.cell(row, 12, acc.dre_group)
+            ws.cell(row, 13, acc.package.name if acc.package else None)
+            ws.cell(row, 14, detail or 0)
             row += 1
-    _widths(ws, {2: 16, 3: 44, 5: 16, 6: 24, 8: 44, 9: 16, 10: 22, 11: 28, 12: 30})
+    _widths(ws, {2: 16, 3: 44, 4: 10, 6: 16, 7: 24, 8: 10, 10: 44, 11: 16, 12: 22, 13: 28, 14: 30})
 
 
 # ---------------------------------------------------------------- OPEX
@@ -233,6 +237,7 @@ def _package_sheet(
         "GESTOR DO CONTRATO",
         "FORNECEDOR",
         "JUSTIFICATIVA",
+        "PREMISSA",
         "PRODUTO/SERVIÇO",
         "FILIAL",
         "DIVISÃO",
@@ -244,7 +249,7 @@ def _package_sheet(
         ctx.target_year,
     ]
     _header_row(ws, head, 2, headers)
-    first_month = 2 + 12
+    first_month = 2 + 13
     row = head + 1
     for line in lines:
         acc = accounts.get(line.account_id)
@@ -258,7 +263,8 @@ def _package_sheet(
             line.description,
             line.contract_manager,
             line.supplier,
-            line.justification or line.assumption,
+            line.justification,
+            line.assumption,
             details.get(line.account_detail_id) if line.account_detail_id else None,
             branch.name if branch else None,
             branch_code,
@@ -277,7 +283,7 @@ def _package_sheet(
         total.number_format = MONEY
         row += 1
     ws.freeze_panes = ws.cell(head + 1, 3)
-    _widths(ws, {2: 30, 3: 36, 4: 20, 5: 24, 6: 36, 7: 24, 8: 14, 9: 10, 10: 34, 11: 14, 12: 36, 13: 14})
+    _widths(ws, {2: 30, 3: 36, 4: 20, 5: 24, 6: 36, 7: 30, 8: 24, 9: 14, 10: 10, 11: 34, 12: 14, 13: 36, 14: 14})
     for col in range(first_month, first_month + 13):
         ws.column_dimensions[get_column_letter(col)].width = 13
 
@@ -295,9 +301,12 @@ def opex_template_workbook(db: Session, ctx: Context, sub: BudgetSubmission) -> 
     by_package: dict[int | None, list[BudgetLine]] = defaultdict(list)
     trips: dict[str, list[BudgetLine]] = defaultdict(list)
     travel_pkg = next((p for p in packages if p.form_type == "TRAVEL"), None)
+    events: list[BudgetLine] = []
     for line in lines:
         if line.line_type == "TRAVEL":
             trips[line.group_ref or f"line-{line.id}"].append(line)
+        elif line.line_type == "EVENT":
+            events.append(line)  # calculados pelo sistema: só leitura (a reimportação os preserva)
         else:
             by_package[line.package_id].append(line)
 
@@ -314,6 +323,7 @@ def opex_template_workbook(db: Session, ctx: Context, sub: BudgetSubmission) -> 
             "as linhas vindas de template são substituídas, as digitadas no sistema são preservadas.",
             "Na aba I - Viagens, cada linha é uma viagem; o consolidador à direita é só conferência.",
             "Linhas sem valor são ignoradas na importação. Não altere a CHAVE nem os códigos de CC e conta.",
+            "Eventos (pacote III) são calculados pelo sistema: aparecem em 'Eventos (leitura)' e não são reimportados.",
         ],
     )
     opex_accounts = sorted(
@@ -333,9 +343,41 @@ def opex_template_workbook(db: Session, ctx: Context, sub: BudgetSubmission) -> 
     if leftovers:
         ws = wb.create_sheet(OTHER_SHEET)
         _package_sheet(ws, ctx, cc, sorted(leftovers, key=lambda line: line.id), accounts, branches, details)
+    if events:
+        _events_sheet(wb.create_sheet("Eventos (leitura)"), ctx, events, accounts)
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def _events_sheet(ws: Worksheet, ctx: Context, events: list[BudgetLine], accounts: dict[int, Account]) -> None:
+    ws["B2"], ws["B2"].font = f"Eventos · orçamento {ctx.target_year} (somente leitura)", TITLE_FONT
+    ws["B3"] = (
+        "Calculados pelo sistema (pessoas × refeição + material + estrutura + brindes + transporte). Edite na tela."
+    )
+    ws["B3"].font = MUTED
+    headers = ["Conta", "Descrição da conta", "Evento", "Tipo", "Mês", "Pessoas", *MONTH_LABELS, "Total"]
+    _header_row(ws, 6, 2, headers)
+    for r, line in enumerate(events, start=7):
+        acc = accounts.get(line.account_id)
+        attrs = line.attributes or {}
+        values = {v.month: v.amount for v in line.values}
+        month = attrs.get("month")
+        cells = [
+            acc.code if acc else None,
+            acc.name if acc else None,
+            line.description,
+            attrs.get("event_type"),
+            MONTH_LABELS[int(month) - 1] if month else None,
+            attrs.get("people"),
+            *[_f(values.get(m, 0)) for m in range(1, 13)],
+            _f(line.total_amount),
+        ]
+        for i, value in enumerate(cells):
+            cell = ws.cell(r, 2 + i, value)
+            if i >= 6:
+                cell.number_format = MONEY
+    _widths(ws, {2: 14, 3: 36, 4: 36, 5: 12, 6: 8, 7: 10})
 
 
 # ---------------------------------------------------------------- CAPEX
@@ -365,6 +407,8 @@ def capex_template_workbook(db: Session, ctx: Context, sub: BudgetSubmission) ->
     ws["B2"], ws["B2"].font = f"CAPEX · {cc.code} · {cc.name} · orçamento {ctx.target_year}", TITLE_FONT
     ws.cell(5, 10, "Não preencher").font = MUTED
     headers = [
+        "EMPRESA",
+        "SOLICITAÇÃO",
         "NOME FILIAL",
         "FILIAL",
         "NOME CENTRO DE CUSTO",
@@ -384,8 +428,11 @@ def capex_template_workbook(db: Session, ctx: Context, sub: BudgetSubmission) ->
         "VIDA ÚTIL",
     ]
     _header_row(ws, 6, 2, headers)
-    for m in range(1, 13):
-        ws.cell(6, 15 + m).number_format = "mmm/yy"
+    money_idx = {i for i, h in enumerate(headers) if h in ("VLR UNIT", "VLR TOTAL") or isinstance(h, datetime)}
+    money_idx.add(headers.index(f"Orçamento {ctx.target_year}"))
+    for i, h in enumerate(headers):
+        if isinstance(h, datetime):
+            ws.cell(6, 2 + i).number_format = "mmm/yy"
     row = 7
     for p in projects:
         branch = branches.get(p.branch_id)
@@ -393,6 +440,8 @@ def capex_template_workbook(db: Session, ctx: Context, sub: BudgetSubmission) ->
             acc = accounts.get(item.account_id)
             values = {v.month: v.amount for v in item.values}
             cells = [
+                cc.company.code,
+                f"{p.code} · {p.title}",
                 branch.name if branch else None,
                 branch.code if branch else None,
                 cc.name,
@@ -413,12 +462,13 @@ def capex_template_workbook(db: Session, ctx: Context, sub: BudgetSubmission) ->
             ]
             for i, value in enumerate(cells):
                 cell = ws.cell(row, 2 + i, value)
-                if i in (10, 12) or 14 <= i <= 26:
+                if i in money_idx:
                     cell.number_format = MONEY
             row += 1
-    ws.freeze_panes = "F7"
-    _widths(ws, {2: 14, 3: 8, 4: 34, 5: 14, 6: 34, 7: 14, 8: 10, 9: 34, 10: 28, 11: 44, 12: 14, 13: 8, 14: 14, 15: 44})
-    for col in range(16, 30):
+    ws.freeze_panes = "H7"
+    _widths(ws, {2: 10, 3: 36, 4: 14, 5: 8, 6: 34, 7: 14, 8: 34, 9: 14, 10: 10, 11: 34, 12: 28, 13: 44, 14: 14})
+    _widths(ws, {15: 8, 16: 14, 17: 44})
+    for col in range(18, 32):
         ws.column_dimensions[get_column_letter(col)].width = 13
     capex_accounts = sorted((a for a in accounts.values() if a.nature == "CAPEX" and a.is_active), key=lambda a: a.code)
     _bd_sheet(db, wb, cc, capex_accounts, tables_row=2)

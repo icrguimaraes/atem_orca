@@ -22,13 +22,15 @@ from app.imports.base import (
     clean_str,
     find_table,
     is_blank,
-    is_system_export,
     norm,
+    system_export,
     to_decimal,
 )
 from app.imports.parsers.master import parse_master
 
 ITEM_ALIASES = {
+    "company": ("EMPRESA",),
+    "request": ("SOLICITAÇÃO", "CÓDIGO DA SOLICITAÇÃO"),
     "branch_name": ("NOME FILIAL",),
     "branch": ("FILIAL",),
     "cost_center_name": ("NOME CENTRO DE CUSTO", "NOME CC"),
@@ -159,7 +161,8 @@ def parse_items(sheet: Sheet, result: ParseResult) -> int:
             rec.error("NEGATIVE_VALUE", "Valores do CAPEX não podem ser negativos")
         life = _number(rec, table.value(row, "useful_life"), "VIDA ÚTIL") if "useful_life" in table.columns else None
         rec.data = {
-            "company": None,
+            "company": clean_code(table.value(row, "company")) if "company" in table.columns else None,
+            "request": clean_str(table.value(row, "request")) if "request" in table.columns else None,
             "branch": clean_code(table.value(row, "branch"), 4),
             "branch_name": clean_str(table.value(row, "branch_name")),
             "cost_center": cc,
@@ -207,7 +210,7 @@ def parse_capex_template(sheets: list[Sheet], options: dict) -> ParseResult:
             items += parse_items(sheet, result)
     result.meta = {
         "parts": {"master": len(master.records), "asset_items": catalog, "capex_items": items},
-        "system_export": is_system_export(sheets),
+        "system_export": system_export(sheets),
     }
     if not items:
         result.structural.append(

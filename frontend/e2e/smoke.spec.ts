@@ -21,7 +21,8 @@ test.describe("todas as páginas abrem sem erro e sem overflow", () => {
       await login(page);
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toContainText(title);
-      await page.waitForTimeout(800);
+      await page.waitForLoadState("networkidle");
+      await expect(page.getByText("Carregando…")).toHaveCount(0);
       await expectNoHorizontalOverflow(page);
       expect(errors, "erros no console").toEqual([]);
     });

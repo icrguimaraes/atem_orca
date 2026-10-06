@@ -255,9 +255,34 @@ def compare_macro(db: Session, result: ParseResult) -> dict:
     return {"kind": "MACRO", "new": new, "changed": changed, "unchanged": unchanged, "no_changes": no_changes}
 
 
+def _full_replace_ok(export: dict, cc_code: str, recs: list, ctx) -> bool:
+    """Exportação do sistema: só o CC exportado tem todos os lançamentos substituídos — e só se nenhuma
+    linha dele estiver com erro (senão a linha com erro sumiria do orçamento) e a versão for a vigente."""
+    if not export or export.get("cost_center") != cc_code:
+        return False
+    errors = [r for r in recs if final_status(r) == "ERROR"]
+    if errors:
+        for r in recs:
+            r.error(
+                "EXPORT_HAS_ERRORS",
+                f"Planilha exportada pelo sistema com {len(errors)} linha(s) inválida(s) no CC {cc_code}: corrija-as "
+                "antes de reimportar (nenhum lançamento deste CC é substituído enquanto houver erro)",
+            )
+        return False
+    if ctx is not None and export.get("version") and export["version"] != ctx.version.label:
+        for r in recs:
+            r.error(
+                "EXPORT_OTHER_VERSION",
+                f"Planilha exportada da versão {export['version']}; a versão em elaboração é {ctx.version.label}. "
+                "Exporte novamente a partir da versão atual",
+            )
+        return False
+    return True
+
+
 def compare_opex_template(db: Session, result: ParseResult, options: dict) -> dict:
     """Template OPEX: compara cada parte e checa se o orçamento de cada CC ainda aceita alterações."""
-    full_replace = bool(result.meta.get("system_export"))  # exportação do sistema: substitui tudo
+    export = result.meta.get("system_export") or {}  # exportação do sistema: substitui tudo no CC exportado
     from app.domain.workflow import EDITABLE, STATUS_LABELS
     from app.models import BudgetLine, Company
     from app.services import opex as opex_svc
@@ -292,6 +317,7 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
             groups[(r.data["company"], r.data["cost_center"])].append(r)
         companies = {c.code: c.id for c in db.scalars(select(Company))}
         for (company, cc_code), recs in sorted(groups.items()):
+            full_replace = _full_replace_ok(export, cc_code, recs, ctx)
             cc = db.scalar(
                 select(CostCenter).where(CostCenter.company_id == companies.get(company), CostCenter.code == cc_code)
             )
@@ -314,6 +340,8 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
                     for line in db.scalars(select(BudgetLine).where(BudgetLine.submission_id == sub.id))
                     if full_replace or (line.attributes or {}).get("source") == "TEMPLATE"
                 ]
+                if export.get("cost_center") == cc_code and not full_replace:
+                    replaced = []  # exportação barrada (erros/versão): nada do CC é carregado
             valid = [r for r in recs if final_status(r) in ("VALID", "WARNING")]
             new_total = sum((Decimal(v) for r in valid for v in r.data["values"].values()), Decimal(0))
             budget.append(
@@ -338,7 +366,7 @@ def compare_opex_template(db: Session, result: ParseResult, options: dict) -> di
 
 def compare_capex_template(db: Session, result: ParseResult, options: dict) -> dict:
     """Template CAPEX: cadastros, catálogo de ativos e, por CC, se o orçamento CAPEX aceita a carga."""
-    full_replace = bool(result.meta.get("system_export"))  # exportação do sistema: substitui tudo
+    export = result.meta.get("system_export") or {}  # exportação do sistema: substitui tudo no CC exportado
     from app.domain.workflow import EDITABLE, STATUS_LABELS
     from app.models import AssetItem, CapexProject, Company
     from app.services import opex as opex_svc
@@ -370,6 +398,7 @@ def compare_capex_template(db: Session, result: ParseResult, options: dict) -> d
             groups[(r.data.get("company") or "", r.data.get("cost_center") or "")].append(r)
         companies = {c.code: c.id for c in db.scalars(select(Company))}
         for (company, cc_code), recs in sorted(groups.items()):
+            full_replace = _full_replace_ok(export, cc_code, recs, ctx)
             cc = db.scalar(
                 select(CostCenter).where(CostCenter.company_id == companies.get(company), CostCenter.code == cc_code)
             )
@@ -394,6 +423,8 @@ def compare_capex_template(db: Session, result: ParseResult, options: dict) -> d
                     for p in db.scalars(select(CapexProject).where(CapexProject.submission_id == sub.id))
                     if full_replace or (p.attributes or {}).get("source") == "TEMPLATE"
                 ]
+                if export.get("cost_center") == cc_code and not full_replace:
+                    replaced = []  # exportação barrada (erros/versão): nada do CC é carregado
             valid = [r for r in recs if final_status(r) in ("VALID", "WARNING")]
             total = sum(
                 (

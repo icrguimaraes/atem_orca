@@ -51,14 +51,18 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
     const node = el as unknown as PlotlyHTMLElement;
     const handler = (ev: { points?: { customdata?: unknown; x?: unknown; y?: unknown }[] }) => {
       const p = ev.points?.[0];
-      if (p && onClick) onClick(p.customdata, String((figure.layout as { orientation?: string }).orientation === "h" ? p.y : p.x));
+      const horizontal = (figure.data[0] as { orientation?: string } | undefined)?.orientation === "h";
+      if (p && onClick) onClick(p.customdata, String(horizontal ? p.y : p.x));
     };
     if (onClick) node.on("plotly_click", handler);
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const onTheme = () => void Plotly.relayout(el, themeLayout() as Record<string, unknown>);
     media.addEventListener("change", onTheme);
+    const observer = new MutationObserver(onTheme); // troca de tema pelo app (atributo data-theme)
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => {
       media.removeEventListener("change", onTheme);
+      observer.disconnect();
       if (onClick) node.removeAllListeners?.("plotly_click");
     };
   }, [figure, height, onClick]);

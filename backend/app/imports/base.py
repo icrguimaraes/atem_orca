@@ -149,10 +149,25 @@ class Sheet:
 EXPORT_MARKER = "ATEM_EXPORT"
 
 
-def is_system_export(sheets: list[Sheet]) -> bool:
-    """Planilha gerada pela exportação do sistema (marcador em A1 da primeira aba): ao reimportar,
-    todos os lançamentos do centro de custo são substituídos, não só os vindos de template."""
-    return any(s.rows and s.rows[0] and str(s.rows[0][0] or "").startswith(EXPORT_MARKER) for s in sheets)
+def export_marker(module: str, cost_center: str, version: str) -> str:
+    return f"{EXPORT_MARKER} module={module} cc={cost_center} version={version}"
+
+
+def system_export(sheets: list[Sheet]) -> dict | None:
+    """Planilha gerada pela exportação do sistema (marcador em A1 da primeira aba). Devolve
+    {module, cost_center, version}: ao reimportar, os lançamentos **desse** CC são todos substituídos
+    (não só os vindos de template); outros CCs no mesmo arquivo seguem a regra normal."""
+    for s in sheets:
+        text = str(s.rows[0][0] or "") if s.rows and s.rows[0] else ""
+        if text.startswith(EXPORT_MARKER):
+            fields = dict(re.findall(r"(\w+)=(\S+)", text))
+            if fields.get("cc"):
+                return {
+                    "module": fields.get("module"),
+                    "cost_center": fields["cc"],
+                    "version": fields.get("version"),
+                }
+    return None
 
 
 def load_sheets(content: bytes, file_name: str) -> list[Sheet]:
