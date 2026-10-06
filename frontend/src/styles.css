@@ -159,7 +159,7 @@ a { color: inherit; }
 .sidebar-foot { border-top: 1px solid var(--border); padding-top: 16px; display: grid; gap: 4px; }
 .sidebar-foot .user-name { color: var(--text); font-weight: 600; }
 .sidebar-foot .btn { justify-self: start; margin-top: 8px; }
-.content { padding: 40px 40px 64px; max-width: 1600px; width: 100%; display: grid; gap: 24px; align-content: start; }
+.content { padding: 40px 40px 64px; max-width: 1600px; width: 100%; display: grid; gap: 28px; align-content: start; }
 
 .page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .page-header p { margin: 4px 0 0; max-width: 760px; }
@@ -172,7 +172,7 @@ a { color: inherit; }
 .card .stat, .card .card, .card .capex-project, .card .table-wrap, .card .mode-choice, .card .filter-summary { border-radius: var(--radius-sm); }
 .card .stat { box-shadow: none; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 24px; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 28px; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; }
 .stat {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px;
@@ -366,11 +366,12 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 }
 
 /* ---------- séries de gráfico (validadas: light e dark) */
-:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-past: #8b95a7; --grid: #eceef1; }
+/* paleta dos gráficos: azul (ano em foco) e verde-água (orçado) como no painel de Custeio em Power BI; laranja só para categorias */
+:root { --series-1: #4472c4; --series-2: #eb6834; --series-3: #4fa894; --series-past: #8b95a7; --grid: #eceef1; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-past: #7b8596; --grid: #262b34; }
+  :root:not([data-theme="light"]) { --series-1: #5b8ad6; --series-2: #d95926; --series-3: #6fbfb0; --series-past: #7b8596; --grid: #262b34; }
 }
-  :root[data-theme="dark"] { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-past: #7b8596; --grid: #262b34; }
+  :root[data-theme="dark"] { --series-1: #5b8ad6; --series-2: #d95926; --series-3: #6fbfb0; --series-past: #7b8596; --grid: #262b34; }
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .filters select { max-width: 320px; }
@@ -446,6 +447,31 @@ input:disabled, select:disabled { opacity: 0.6; }
 .year-tabs button.active { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
 .year-tabs[aria-busy="true"] button { opacity: 0.7; cursor: progress; }
 .is-loading { opacity: 0.55; transition: opacity 150ms ease; }
+/* chips de mês (Jan..Dez + Todos): seleção múltipla, mesmo desenho dos anos em tamanho menor */
+.month-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.month-chips button { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: 500 13px/18px var(--font-body); padding: 7px 12px; min-height: 36px; cursor: pointer; }
+.month-chips button.active { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+.selection-note { color: var(--muted); font-size: 13px; }
+.btn-ghost[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+/* ferramentas de seção e modo "organizar" (ordem dos blocos escolhida pelo usuário, via CSS order) */
+.section-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.section-stack { display: grid; gap: 28px; }
+.section-organize { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; margin-bottom: 8px; border: 1px dashed var(--border); border-radius: var(--radius-sm); font-size: 13px; color: var(--muted); }
+.section-organize strong { color: var(--text); font-weight: 600; }
+.section-organize .inline-controls { gap: 4px; }
+/* tabela com drill-down */
+.drill-toggle { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); cursor: pointer; font-size: 15px; line-height: 1; margin-right: 10px; vertical-align: middle; }
+.drill-toggle:hover { border-color: var(--text); }
+.drill-leaf { border-color: transparent; background: transparent; cursor: default; }
+.drill-table tbody tr.drill-level-1 td:first-child { padding-left: 40px; }
+.drill-table tbody tr.drill-level-2 td:first-child { padding-left: 70px; }
+.drill-table tbody tr.drill-level-1 td, .drill-table tbody tr.drill-level-2 td { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.drill-table tbody tr.drill-level-2 td { font-size: 13px; }
+.drill-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); }
+.dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: -2px; margin-right: 8px; }
+.dot.good { background: var(--good); }
+.dot.warn { background: var(--warn-line); }
+.dot.bad { background: var(--bad); }
 /* ranking em barras horizontais (maiores CCs e contas) */
 .top-bar { height: 22px; border-radius: 0 6px 6px 0; }
 .top-bar-prev { height: 6px; border-radius: 0 3px 3px 0; background: var(--series-past); opacity: 0.8; }

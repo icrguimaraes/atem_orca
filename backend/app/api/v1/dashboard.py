@@ -5,8 +5,10 @@ anteriores ficam no banco para auditoria, mas nunca somam no painel.
 """
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import Select, func, select
@@ -46,15 +48,20 @@ def _pct(new: Decimal, base: Decimal) -> str | None:
 class Facts:
     """Consultas agregadas sobre os fatos vigentes com os filtros e o escopo do usuário."""
 
-    def __init__(self, db: Session, user: User, company_id, cost_center_id, package_id) -> None:
+    def __init__(
+        self, db: Session, user: User, company_id, cost_center_id, package_id, months: set[int] | None = None
+    ) -> None:
         self.db = db
         self.visible = visible_cost_center_ids(db, user)
         self.company_id, self.cost_center_id, self.package_id = company_id, cost_center_id, package_id
+        self.months = months  # filtro de meses do painel (vazio = todos)
 
     def _filtered(self, model, stmt: Select) -> Select:
         stmt = stmt.join(DatasetVersion, DatasetVersion.id == model.dataset_version_id).where(DatasetVersion.is_current)
         if self.visible is not None:
             stmt = stmt.where(model.cost_center_id.in_(self.visible or {-1}))
+        if self.months:
+            stmt = stmt.where(model.period.in_(self.months))
         if self.company_id:
             stmt = stmt.where(model.company_id == self.company_id)
         if self.cost_center_id:
@@ -95,28 +102,33 @@ def _last_closed(db: Session, year: int) -> int | None:
     )
 
 
-@router.get("/overview", summary="KPIs, evolução mensal e rankings (realizado vigente × orçamento de referência)")
-def overview(
-    company_id: int | None = None,
-    cost_center_id: int | None = None,
-    package_id: int | None = None,
-    year: int | None = None,
-    years: str | None = None,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
+def _ints(csv: str | None) -> set[int]:
+    return {int(x) for x in (csv or "").split(",") if x.strip().isdigit()}
+
+
+@dataclass
+class YearSelection:
+    ref: int
+    prev: int | None
+    selected: list[int]
+    actual_years: list[int]
+    budget_years: list[int]
+    available: list[int]
+
+
+def _select_years(db: Session, years: str | None, year: int | None = None) -> YearSelection:
     """`years` (ex.: "2025" ou "2025,2026") escolhe os anos exibidos: um ano só mostra esse ano, sem
     comparação; dois ou mais comparam o maior (referência) com o segundo maior (anterior). Sem o
     parâmetro, vale o ano mais recente com realizado comparado ao anterior, quando carregado."""
     actual_years = _loaded_years(db, "ACTUAL", 1)
     budget_years = _loaded_years(db, "REFERENCE_BUDGET", 2)
     available = sorted(set(actual_years) | set(budget_years))  # crescente: 2025, 2026, …
-    cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
-    selected = sorted({int(y) for y in (years or "").split(",") if y.strip().isdigit()} & set(available), reverse=True)
+    selected = sorted(_ints(years) & set(available), reverse=True)
     if selected:
         ref = selected[0]
         prev = selected[1] if len(selected) > 1 else None
     else:
+        cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
         # ano exibido: o pedido, senão o mais recente com realizado, senão com orçamento, senão o do ciclo
         ref = year or (
             max(actual_years)
@@ -129,7 +141,33 @@ def overview(
         )
         prev = ref - 1
         selected = [ref] + ([prev] if prev in available else [])
-    f = Facts(db, user, company_id, cost_center_id, package_id)
+    return YearSelection(ref, prev, sorted(selected), actual_years, budget_years, available)
+
+
+@router.get("/overview", summary="KPIs, evolução mensal e rankings (realizado vigente × orçamento de referência)")
+def overview(
+    company_id: int | None = None,
+    cost_center_id: int | None = None,
+    package_id: int | None = None,
+    year: int | None = None,
+    years: str | None = None,
+    months: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Anos em `years` (ver `_select_years`); `months` (ex.: "1,2,3") restringe todos os números aos meses
+    escolhidos — o mês fechado continua sendo o último com realizado no ano."""
+    ys = _select_years(db, years, year)
+    ref, prev, selected, actual_years, budget_years, available = (
+        ys.ref,
+        ys.prev,
+        ys.selected,
+        ys.actual_years,
+        ys.budget_years,
+        ys.available,
+    )
+    month_filter = {m for m in _ints(months) if 1 <= m <= 12}
+    f = Facts(db, user, company_id, cost_center_id, package_id, month_filter or None)
     closed = _last_closed(db, ref)  # último mês com realizado no ano de referência
 
     # ---- KPIs
@@ -213,7 +251,8 @@ def overview(
     return {
         "reference_year": ref,
         "previous_year": prev,
-        "selected_years": sorted(selected),
+        "selected_years": selected,
+        "selected_months": sorted(month_filter),
         "last_closed_period": closed,
         "years_loaded": actual_years,
         "budget_years": budget_years,
@@ -241,6 +280,110 @@ def overview(
         if (closed and prev and prev in actual_years)
         else [],
         "budget_progress": budget_progress(db, user, company_id, cost_center_id, package_id),
+    }
+
+
+@router.get("/breakdown", summary="Tabela do painel com drill-down: pacote GMD → conta → centro de custo")
+def breakdown(
+    group_by: Literal["package", "account", "cost_center"] = "package",
+    parent_package_id: int | None = None,
+    parent_no_package: bool = False,
+    parent_account_id: int | None = None,
+    company_id: int | None = None,
+    cost_center_id: int | None = None,
+    package_id: int | None = None,
+    years: str | None = None,
+    months: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Uma linha por grupo com realizado do ano em foco, a base de comparação (realizado do ano anterior
+    no mesmo período quando há dois anos; senão o orçado do ano até o mês fechado), participação (AV %),
+    variação e variação %. `parent_*` restringem aos filhos de uma linha expandida (drill-down)."""
+    ys = _select_years(db, years)
+    ref, prev = ys.ref, ys.prev
+    month_filter = {m for m in _ints(months) if 1 <= m <= 12}
+    f = Facts(db, user, company_id, cost_center_id, package_id, month_filter or None)
+    closed = _last_closed(db, ref)
+
+    def grouped(model, year: int, max_period: int | None) -> dict:
+        col = {"package": Account.package_id, "account": model.account_id, "cost_center": model.cost_center_id}[
+            group_by
+        ]
+        stmt = select(col, func.sum(model.amount)).select_from(model).where(model.fiscal_year == year)
+        if group_by == "package":
+            stmt = stmt.join(Account, Account.id == model.account_id)
+        if parent_package_id is not None:
+            stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id == parent_package_id)))
+        elif parent_no_package:
+            stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id.is_(None))))
+        if parent_account_id is not None:
+            stmt = stmt.where(model.account_id == parent_account_id)
+        if max_period:
+            stmt = stmt.where(model.period <= max_period)
+        return {k: v or ZERO for k, v in db.execute(f._filtered(model, stmt).group_by(col))}
+
+    cur = grouped(ActualEntry, ref, None)
+    base_kind: str | None = None
+    base: dict = {}
+    if prev is not None and prev in ys.actual_years:
+        base_kind, base = "prev", grouped(ActualEntry, prev, closed)
+    elif ref in ys.budget_years:
+        base_kind, base = "budget", grouped(ReferenceBudgetEntry, ref, closed)
+
+    ids = [k for k in set(cur) | set(base) if k is not None]
+    if group_by == "package":
+        objs = {
+            p.id: (None, p.name) for p in db.scalars(select(BudgetPackage).where(BudgetPackage.id.in_(ids or [-1])))
+        }
+    elif group_by == "account":
+        objs = {a.id: (a.code, a.name) for a in db.scalars(select(Account).where(Account.id.in_(ids or [-1])))}
+    else:
+        objs = {c.id: (c.code, c.name) for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(ids or [-1])))}
+    total_cur = sum(cur.values(), ZERO)
+    total_base = sum(base.values(), ZERO)
+    rows = []
+    for key in set(cur) | set(base):
+        c, b = cur.get(key, ZERO), base.get(key, ZERO)
+        if c == 0 and b == 0:
+            continue
+        code, name = objs.get(key, (None, "Sem pacote" if group_by == "package" else "—"))
+        rows.append(
+            {
+                "id": key,
+                "code": code,
+                "name": name,
+                "ref": _money(c),
+                "base": _money(b),
+                "share_ref": _pct(c, total_cur) if total_cur else None,
+                "share_base": _pct(b, total_base) if total_base else None,
+                "var": _money(c - b),
+                "var_pct": _pct(c, b),
+                "has_children": group_by != "cost_center",
+            }
+        )
+    rows.sort(key=lambda r: Decimal(r["ref"]), reverse=True)
+    base_label = (
+        f"Realizado {prev} até {closed or 12}"
+        if base_kind == "prev"
+        else f"Orçado {ref} até {closed or 12}"
+        if base_kind
+        else None
+    )
+    return {
+        "group_by": group_by,
+        "reference_year": ref,
+        "previous_year": prev,
+        "last_closed_period": closed,
+        "base": base_kind,
+        "base_label": base_label,
+        "rows": rows,
+        "total": {
+            "ref": _money(total_cur),
+            "base": _money(total_base),
+            "var": _money(total_cur - total_base),
+            "var_pct": _pct(total_cur, total_base),
+        },
     }
 
 

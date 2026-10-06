@@ -161,7 +161,8 @@ export interface PackageRow {
   ref_ytd: string; ref_annualized: string; budget: string; ytd_var_pct: string | null;
 }
 export interface Overview {
-  reference_year: number; previous_year: number | null; selected_years: number[]; last_closed_period: number | null; years_loaded: number[];
+  reference_year: number; previous_year: number | null; selected_years: number[]; selected_months: number[];
+  last_closed_period: number | null; years_loaded: number[];
   budget_years: number[]; available_years: number[]; has_actual: boolean; has_prev: boolean; has_budget: boolean;
   kpis: {
     prev_total: string; prev_ytd: string; ref_ytd: string; ytd_var_pct: string | null; ref_annualized: string;
@@ -174,6 +175,16 @@ export interface Overview {
   heatmap: { year: number; rows: { id: number; code: string | null; name: string; values: string[]; total: string }[] };
   account_deltas: { id: number; code: string | null; name: string; prev_ytd: string; ref_ytd: string; delta: string }[];
   budget_progress: BudgetProgress | null;
+}
+
+export interface BreakdownRow {
+  id: number | null; code: string | null; name: string; ref: string; base: string; share_ref: string | null;
+  share_base: string | null; var: string; var_pct: string | null; has_children: boolean;
+}
+export interface Breakdown {
+  group_by: "package" | "account" | "cost_center"; reference_year: number; previous_year: number | null;
+  last_closed_period: number | null; base: "prev" | "budget" | null; base_label: string | null; rows: BreakdownRow[];
+  total: { ref: string; base: string; var: string; var_pct: string | null };
 }
 
 export interface BudgetProgress {

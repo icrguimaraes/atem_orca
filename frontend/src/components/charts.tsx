@@ -49,71 +49,152 @@ function useWidth(fallback = 760): [RefObject<HTMLDivElement>, number] {
   return [ref, w];
 }
 
+/** Rótulo curto para dentro do gráfico: "1,5 mi" em vez de "R$ 1,5 mi". */
+function short(v: number): string {
+  return fmtCompact(v).replace(/^R\$\s?/, "");
+}
+
+/** Comparativo mensal em colunas: ano anterior (cinza), ano em foco (azul) e orçado (verde-água), lado a lado.
+ * Com espaço, cada barra recebe o próprio valor; senão, só máximo e mínimo de cada série. */
 export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean }) {
   const [hover, setHover] = useState<number | null>(null);
   const [box, W] = useWidth();
-  const H = 260, L = 84, R = 12, T = 12, B = 28;
+  const H = 290, L = 84, R = 12, T = 26, B = 28;
   const plotW = W - L - R, plotH = H - T - B;
-  const values = rows.flatMap((r) => [Number(r.prev), Number(r.ref), showBudget ? Number(r.budget) : 0]);
+  type Key = "prev" | "ref" | "budget";
+  const series: { key: Key; label: string; color: string }[] = [
+    ...(prevYear !== null ? [{ key: "prev" as Key, label: String(prevYear), color: SERIES.past }] : []),
+    { key: "ref" as Key, label: String(refYear), color: SERIES.ref },
+    ...(showBudget ? [{ key: "budget" as Key, label: `Orçado ${refYear}`, color: SERIES.budget }] : []),
+  ];
+  const values = rows.flatMap((r) => series.map((s) => Number(r[s.key])));
   const max = niceMax(Math.max(...values, 0));
   const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
   const slot = plotW / 12;
-  // um ano só: barra única e larga no centro do mês; dois anos: duas barras lado a lado
-  const paired = prevYear !== null;
-  const barW = paired ? Math.min(22, (slot - 10) / 2) : Math.min(44, slot * 0.6);
+  const n = series.length;
+  const gap = 3;
+  const barW = Math.max(6, Math.min(n === 1 ? 44 : n === 2 ? 24 : 18, (slot - 12 - gap * (n - 1)) / n));
+  const groupW = barW * n + gap * (n - 1);
+  const xOf = (i: number, j: number) => L + slot * i + slot / 2 - groupW / 2 + j * (barW + gap);
+  const labelAll = slot - 6 >= n * 36; // um rótulo de ~36 px por barra
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * max);
-  const budgetPts = rows.map((r, i) => `${L + slot * i + slot / 2},${y(Number(r.budget))}`).join(" ");
   const h = hover !== null ? rows[hover] : null;
 
   return (
     <div className="chart" ref={box}>
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={prevYear ? `Realizado mensal ${prevYear} e ${refYear}` : `Realizado mensal ${refYear}`} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={`Comparativo mensal ${series.map((s) => s.label).join(" e ")}`} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="grid" />
             <text x={L - 8} y={y(t) + 4} className="axis" textAnchor="end">{fmtCompact(t)}</text>
           </g>
         ))}
-        {rows.map((r, i) => {
-          const x0 = L + slot * i + slot / 2;
-          return (
-            <g key={r.month}>
-              {hover === i && <rect x={L + slot * i} y={T} width={slot} height={plotH} className="hover-band" />}
-              {(paired
-                ? [{ v: Number(r.prev), c: SERIES.past, dx: -barW - 1 }, { v: Number(r.ref), c: SERIES.ref, dx: 1 }]
-                : [{ v: Number(r.ref), c: SERIES.ref, dx: -barW / 2 }]
-              ).map(
-                (b, j) =>
-                  b.v > 0 && (
-                    <path
-                      key={j}
-                      d={roundedTop(x0 + b.dx, y(b.v), barW, T + plotH - y(b.v))}
-                      fill={b.c}
-                    />
-                  ),
-              )}
-              <text x={x0} y={H - 8} className="axis" textAnchor="middle">{MONTHS[r.month - 1]}</text>
-              <rect x={L + slot * i} y={T} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHover(i)} />
-            </g>
-          );
-        })}
-        <ExtremeLabels values={rows.map((r) => Number(r.prev))} x={(i) => L + slot * i + slot / 2} y={y} color={SERIES.past} dx={-barW / 2 - 1} />
-        <ExtremeLabels values={rows.map((r) => Number(r.ref))} x={(i) => L + slot * i + slot / 2} y={y} color={SERIES.ref} dx={barW / 2 + 1} />
-        {showBudget && <polyline points={budgetPts} fill="none" stroke={SERIES.budget} strokeWidth={2} pointerEvents="none" />}
-        {showBudget && <ExtremeLabels values={rows.map((r) => Number(r.budget))} x={(i) => L + slot * i + slot / 2} y={y} color={SERIES.budget} />}
-        {showBudget &&
-          rows.map((r, i) => (
-            <circle key={i} cx={L + slot * i + slot / 2} cy={y(Number(r.budget))} r={4} fill={SERIES.budget} className="ring" pointerEvents="none" />
+        {rows.map((r, i) => (
+          <g key={r.month}>
+            {hover === i && <rect x={L + slot * i} y={T} width={slot} height={plotH} className="hover-band" />}
+            {series.map((s, j) => {
+              const v = Number(r[s.key]);
+              if (v <= 0) return null;
+              return (
+                <g key={s.key}>
+                  <path d={roundedTop(xOf(i, j), y(v), barW, T + plotH - y(v))} fill={s.color} />
+                  {labelAll && (
+                    <text x={xOf(i, j) + barW / 2} y={y(v) - 6} className="extreme" textAnchor="middle" fill={s.color} pointerEvents="none">
+                      {short(v)}
+                    </text>
+                  )}
+                </g>
+              );
+            })}
+            <text x={L + slot * i + slot / 2} y={H - 8} className="axis" textAnchor="middle">{MONTHS[r.month - 1]}</text>
+            <rect x={L + slot * i} y={T} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHover(i)} />
+          </g>
+        ))}
+        {!labelAll &&
+          series.map((s, j) => (
+            <ExtremeLabels key={s.key} values={rows.map((r) => Number(r[s.key]))} x={(i) => xOf(i, j) + barW / 2} y={y} color={s.color} format={short} />
           ))}
         <line x1={L} x2={W - R} y1={T + plotH} y2={T + plotH} className="baseline" />
       </svg>
       {h && hover !== null && (
         <div className="tooltip" style={{ left: `${((L + slot * hover + slot / 2) / W) * 100}%` }}>
           <strong>{MONTHS[h.month - 1]}</strong>
-          <span><i style={{ background: SERIES.past }} />{prevYear}: {fmtMoney(h.prev)}</span>
-          <span><i style={{ background: SERIES.ref }} />{refYear}: {fmtMoney(h.ref)}</span>
-          {showBudget && <span><i style={{ background: SERIES.budget }} />Orçado {refYear}: {fmtMoney(h.budget)}</span>}
-          {Number(h.prev) > 0 && Number(h.ref) > 0 && <span className="muted">Variação: {fmtPct(String((Number(h.ref) - Number(h.prev)) / Number(h.prev)))}</span>}
+          {series.map((s) => (
+            <span key={s.key}><i style={{ background: s.color }} />{s.label}: {fmtMoney(h[s.key])}</span>
+          ))}
+          {prevYear !== null && Number(h.prev) > 0 && Number(h.ref) > 0 && <span className="muted">Variação: {fmtPct(String((Number(h.ref) - Number(h.prev)) / Number(h.prev)))}</span>}
+          {showBudget && Number(h.budget) > 0 && Number(h.ref) > 0 && <span className="muted">Realizado vs orçado: {fmtPct(String((Number(h.ref) - Number(h.budget)) / Number(h.budget)))}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Total acumulado mês a mês: ano em foco (azul, linha com marcadores) sobre a base (orçado em verde-água
+ * ou ano anterior em cinza, área). A série do ano em foco para no último mês com realizado. */
+export function CumulativeChart({ rows, prevYear, refYear, showBudget }: { rows: MonthlyRow[]; prevYear: number | null; refYear: number; showBudget: boolean }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const [box, W] = useWidth();
+  const H = 300, L = 84, R = 24, T = 30, B = 28;
+  const plotW = W - L - R, plotH = H - T - B;
+  const cum = (key: "prev" | "ref" | "budget") => rows.reduce<number[]>((acc, r) => [...acc, (acc[acc.length - 1] ?? 0) + Number(r[key])], []);
+  const ref = cum("ref");
+  const lastRef = rows.reduce((last, r, i) => (Number(r.ref) > 0 ? i : last), -1);
+  const baseKey = showBudget ? "budget" : prevYear !== null ? "prev" : null;
+  const base = baseKey ? cum(baseKey) : null;
+  const baseColor = baseKey === "budget" ? SERIES.budget : SERIES.past;
+  const baseLabel = baseKey === "budget" ? `Orçado ${refYear}` : String(prevYear);
+  const max = niceMax(Math.max(ref[lastRef] ?? 0, ...(base ?? [0]), 0));
+  const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
+  const slot = plotW / 12;
+  const x = (i: number) => L + slot * i + slot / 2;
+  const labelAll = slot >= 54;
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * max);
+  const refPts = ref.slice(0, lastRef + 1);
+  const area = (pts: number[]) => `${x(0)},${y(0)} ${pts.map((v, i) => `${x(i)},${y(v)}`).join(" ")} ${x(pts.length - 1)},${y(0)}`;
+
+  if (lastRef < 0 && !base) return <div className="chart muted small">Sem dados.</div>;
+  return (
+    <div className="chart" ref={box}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={`Total acumulado ${refYear}${base ? ` e ${baseLabel}` : ""}`} onMouseLeave={() => setHover(null)}>
+        {ticks.map((t) => (
+          <g key={t}>
+            <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="grid" />
+            <text x={L - 8} y={y(t) + 4} className="axis" textAnchor="end">{fmtCompact(t)}</text>
+          </g>
+        ))}
+        {base && <polygon points={area(base)} fill={baseColor} opacity={0.16} pointerEvents="none" />}
+        {base && <polyline points={base.map((v, i) => `${x(i)},${y(v)}`).join(" ")} fill="none" stroke={baseColor} strokeWidth={2} pointerEvents="none" />}
+        {refPts.length > 0 && <polygon points={area(refPts)} fill={SERIES.ref} opacity={0.14} pointerEvents="none" />}
+        {refPts.length > 0 && <polyline points={refPts.map((v, i) => `${x(i)},${y(v)}`).join(" ")} fill="none" stroke={SERIES.ref} strokeWidth={2.5} strokeDasharray="5 4" pointerEvents="none" />}
+        {base && base.map((v, i) => <circle key={`b${i}`} cx={x(i)} cy={y(v)} r={3.5} fill={baseColor} className="ring" pointerEvents="none" />)}
+        {refPts.map((v, i) => <circle key={`r${i}`} cx={x(i)} cy={y(v)} r={4} fill={SERIES.ref} className="ring" pointerEvents="none" />)}
+        {base &&
+          base.map((v, i) =>
+            labelAll || i === base.length - 1 || i === 0 ? (
+              <text key={`bl${i}`} x={x(i)} y={y(v) - 9} className="extreme" textAnchor="middle" fill={baseColor} pointerEvents="none">{short(v)}</text>
+            ) : null,
+          )}
+        {refPts.map((v, i) =>
+          labelAll || i === refPts.length - 1 || i === 0 ? (
+            <text key={`rl${i}`} x={x(i)} y={y(v) + 16} className="extreme" textAnchor="middle" fill={SERIES.ref} pointerEvents="none">{short(v)}</text>
+          ) : null,
+        )}
+        {rows.map((r, i) => (
+          <g key={r.month}>
+            {hover === i && <rect x={L + slot * i} y={T} width={slot} height={plotH} className="hover-band" />}
+            <text x={x(i)} y={H - 8} className="axis" textAnchor="middle">{MONTHS[r.month - 1]}</text>
+            <rect x={L + slot * i} y={T} width={slot} height={plotH} fill="transparent" onMouseEnter={() => setHover(i)} />
+          </g>
+        ))}
+        <line x1={L} x2={W - R} y1={T + plotH} y2={T + plotH} className="baseline" />
+      </svg>
+      {hover !== null && (
+        <div className="tooltip" style={{ left: `${(x(hover) / W) * 100}%` }}>
+          <strong>Acumulado até {MONTHS[hover]}</strong>
+          {hover <= lastRef && <span><i style={{ background: SERIES.ref }} />{refYear}: {fmtMoney(ref[hover])}</span>}
+          {base && <span><i style={{ background: baseColor }} />{baseLabel}: {fmtMoney(base[hover])}</span>}
+          {base && hover <= lastRef && base[hover] > 0 && <span className="muted">Diferença: {fmtMoney(ref[hover] - base[hover])} ({fmtPct(String((ref[hover] - base[hover]) / base[hover]))})</span>}
         </div>
       )}
     </div>

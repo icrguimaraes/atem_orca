@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   api,
@@ -16,7 +16,8 @@ import {
 import { useAuth } from "../auth";
 import { BudgetProgressCard } from "../components/BudgetProgressCard";
 import { FilterBar } from "../components/FilterBar";
-import { DivergingBars, Heatmap, Legend, MonthlyChart, PairedBars, SERIES, TopBars, Waterfall } from "../components/charts";
+import { CumulativeChart, DivergingBars, Heatmap, Legend, MonthlyChart, PairedBars, SERIES, TopBars, Waterfall } from "../components/charts";
+import { DrillTable } from "../components/DrillTable";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import {
   CYCLE_STATUS,
@@ -70,6 +71,51 @@ function RankChart({ rows, refLabel, prevLabel, empty, showPrev }: { rows: Overv
   );
 }
 
+const ORDER_KEY = "atem.painel.order";
+const MONTH_FULL = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+// blocos do painel que o usuário pode reordenar (os KPIs ficam sempre no topo)
+const SECTIONS = [
+  { key: "monthly", label: "Comparativo mensal" },
+  { key: "table", label: "Tabela por pacote, conta e centro de custo" },
+  { key: "cumulative", label: "Total acumulado" },
+  { key: "top", label: "Maiores centros de custo e contas" },
+  { key: "packages", label: "Pacotes GMD e prazos" },
+  { key: "bridge", label: "Ponte e variações por conta" },
+  { key: "heatmap", label: "Mapa de calor" },
+];
+
+/** Envolve um bloco do painel: posição visual pela ordem escolhida (CSS `order`) e, no modo organizar,
+ * uma faixa com o nome do bloco e setas para subir/descer. */
+function SectionShell({ id, index, count, organizing, onMove, children }: {
+  id: string; index: number; count: number; organizing: boolean; onMove: (key: string, dir: -1 | 1) => void; children: ReactNode;
+}) {
+  const label = SECTIONS.find((s) => s.key === id)?.label ?? id;
+  return (
+    <div className="section-shell" style={{ order: index }}>
+      {organizing && (
+        <div className="section-organize">
+          <span><strong>{index + 1}.</strong> {label}</span>
+          <div className="inline-controls">
+            <button type="button" className="btn btn-ghost btn-sm" disabled={index === 0} onClick={() => onMove(id, -1)} aria-label={`Subir ${label}`}>↑ Subir</button>
+            <button type="button" className="btn btn-ghost btn-sm" disabled={index === count - 1} onClick={() => onMove(id, 1)} aria-label={`Descer ${label}`}>↓ Descer</button>
+          </div>
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+/** "janeiro a setembro/26", "janeiro, março e maio/26" ou "todos os meses de 2026". */
+function monthsLabel(months: number[], year: number, closed: number | null): string {
+  const yy = String(year).slice(-2);
+  if (!months.length) return closed && closed < 12 ? `janeiro a ${MONTH_FULL[closed - 1]}/${yy} (meses com realizado)` : `todos os meses de ${year}`;
+  const contiguous = months.every((m, i) => i === 0 || m === months[i - 1] + 1);
+  if (contiguous && months.length > 1) return `${MONTH_FULL[months[0] - 1]} a ${MONTH_FULL[months[months.length - 1] - 1]}/${yy}`;
+  const names = months.map((m) => MONTH_FULL[m - 1]);
+  return `${names.length > 1 ? `${names.slice(0, -1).join(", ")} e ${names[names.length - 1]}` : names[0]}/${yy}`;
+}
+
 export default function Home() {
   const { user, can } = useAuth();
   const isController = can("CONTROLLER");
@@ -93,8 +139,47 @@ export default function Home() {
     return { cycle: cycles[0] ?? null, companies, ccs, packages };
   });
 
+  // meses exibidos (vazio = todos); afeta KPIs, gráficos e tabela
+  const [months, setMonths] = useState<number[]>([]);
+  function toggleMonth(m: number) {
+    setMonths((cur) => {
+      const next = cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m].sort((a, b) => a - b);
+      return next.length === 12 ? [] : next;
+    });
+  }
+  // ordem dos blocos do painel escolhida pelo usuário (guardada no navegador)
+  const [order, setOrder] = useState<string[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(ORDER_KEY) ?? "[]") as string[];
+      return [...saved.filter((k) => SECTIONS.some((s) => s.key === k)), ...SECTIONS.map((s) => s.key).filter((k) => !saved.includes(k))];
+    } catch {
+      return SECTIONS.map((s) => s.key);
+    }
+  });
+  const [organizing, setOrganizing] = useState(false);
+  function move(key: string, dir: -1 | 1) {
+    setOrder((cur) => {
+      const i = cur.indexOf(key);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= cur.length) return cur;
+      const next = [...cur];
+      [next[i], next[j]] = [next[j], next[i]];
+      try {
+        localStorage.setItem(ORDER_KEY, JSON.stringify(next));
+      } catch {
+        /* sem armazenamento: a ordem vale só nesta visita */
+      }
+      return next;
+    });
+  }
+  const shell = (key: string, children: ReactNode) => (
+    <SectionShell key={key} id={key} index={order.indexOf(key)} count={order.length} organizing={organizing} onMove={move}>
+      {children}
+    </SectionShell>
+  );
+
   const query = new URLSearchParams(
-    Object.entries({ ...filters, years: years.join(",") }).filter(([, v]) => v),
+    Object.entries({ ...filters, years: years.join(","), months: months.join(",") }).filter(([, v]) => v),
   ).toString();
   const inventory = useLoad(() => api<Inventory>("/dashboard/inventory"));
   const overview = useLoad(() => api<Overview>(`/dashboard/overview${query ? `?${query}` : ""}`), [query]);
@@ -168,6 +253,27 @@ export default function Home() {
         )}
       />
 
+      {o && hasData && (
+        <div className="section-tools">
+          <div className="month-chips" role="group" aria-label="Meses exibidos">
+            <button type="button" className={months.length === 0 ? "active" : ""} aria-pressed={months.length === 0} onClick={() => setMonths([])}>
+              Todos
+            </button>
+            {MONTHS.map((m, i) => (
+              <button key={m} type="button" className={months.includes(i + 1) ? "active" : ""} aria-pressed={months.includes(i + 1)} onClick={() => toggleMonth(i + 1)}>
+                {m.charAt(0) + m.slice(1).toLowerCase()}
+              </button>
+            ))}
+          </div>
+          <div className="inline-controls">
+            <span className="selection-note">Selecionado: {monthsLabel(months, o.reference_year, o.last_closed_period)}</span>
+            <button type="button" className="btn btn-ghost btn-sm" aria-pressed={organizing} onClick={() => setOrganizing(!organizing)}>
+              {organizing ? "Concluir" : "Organizar painel"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {overview.error && <Alert>{overview.error}</Alert>}
       {!o ? (
         <Loading />
@@ -202,7 +308,7 @@ export default function Home() {
                 hint={`${o.last_closed_period} mês(es) com realizado`}
               />
             )}
-            {o.has_actual && o.last_closed_period !== 12 && (
+            {o.has_actual && o.last_closed_period !== 12 && !months.length && (
               <Stat
                 label={`${o.reference_year} anualizado`}
                 value={fmtCompact(o.kpis.ref_annualized)}
@@ -218,8 +324,10 @@ export default function Home() {
             )}
           </div>
 
+          <div className="section-stack">
+          {shell("monthly",
           <Card
-            title="Evolução mensal do realizado"
+            title="Comparativo mensal"
             actions={
               <button className="btn btn-ghost btn-sm" onClick={() => setShowTable(!showTable)}>
                 {showTable ? "Ver gráfico" : "Ver tabela"}
@@ -230,7 +338,7 @@ export default function Home() {
               items={[
                 ...(o.has_prev ? [{ label: String(o.previous_year), color: SERIES.past }] : []),
                 ...(o.has_actual ? [{ label: String(o.reference_year), color: SERIES.ref }] : []),
-                ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget, line: true }] : []),
+                ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget }] : []),
               ]}
             />
             {showTable ? (
@@ -265,9 +373,29 @@ export default function Home() {
             ) : (
               <MonthlyChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} />
             )}
-          </Card>
+          </Card>,
+          )}
 
-          {/* ordem por relevância: onde está o dinheiro (CCs e contas) → pacotes → de onde vem a variação → detalhe mês a mês */}
+          {shell("table",
+          <Card title={`Por pacote GMD, conta e centro de custo · ${refLabel}`}>
+            <DrillTable query={query} refLabel={`Realizado ${refLabel}`} />
+          </Card>,
+          )}
+
+          {shell("cumulative",
+          <Card title={`Total acumulado · ${o.reference_year}${o.has_budget ? " vs orçado" : o.has_prev ? ` vs ${o.previous_year}` : ""}`}>
+            <Legend
+              items={[
+                { label: `Realizado ${o.reference_year}`, color: SERIES.ref },
+                ...(o.has_budget ? [{ label: `Orçado ${o.reference_year}`, color: SERIES.budget }] : o.has_prev ? [{ label: `Realizado ${o.previous_year}`, color: SERIES.past }] : []),
+              ]}
+            />
+            <CumulativeChart rows={o.monthly} prevYear={o.has_prev ? o.previous_year : null} refYear={o.reference_year} showBudget={o.has_budget} />
+          </Card>,
+          )}
+
+          {/* ordem padrão por relevância; o usuário pode reordenar em "Organizar painel" */}
+          {shell("top",
           <div className="grid-2">
             <Card title={`Maiores centros de custo · ${refLabel}`}>
               {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
@@ -277,8 +405,10 @@ export default function Home() {
               {o.has_prev && <p className="muted small">Barra fina: {prevLabel}. Percentual: variação entre os períodos.</p>}
               <RankChart rows={o.top_accounts} prevLabel={prevLabel} refLabel={refLabel} empty="Sem dados." showPrev={o.has_prev} />
             </Card>
-          </div>
+          </div>,
+          )}
 
+          {shell("packages",
           <div className="grid-2">
             <Card title={`Por pacote GMD · acumulado até ${monthName ?? "—"}`}>
               <Legend
@@ -312,9 +442,10 @@ export default function Home() {
                 <dd>{fmtDate(cycle?.capex_deadline ?? null)} <span className="muted small">{daysUntil(cycle?.capex_deadline ?? null)}</span></dd>
               </dl>
             </Card>
-          </div>
+          </div>,
+          )}
 
-          {o.has_prev && o.has_actual && o.by_package.length > 0 && (
+          {o.has_prev && o.has_actual && o.by_package.length > 0 && shell("bridge",
             <div className="grid-2">
               <Card title={`Ponte ${o.previous_year} → ${o.reference_year} por pacote · até ${monthName ?? "—"}`}>
                 <p className="muted small">De onde vem a variação: cada barra é o aumento (▲) ou redução (▼) do pacote no mesmo período.</p>
@@ -336,15 +467,15 @@ export default function Home() {
                   <Empty>Sem variações.</Empty>
                 )}
               </Card>
-            </div>
+            </div>,
           )}
 
-          {o.heatmap.rows.length > 0 && (
+          {o.heatmap.rows.length > 0 && shell("heatmap",
             <Card title={`Mapa de calor · maiores centros de custo × mês (${o.heatmap.year})`}>
               <Heatmap rows={o.heatmap.rows.map((r) => ({ label: r.name, sub: r.code, values: r.values.map(Number), total: Number(r.total) }))} />
-            </Card>
+            </Card>,
           )}
-
+          </div>
         </div>
       )}
 

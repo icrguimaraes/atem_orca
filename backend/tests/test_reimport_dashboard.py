@@ -135,6 +135,30 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     assert (both["reference_year"], both["previous_year"], both["kpis"]["ytd_var_pct"]) == (2026, 2025, "-0.5000")
     # ano sem base carregada é ignorado
     assert client.get("/api/v1/dashboard/overview?years=2019", headers=admin).json()["selected_years"] == [2025, 2026]
+    # filtro de meses: só janeiro e fevereiro entram nos números (2026: 110 + 210 = 320; 2025: o dobro)
+    jf = client.get("/api/v1/dashboard/overview?years=2025,2026&months=1,2", headers=admin).json()
+    assert jf["selected_months"] == [1, 2] and jf["kpis"]["ref_ytd"] == "320.00" and jf["kpis"]["prev_ytd"] == "640.00"
+
+    # tabela com drill-down: pacote → conta → centro de custo, base = ano anterior no mesmo período
+    bd = client.get("/api/v1/dashboard/breakdown?years=2025,2026", headers=admin).json()
+    assert bd["base"] == "prev" and bd["base_label"] == "Realizado 2025 até 8"
+    by_name = {r["name"]: r for r in bd["rows"]}
+    assert by_name["Viagens"]["ref"] == "350.00" and by_name["Viagens"]["base"] == "700.00"
+    assert by_name["Viagens"]["var_pct"] == "-0.5000" and by_name["Viagens"]["has_children"] is True
+    assert bd["total"]["ref"] == "430.00" and bd["total"]["base"] == "860.00"
+    pkg = by_name["Viagens"]["id"]
+    accounts = client.get(
+        f"/api/v1/dashboard/breakdown?years=2025,2026&group_by=account&parent_package_id={pkg}", headers=admin
+    ).json()
+    assert [(r["code"], r["ref"]) for r in accounts["rows"]] == [("6010301001", "350.00")]
+    ccs = client.get(
+        f"/api/v1/dashboard/breakdown?years=2025,2026&group_by=cost_center&parent_account_id={accounts['rows'][0]['id']}",
+        headers=admin,
+    ).json()
+    assert [(r["code"], r["ref"], r["has_children"]) for r in ccs["rows"]] == [("1050101011", "350.00", False)]
+    # um ano só e sem orçado: sem base de comparação
+    solo = client.get("/api/v1/dashboard/breakdown?years=2026", headers=admin).json()
+    assert solo["base"] is None and solo["total"]["ref"] == "430.00" and solo["total"]["var_pct"] is None
 
     # gestor só enxerga o próprio CC
     client.post(
