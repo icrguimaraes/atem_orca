@@ -79,6 +79,11 @@ Shadow strategy is subtle and warm, using slightly tinted shadows to feel less c
 
 ## Aplicação no ATEM
 
+### Aninhamento e modebar
+
+- Elemento com borda dentro de um `.card` (stat, tabela, sub-card, resumo de filtros) usa `--radius-sm` (8 px) e sem sombra própria: cantos internos menores que os externos (12 px).
+- A *modebar* do Plotly no desktop aparece só no hover, sem fundo (ícones em `--muted`); no celular não existe.
+
 ### Tema claro/escuro
 
 - Três opções no rodapé da barra lateral e na folha "Mais" do celular: **Auto** (segue o sistema), **Claro**, **Escuro** (`theme.tsx`, preferência em `localStorage["atem.theme"]`, aplicada em `index.html` antes do React para não piscar).

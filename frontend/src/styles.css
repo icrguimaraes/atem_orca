@@ -168,6 +168,9 @@ a { color: inherit; }
 
 /* ---------- componentes */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); min-width: 0; }
+/* aninhamento: cantos internos menores que os externos (12 px fora, 8 px dentro) para não destoar */
+.card .stat, .card .card, .card .capex-project, .card .table-wrap, .card .mode-choice, .card .filter-summary { border-radius: var(--radius-sm); }
+.card .stat { box-shadow: none; }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 24px; }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; }
@@ -550,9 +553,11 @@ tr.saving { opacity: 0.6; }
 
 /* ---------- Análise (Plotly) */
 .plotly-chart { width: 100%; min-width: 0; }
-.plotly-chart .modebar { opacity: 0.35; transition: opacity 150ms ease; }
+.plotly-chart .modebar { opacity: 0; transition: opacity 150ms ease; }
 .plotly-chart:hover .modebar { opacity: 1; }
+.plotly-chart .modebar, .plotly-chart .modebar-group { background: transparent !important; }
 .plotly-chart .modebar-btn path { fill: var(--muted) !important; }
+.plotly-chart .modebar-btn:hover path, .plotly-chart .modebar-btn.active path { fill: var(--text) !important; }
 .breadcrumb { font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .breadcrumb .btn-link:disabled { text-decoration: none; color: var(--text); font-weight: 600; cursor: default; }
 .stats-compact { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); margin-bottom: 12px; }
