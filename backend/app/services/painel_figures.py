@@ -104,7 +104,13 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
                 text=[_short(v) if v > 0 else "" for v in values],
                 textposition="outside",
                 cliponaxis=False,
-                textfont={"size": 11, "color": [INK[color] if a == 1.0 else _rgba(INK[color], 0.4) for a in opacity]},
+                textfont={
+                    "size": 11,
+                    # sem seleção, uma cor só; com meses escolhidos, os rótulos dos outros meses esmaecem
+                    "color": [INK[color] if a == 1.0 else _rgba(INK[color], 0.4) for a in opacity]
+                    if picked
+                    else INK[color],
+                },
                 customdata=[[fmt_money(v), m, t] for m, (v, t) in enumerate(zip(values, tips, strict=True), start=1)],
                 hovertemplate=name + ": <b>%{customdata[0]}</b><extra></extra>",
             )
