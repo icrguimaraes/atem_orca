@@ -201,6 +201,29 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     assert client.get("/api/v1/dashboard/data-quality", headers=manager).status_code == 403
 
 
+def test_breakdown_drills_into_accounts_without_package(client, admin, run_worker):
+    """A linha "Sem pacote" da tabela do painel também abre (contas sem pacote → centros de custo)."""
+    _setup(client, admin, run_worker)
+    row = ("1001", "0001", "MANAUS", "1050101011", "CC A", "G", "6010309998", "Conta sem pacote", None, 40)
+    row += (None,) * 7 + (40,)
+    import_and_load(
+        client, admin, run_worker, builders.realizado_wide([row]), "r2026b.xlsx", create_missing_dimensions="true"
+    )
+    root = client.get("/api/v1/dashboard/breakdown?years=2026&compare=false", headers=admin).json()
+    no_pkg = next(r for r in root["rows"] if r["name"] == "Sem pacote")
+    assert (no_pkg["id"], no_pkg["ref"], no_pkg["has_children"]) == (None, "40.00", True)
+    assert all(r["has_children"] for r in root["rows"])
+    accounts = client.get(
+        "/api/v1/dashboard/breakdown?years=2026&compare=false&group_by=account&parent_no_package=true", headers=admin
+    ).json()
+    assert [(r["code"], r["ref"], r["has_children"]) for r in accounts["rows"]] == [("6010309998", "40.00", True)]
+    ccs = client.get(
+        f"/api/v1/dashboard/breakdown?years=2026&compare=false&group_by=cost_center&parent_account_id={accounts['rows'][0]['id']}",
+        headers=admin,
+    ).json()
+    assert [(r["code"], r["ref"], r["has_children"]) for r in ccs["rows"]] == [("1050101011", "40.00", False)]
+
+
 def test_data_quality(client, admin, run_worker):
     _setup(client, admin, run_worker)
     checks = {c["code"]: c for c in client.get("/api/v1/dashboard/data-quality", headers=admin).json()["checks"]}

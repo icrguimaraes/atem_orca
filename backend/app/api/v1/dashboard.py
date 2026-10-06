@@ -588,7 +588,9 @@ def breakdown(
                 "share_base": _pct(b, total_base) if total_base else None,
                 "var": _money(c - b),
                 "var_pct": _pct(c, b) if P.base_kind else None,
-                "has_children": group_by != "cost_center" and k is not None,
+                # "Sem pacote" (id nulo) também detalha: os filhos vêm com parent_no_package; já uma conta
+                # sem cadastro (só no orçamento proposto) não tem como ser filtrada
+                "has_children": group_by == "package" or (group_by == "account" and k is not None),
             }
         )
     rows.sort(key=lambda r: Decimal(r["ref"]), reverse=True)
