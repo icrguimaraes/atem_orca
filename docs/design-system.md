@@ -79,6 +79,12 @@ Shadow strategy is subtle and warm, using slightly tinted shadows to feel less c
 
 ## Aplicação no ATEM
 
+### Largura e rótulos de extremos
+
+- Conteúdo em até **1600 px** (`.content`), com 40 px de margem; em monitores largos o espaço vazio fica à direita, não dentro dos cards.
+- Gráfico sem rótulo em cada ponto (linhas e barras mensais) mostra **sempre o maior e o menor valor** da série: Plotly via `_extreme_labels` (texto no ponto, cor da série); SVG via `ExtremeLabels` (contorno na cor da superfície para legibilidade). O mínimo considera só meses com valor.
+- Gráficos SVG mensais são desenhados na largura real do container (`useWidth`), em escala 1:1: texto e barras não esticam.
+
 ### Marca e celular
 
 - **Logo**: `frontend/public/brand/logo.svg` (ou `.png`) é usada por `components/Brand.tsx` na barra lateral, na barra superior do celular e no login; sem o arquivo, monograma "A" em coral.

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { MONTHS, fmtCompact, fmtMoney, fmtPct } from "../labels";
 
 /** Séries: ano de referência (slot 1), ano anterior (slot 2), orçamento (slot 3). Cores em styles.css. */
@@ -31,9 +31,27 @@ export function Legend({ items }: { items: { label: string; color: string; line?
 interface MonthlyRow { month: number; prev: string; ref: string; budget: string }
 
 /** Barras agrupadas por mês (ano anterior × ano de referência) + linha opcional de orçamento. Um eixo só, em R$. */
+/** Largura real do container: o SVG é desenhado em escala 1:1 (texto e barras não esticam em telas largas). */
+function useWidth(fallback = 760): [RefObject<HTMLDivElement>, number] {
+  const ref = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState(fallback);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const width = Math.round(entries[0].contentRect.width);
+      if (width > 0) setW(Math.max(360, width));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, w];
+}
+
 export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: MonthlyRow[]; prevYear: number; refYear: number; showBudget: boolean }) {
   const [hover, setHover] = useState<number | null>(null);
-  const W = 760, H = 260, L = 84, R = 12, T = 12, B = 28;
+  const [box, W] = useWidth();
+  const H = 260, L = 84, R = 12, T = 12, B = 28;
   const plotW = W - L - R, plotH = H - T - B;
   const values = rows.flatMap((r) => [Number(r.prev), Number(r.ref), showBudget ? Number(r.budget) : 0]);
   const max = niceMax(Math.max(...values, 0));
@@ -45,8 +63,8 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
   const h = hover !== null ? rows[hover] : null;
 
   return (
-    <div className="chart">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Realizado mensal ${prevYear} e ${refYear}`} onMouseLeave={() => setHover(null)}>
+    <div className="chart" ref={box}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={`Realizado mensal ${prevYear} e ${refYear}`} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="grid" />
@@ -73,7 +91,10 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
             </g>
           );
         })}
+        <ExtremeLabels values={rows.map((r) => Number(r.prev))} x={(i) => L + slot * i + slot / 2} y={y} color={SERIES.prev} dx={-barW / 2 - 1} />
+        <ExtremeLabels values={rows.map((r) => Number(r.ref))} x={(i) => L + slot * i + slot / 2} y={y} color={SERIES.ref} dx={barW / 2 + 1} />
         {showBudget && <polyline points={budgetPts} fill="none" stroke={SERIES.budget} strokeWidth={2} pointerEvents="none" />}
+        {showBudget && <ExtremeLabels values={rows.map((r) => Number(r.budget))} x={(i) => L + slot * i + slot / 2} y={y} color={SERIES.budget} />}
         {showBudget &&
           rows.map((r, i) => (
             <circle key={i} cx={L + slot * i + slot / 2} cy={y(Number(r.budget))} r={4} fill={SERIES.budget} className="ring" pointerEvents="none" />
@@ -90,6 +111,29 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget }: { rows: Mo
         </div>
       )}
     </div>
+  );
+}
+
+/** Índices do maior e do menor valor (> 0) de uma série: gráficos sem rótulo mostram sempre os extremos. */
+function extremes(values: number[]): { i: number; v: number; kind: "max" | "min" }[] {
+  const pos = values.map((v, i) => ({ v, i })).filter((p) => p.v > 0);
+  if (!pos.length) return [];
+  const hi = pos.reduce((a, b) => (b.v > a.v ? b : a));
+  const lo = pos.reduce((a, b) => (b.v < a.v ? b : a));
+  return hi.i === lo.i ? [{ ...hi, kind: "max" }] : [{ ...hi, kind: "max" }, { ...lo, kind: "min" }];
+}
+
+function ExtremeLabels({ values, x, y, color, format = fmtCompact, dx = 0 }: {
+  values: number[]; x: (i: number) => number; y: (v: number) => number; color: string; format?: (n: number) => string; dx?: number;
+}) {
+  return (
+    <>
+      {extremes(values).map((e) => (
+        <text key={e.kind} x={x(e.i) + dx} y={y(e.v) - 7} className="extreme" textAnchor="middle" fill={color} pointerEvents="none">
+          {format(e.v)}
+        </text>
+      ))}
+    </>
   );
 }
 
@@ -149,7 +193,8 @@ export function MonthlyBars({
   const tip = format ?? fmtMoney;
   const axis = axisFormat ?? format ?? fmtCompact;
   const [hover, setHover] = useState<number | null>(null);
-  const W = 760, H = height, L = 84, R = 12, T = 12, B = 28;
+  const [box, W] = useWidth();
+  const H = height, L = 84, R = 12, T = 12, B = 28;
   const plotW = W - L - R, plotH = H - T - B;
   const max = niceMax(Math.max(0, ...series.flatMap((s) => s.values), ...(line?.values ?? [])));
   const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH;
@@ -159,8 +204,8 @@ export function MonthlyBars({
   const groupW = barW * series.length + gap * (series.length - 1);
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * max);
   return (
-    <div className="chart">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={series.map((s) => s.label).join(", ")} onMouseLeave={() => setHover(null)}>
+    <div className="chart" ref={box}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={series.map((s) => s.label).join(", ")} onMouseLeave={() => setHover(null)}>
         {ticks.map((t) => (
           <g key={t}>
             <line x1={L} x2={W - R} y1={y(t)} y2={y(t)} className="grid" />
@@ -182,12 +227,16 @@ export function MonthlyBars({
             </g>
           );
         })}
+        {series.map((s, j) => (
+          <ExtremeLabels key={s.label} values={s.values} x={(i) => L + slot * i + (slot - groupW) / 2 + j * (barW + gap) + barW / 2} y={y} color={s.color} format={axis} />
+        ))}
         {line && line.values.some((v) => v > 0) && (
           <>
             <polyline
               points={line.values.map((v, i) => `${L + slot * i + slot / 2},${y(v)}`).join(" ")}
               fill="none" stroke={line.color} strokeWidth={2} pointerEvents="none"
             />
+            <ExtremeLabels values={line.values} x={(i) => L + slot * i + slot / 2} y={y} color={line.color} format={axis} />
             {line.values.map((v, i) => (
               <circle key={i} cx={L + slot * i + slot / 2} cy={y(v)} r={4} fill={line.color} className="ring" pointerEvents="none" />
             ))}

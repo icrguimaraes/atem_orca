@@ -120,7 +120,7 @@ a { color: inherit; }
 .sidebar-foot { border-top: 1px solid var(--border); padding-top: 16px; display: grid; gap: 4px; }
 .sidebar-foot .user-name { color: var(--text); font-weight: 600; }
 .sidebar-foot .btn { justify-self: start; margin-top: 8px; }
-.content { padding: 40px 40px 64px; max-width: 1280px; width: 100%; display: grid; gap: 24px; align-content: start; }
+.content { padding: 40px 40px 64px; max-width: 1600px; width: 100%; display: grid; gap: 24px; align-content: start; }
 
 .page-header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .page-header p { margin: 4px 0 0; max-width: 760px; }
@@ -346,6 +346,7 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 .chart .grid { stroke: var(--grid); stroke-width: 1; }
 .chart .baseline { stroke: var(--border); stroke-width: 1; }
 .chart .axis { fill: var(--muted); font-size: 11px; }
+.chart .extreme { font-size: 11px; font-weight: 700; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
 .chart .hover-band { fill: var(--surface-2); }
 .chart .ring { stroke: var(--surface); stroke-width: 2; }
 .tooltip {

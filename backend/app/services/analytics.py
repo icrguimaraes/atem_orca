@@ -391,6 +391,23 @@ def _fig(data: list, layout: dict) -> dict:
     return json.loads(fig.to_json())
 
 
+def _extreme_labels(values: list[float]) -> tuple[list[str], list[str]]:
+    """Rótulos só no maior e no menor ponto da série (regra do design: gráfico sem rótulo mostra os extremos).
+    O mínimo considera só meses com valor; se máximo e mínimo coincidem, um rótulo só."""
+    positives = [v for v in values if v > 0]
+    if not positives:
+        return [""] * len(values), ["top center"] * len(values)
+    hi, lo = max(positives), min(positives)
+    i_hi, i_lo = values.index(hi), values.index(lo)
+    text = [""] * len(values)
+    pos = ["top center"] * len(values)
+    text[i_hi] = fmt_compact(hi)
+    if i_lo != i_hi:
+        text[i_lo] = fmt_compact(lo)
+        pos[i_lo] = "bottom center"
+    return text, pos
+
+
 def fig_monthly(base: Base) -> dict:
     y = base.ctx
     rows = {r["id"]: r for r in group(base, "month")}
@@ -406,12 +423,17 @@ def fig_monthly(base: Base) -> dict:
         if not any(values):
             continue
         all_values += values
+        text, textposition = _extreme_labels(values)
         data.append(
             go.Scatter(
                 x=list(MONTH_NAMES),
                 y=values,
                 name=name,
-                mode="lines+markers",
+                mode="lines+markers+text",
+                text=text,
+                textposition=textposition,
+                textfont={"size": 11, "color": color},
+                cliponaxis=False,
                 line={"color": color, "width": 2.5, "dash": dash},
                 marker={"size": 7},
                 customdata=[fmt_money(v) for v in values],
