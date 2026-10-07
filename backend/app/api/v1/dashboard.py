@@ -360,7 +360,16 @@ class Facts:
                 if not amount or (self.months and m not in self.months) or (max_period and m > max_period):
                     continue
                 out[tuple(m if k == "period" else attrs[k] for k in keys)] += amount
+            # CAPEX sem cronograma: conta no total do ano, não nos cortes por mês nem no "mesmo período"
+            if r.unscheduled and "period" not in keys and not self.months and max_period is None:
+                out[tuple(attrs[k] for k in keys)] += r.unscheduled
         return out
+
+    def unscheduled_total(self) -> Decimal:
+        """Orçamento proposto sem mês (CAPEX sem cronograma) no escopo e nos filtros."""
+        if self.months:
+            return ZERO
+        return sum((r.unscheduled for r, _, _ in self._target_rows()), ZERO)
 
     @staticmethod
     def _column(model, key: str):
@@ -473,6 +482,8 @@ def overview(
             "budget_total": _money(budget_total),
             "budget_ytd": _money(budget_cmp),
             "budget_consumption_pct": _pct(actual_total, budget_cmp) if (P.main == "actual" and budget_cmp) else None,
+            # parcela do orçamento do ano do ciclo sem mês (CAPEX sem cronograma): está no total, não no mensal
+            "budget_unscheduled": _money(f.unscheduled_total() if P.target_year in P.years else ZERO),
         },
         "monthly": _monthly(f, P),
         "top_cost_centers": _ranking(db, f, P, "cost_center_id", CostCenter),

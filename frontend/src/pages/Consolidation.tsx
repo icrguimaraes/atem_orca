@@ -192,7 +192,11 @@ export default function Consolidation() {
           const mod = data.modules[m];
           const p = Number(mod.proposed);
           const r = Number(mod.ref_annualized);
-          return <Stat key={m} label={mod.label} value={fmtCompact(p)} hint={r ? `${pct(p, r)} vs ${y.ref} anualizado` : `${y.ref} sem realizado`} />;
+          const u = Number(mod.unscheduled ?? 0);
+          const hint = [r ? `${pct(p, r)} vs ${y.ref} anualizado` : `${y.ref} sem realizado`, u > 0 ? `inclui ${fmtCompact(u)} sem cronograma mensal` : null]
+            .filter(Boolean)
+            .join(" · ");
+          return <Stat key={m} label={mod.label} value={fmtCompact(p)} hint={hint} />;
         })}
       </div>
 

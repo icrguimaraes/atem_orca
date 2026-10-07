@@ -159,6 +159,19 @@ def test_capex_template_import(client, admin, run_worker):
     _, outsider = _user(client, admin, "sem-cc@t.com", ["MANAGER"])
     assert client.get("/api/v1/findings", headers=outsider).json()["items"] == []  # gestor só vê os seus CCs
 
+    # CAPEX sem cronograma é orçamento: a cadeira (total 4.000, cronograma 3.000) entra inteira no total do ano,
+    # a diferença aparece como "sem cronograma" (Consolidação e Painel), e some quando o cronograma fecha
+    ov = client.get("/api/v1/consolidation/overview", headers=admin).json()["modules"]["CAPEX"]
+    assert (ov["proposed"], ov["unscheduled"]) == ("34000.00", "1000.00")
+    assert sum(float(v) for v in ov["monthly"]) == 33000.0
+    panel = client.get("/api/v1/dashboard/overview?years=2027", headers=admin).json()
+    assert (panel["kpis"]["ref_ytd"], panel["kpis"]["budget_unscheduled"]) == ("34000.00", "1000.00")
+    assert sum(float(r["budget"]) for r in panel["monthly"]) == 33000.0
+    assert (
+        client.get("/api/v1/dashboard/overview?years=2027&months=5", headers=admin).json()["kpis"]["ref_ytd"]
+        == "3000.00"
+    )
+
     # correção na própria página: cronograma da cadeira (4 × R$ 1.000) fecha com o total
     cadeira = mine[0]
     assert cadeira["fix"]["type"] == "schedule" and cadeira["fix"]["total"] == "4000.00" and cadeira["editable"]
@@ -170,6 +183,8 @@ def test_capex_template_import(client, admin, run_worker):
     )
     assert fixed.status_code == 200, fixed.text
     assert fixed.json()["note"] == "Cronograma: MAI R$ 2.000,00, JUN R$ 2.000,00"
+    ov = client.get("/api/v1/consolidation/overview", headers=admin).json()["modules"]["CAPEX"]
+    assert (ov["proposed"], ov["unscheduled"]) == ("34000.00", "0.00")
     found = client.get("/api/v1/findings", headers=admin).json()
     assert cadeira["key"] not in {i["key"] for i in found["items"]}
     assert (found["reviews"][0]["action"], found["reviews"][0]["kind"]) == ("CORRECTED", "CAPEX_SCHEDULE_MISMATCH")

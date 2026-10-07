@@ -121,6 +121,10 @@ def budget_workbook(db: Session, ctx: Context, version: BudgetVersion, scope: se
         f"{ctx.ref_year} anualizado = realizado até o último mês fechado × 12 / meses fechados. "
         "Pessoal = salário × reajuste × multiplicador do contrato."
     )
+    ws["A4"] = (
+        "Sem cronograma = CAPEX com valor total mas sem distribuição mensal (pendência crítica no CC): "
+        "conta no orçamento do ano, mas não vai para a carga SAP até ser distribuído."
+    )
     by_module: dict[str, Decimal] = defaultdict(lambda: ZERO)
     for r in rows:
         by_module[r.module] += r.total
@@ -154,6 +158,7 @@ def budget_workbook(db: Session, ctx: Context, version: BudgetVersion, scope: se
         [
             svc.MODULE_LABELS[m],
             *[_f(sum((r.values[i] for r in rows if r.module == m), ZERO)) for i in range(12)],
+            _f(sum((r.unscheduled for r in rows if r.module == m), ZERO)),
             _f(by_module[m]),
         ]
         for m in svc.MODULES
@@ -162,9 +167,9 @@ def budget_workbook(db: Session, ctx: Context, version: BudgetVersion, scope: se
     _table(
         ws,
         next_row + 1,
-        ["Módulo", *months, "Total"],
+        ["Módulo", *months, "Sem cronograma", "Total"],
         monthly,
-        money_cols=set(range(2, 15)),
+        money_cols=set(range(2, 16)),
         widths={1: 28},
         total=True,
     )
@@ -173,9 +178,10 @@ def budget_workbook(db: Session, ctx: Context, version: BudgetVersion, scope: se
     keyed: dict[tuple, list[Decimal]] = {}
     for r in rows:
         k = (r.company_code, r.branch_code or "", r.cost_center_code, r.account_code)
-        keyed.setdefault(k, [ZERO] * 12)
+        keyed.setdefault(k, [ZERO] * 13)  # 12 meses + sem cronograma
         for i in range(12):
             keyed[k][i] += r.values[i]
+        keyed[k][12] += r.unscheduled
     sap = [
         [k[0], k[1], k[2], k[3], "-".join(k), *[_f(v) for v in vals], _f(money(sum(vals, ZERO)))]
         for k, vals in sorted(keyed.items())
@@ -184,9 +190,9 @@ def budget_workbook(db: Session, ctx: Context, version: BudgetVersion, scope: se
     _sheet(
         wb,
         "Carga SAP",
-        ["Empresa", "Filial", "Centro de custo", "Conta", "Chave", *months, "Total"],
+        ["Empresa", "Filial", "Centro de custo", "Conta", "Chave", *months, "Sem cronograma", "Total"],
         sap,
-        money_cols=set(range(6, 19)),
+        money_cols=set(range(6, 20)),
         widths={5: 34},
         total=True,
     )
@@ -206,6 +212,7 @@ def budget_workbook(db: Session, ctx: Context, version: BudgetVersion, scope: se
             "Pacote",
             "Chave",
             *months,
+            "Sem cronograma",
             "Total",
         ],
         [
@@ -220,11 +227,12 @@ def budget_workbook(db: Session, ctx: Context, version: BudgetVersion, scope: se
                 r.package,
                 r.key,
                 *[_f(v) for v in r.values],
+                _f(r.unscheduled),
                 _f(r.total),
             ]
             for r in rows
         ],
-        money_cols=set(range(10, 23)),
+        money_cols=set(range(10, 24)),
         widths={5: 36, 7: 34, 8: 22, 9: 34},
         total=True,
     )

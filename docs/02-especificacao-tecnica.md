@@ -349,6 +349,12 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 
 ## 15. Regras implementadas na Fase 5 (Consolidação e exportação)
 
+- **CAPEX sem cronograma mensal** (ex.: template importado com o valor total e os meses vazios): a diferença entre
+  o valor do item e a soma do cronograma é **orçamento sem mês** (`Row.unscheduled`): entra no total do ano na
+  Consolidação, no Painel (`kpis.budget_unscheduled`, com a nota "inclui … sem cronograma mensal") e na tabela por
+  pacote/conta/CC; não entra nos meses, nos cortes por mês nem na carga SAP (coluna "Sem cronograma" no Excel).
+  Continua pendência crítica no CC até o gestor distribuir. A fotografia da versão guarda a parcela como 13º valor.
+
 - **Base consolidada** (`services/consolidation.py`): OPEX (linhas), CAPEX (itens) e Pessoal (projeção do quadro) na mesma granularidade `empresa-filial-CC-conta × mês`. Pessoal entra em três contas por CC, parametrizáveis no ciclo: `personnel.salary_account` (salário com reajuste), `personnel.charges_account` (parte do multiplicador: encargos e benefícios) e `personnel.severance_account` (verbas rescisórias). Valores sugeridos 6010101001 / 6010102001 / 6010101010 — **confirmar com a contabilidade**; enquanto a conta não existir no cadastro, aparece como ponto de atenção.
 - **Painel** (`/consolidacao`): totais por módulo × ano anterior × ano de referência anualizado, ponte por módulo, mês × módulo, pacote, maiores variações por conta (mesmos alertas do OPEX), matriz CC × módulo × situação e versões. Gestor vê só os seus CCs.
 - **Pontos de atenção**: CCs não iniciados (com prazo), prazo vencido, ajuste pendente, envios aguardando análise, justificativas pendentes (OPEX e Pessoal), pendências críticas de CAPEX, contas de pessoal não cadastradas.

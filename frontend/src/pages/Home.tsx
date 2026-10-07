@@ -377,7 +377,13 @@ export default function Home() {
               <Stat label={`Realizado ${o.previous_year} (ano cheio)`} value={fmtCompact(o.kpis.prev_total)} hint={fmtMoney(o.kpis.prev_total)} />
             )}
             {hasBase && <Stat label={baseLabel} value={fmtCompact(o.kpis.prev_ytd)} hint="base de comparação" />}
-            <Stat label={mainLabel} value={fmtCompact(o.kpis.ref_ytd)} hint={fmtMoney(o.kpis.ref_ytd)} />
+            <Stat
+              label={mainLabel}
+              value={fmtCompact(o.kpis.ref_ytd)}
+              hint={isBudgetMain && Number(o.kpis.budget_unscheduled) > 0
+                ? `${fmtMoney(o.kpis.ref_ytd)} · inclui ${fmtCompact(o.kpis.budget_unscheduled)} de CAPEX sem cronograma mensal`
+                : fmtMoney(o.kpis.ref_ytd)}
+            />
             {hasBase && (
               <div className="stat stat-inline-delta">
                 <span className="stat-label">Variação</span>
@@ -403,7 +409,10 @@ export default function Home() {
               <Stat
                 label={budgetLabel}
                 value={fmtCompact(o.kpis.budget_total)}
-                hint={o.kpis.budget_consumption_pct !== null ? `realizado ${fmtPct(o.kpis.budget_consumption_pct)} do orçado no período` : undefined}
+                hint={[
+                  o.kpis.budget_consumption_pct !== null ? `realizado ${fmtPct(o.kpis.budget_consumption_pct)} do orçado no período` : null,
+                  Number(o.kpis.budget_unscheduled) > 0 ? `inclui ${fmtCompact(o.kpis.budget_unscheduled)} de CAPEX sem cronograma mensal` : null,
+                ].filter(Boolean).join(" · ") || undefined}
               />
             )}
           </div>

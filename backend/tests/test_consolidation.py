@@ -84,7 +84,8 @@ def test_overview_export_freeze_and_revision(client, admin, run_worker):
     sap = wb["Carga SAP"]
     keys = [sap.cell(r, 5).value for r in range(2, sap.max_row) if sap.cell(r, 5).value]
     assert f"1001--{CC}-6010101001" in keys and f"1001--{CC}-1020601005" in keys
-    totals = [sap.cell(r, 18).value for r in range(2, sap.max_row) if isinstance(sap.cell(r, 18).value, (int, float))]
+    # coluna 19 = Total (a 18 é "Sem cronograma")
+    totals = [sap.cell(r, 19).value for r in range(2, sap.max_row) if isinstance(sap.cell(r, 19).value, (int, float))]
     assert round(sum(totals), 2) == 524750.00
     assert wb["Pessoal (quadro)"].max_row >= 5 and wb["OPEX (linhas)"].cell(2, 4).value == "6010301002"
 

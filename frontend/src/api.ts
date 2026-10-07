@@ -167,6 +167,7 @@ export interface Overview {
   kpis: {
     prev_total: string; prev_ytd: string; ref_ytd: string; actual_total: string; ytd_var_pct: string | null; ref_annualized: string;
     annualized_vs_prev_pct: string | null; budget_total: string; budget_ytd: string; budget_consumption_pct: string | null;
+    budget_unscheduled: string;
   };
   monthly: { month: number; prev: string; ref: string; budget: string }[];
   top_cost_centers: Ranked[];
@@ -411,7 +412,7 @@ export interface WhatIfResult {
 
 // ---------------------------------------------------------------- Consolidação
 
-export interface ModuleTotals { label: string; proposed: string; prev_actual: string; ref_annualized: string; ref_budget: string; monthly: string[] }
+export interface ModuleTotals { label: string; proposed: string; prev_actual: string; ref_annualized: string; ref_budget: string; monthly: string[]; unscheduled: string }
 export interface VersionInfo { id: number; label: string; status: string; reason: string | null; frozen_at: string | null; created_at: string | null; current: boolean }
 export interface VariationRow {
   account: string; name: string | null; module: string; package: string | null; prev_actual: string; ref_actual_ytd: string;

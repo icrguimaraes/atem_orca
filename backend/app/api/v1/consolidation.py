@@ -110,6 +110,7 @@ def overview(
             "ref_annualized": str(money(sum((ref.ref_annualized.get(c, ZERO) for c in codes), ZERO))),
             "ref_budget": str(money(sum((ref.ref_budget.get(c, ZERO) for c in codes), ZERO))),
             "monthly": [str(money(sum((r.values[i] for r in mrows), ZERO))) for i in range(12)],
+            "unscheduled": str(money(sum((r.unscheduled for r in mrows), ZERO))),  # CAPEX sem cronograma
         }
     total = sum((Decimal(v["proposed"]) for v in modules.values()), ZERO)
 

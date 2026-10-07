@@ -67,10 +67,12 @@ class Row:
     account_name: str | None
     package: str | None
     values: list[Decimal] = field(default_factory=lambda: [ZERO] * 12)
+    # CAPEX com valor total mas sem distribuição mensal: é orçamento (conta no total do ano), só não tem mês
+    unscheduled: Decimal = ZERO
 
     @property
     def total(self) -> Decimal:
-        return money(sum(self.values, ZERO))
+        return money(sum(self.values, ZERO) + self.unscheduled)
 
     @property
     def key(self) -> str:
@@ -125,7 +127,10 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
                 account_name,
                 package,
             )
-        row.values[month - 1] += amount or ZERO
+        if month is None:
+            row.unscheduled += amount or ZERO
+        else:
+            row.values[month - 1] += amount or ZERO
 
     sub_filter = [BudgetSubmission.version_id == ctx.version.id]
     if cc_ids is not None:
@@ -181,6 +186,35 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
     for company_id, branch_id, cc_id, acc_id, month, amount in capex:
         acc = accounts.get(acc_id)
         add("CAPEX", company_id, branch_id, cc_id, acc.code, acc.name, "Capex", month, amount)
+    # item com valor total maior que o cronograma (ex.: template sem os meses): a diferença é orçamento sem mês
+    items = db.execute(
+        select(
+            CapexProject.company_id,
+            CapexProject.branch_id,
+            CapexProject.cost_center_id,
+            CapexItem.account_id,
+            CapexItem.total_value,
+            func.coalesce(func.sum(CapexItemValue.amount), 0),
+        )
+        .select_from(CapexItem)
+        .join(CapexProject, CapexProject.id == CapexItem.project_id)
+        .join(BudgetSubmission, BudgetSubmission.id == CapexProject.submission_id)
+        .outerjoin(CapexItemValue, CapexItemValue.item_id == CapexItem.id)
+        .where(BudgetSubmission.module == "CAPEX", *sub_filter)
+        .group_by(
+            CapexItem.id,
+            CapexProject.company_id,
+            CapexProject.branch_id,
+            CapexProject.cost_center_id,
+            CapexItem.account_id,
+            CapexItem.total_value,
+        )
+    )
+    for company_id, branch_id, cc_id, acc_id, total_value, scheduled in items:
+        pending = (total_value or ZERO) - (scheduled or ZERO)
+        if pending > 0:
+            acc = accounts.get(acc_id)
+            add("CAPEX", company_id, branch_id, cc_id, acc.code, acc.name, "Capex", None, pending)
 
     pacc = personnel_accounts(db, ctx)
     scenario = personnel_svc.baseline(db, ctx)
@@ -196,9 +230,10 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
             for m, amount in enumerate(series, start=1):
                 if amount:
                     add("PERSONNEL", None, None, cc_id, code, name, "Pessoas", m, money(amount))
-    rows = [r for r in grouped.values() if any(r.values)]
+    rows = [r for r in grouped.values() if any(r.values) or r.unscheduled]
     for r in rows:
         r.values = [money(v) for v in r.values]
+        r.unscheduled = money(r.unscheduled)
     return sorted(rows, key=lambda r: (r.company_code, r.cost_center_code, r.module, r.account_code))
 
 
@@ -217,7 +252,8 @@ def snapshot_rows(db: Session, version: BudgetVersion, cc_ids: set[int] | None =
             s.account_code,
             s.account_name,
             s.package,
-            [Decimal(v) for v in s.values],
+            [Decimal(v) for v in s.values[:12]],
+            Decimal(s.values[12]) if len(s.values) > 12 else ZERO,  # 13º valor: parcela sem mês
         )
         for s in db.scalars(stmt.order_by(BudgetSnapshotLine.id))
     ]
@@ -251,7 +287,7 @@ def freeze(db: Session, ctx: Context, user_id: int | None, reason: str | None) -
                 account_code=r.account_code,
                 account_name=r.account_name,
                 package=r.package,
-                values=[str(v) for v in r.values],
+                values=[str(v) for v in r.values] + [str(r.unscheduled)],
                 total=r.total,
             )
         )
