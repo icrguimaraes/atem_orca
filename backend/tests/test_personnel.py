@@ -363,3 +363,44 @@ def test_findings_bulk_fix_keep_and_sector(client, admin, run_worker):
     assert cc["area_id"] == sector["id"] and cc["department_id"]
     left = {i["kind"] for i in client.get("/api/v1/findings", headers=admin).json()["items"]}
     assert "STRUCTURE_NO_SECTOR" not in left and "PERSONNEL_NO_MONTH" not in left
+
+
+def test_quadro_company_by_name_and_vacancy_without_salary(client, admin, run_worker):
+    """Empresa escrita por nome ("ATEM") vira 1001 com aviso; "(VAGA ABERTA)" no nome é vaga; vaga sem salário entra
+    pendente (sem custo) e aparece em Apontamentos para informar o salário."""
+    ccs, _, _ = _setup(client, admin, run_worker)
+    rows = [
+        ("900", "JOAO", "ANALISTA", "ATEM", None, CC1, 7000, "MANTER", None, None, None, "CLT", None, None),
+        (
+            None,
+            "FULANO (VAGA ABERTA)",
+            "ANALISTA",
+            "ATEM",
+            None,
+            CC1,
+            5000,
+            "MANTER",
+            None,
+            None,
+            None,
+            "CLT",
+            None,
+            None,
+        ),
+        (None, "-", "ANALISTA PL", "ATEM", None, CC1, None, "INCLUIR", 3, None, None, "CLT", None, None),
+    ]
+    batch_id = upload(client, admin, builders.quadro_funcionarios(rows), "q-nome.xlsx")
+    run_worker()
+    errors = client.get(f"/api/v1/imports/{batch_id}/errors", headers=admin).json()
+    codes = {e["code"] for e in (errors["items"] if isinstance(errors, dict) else errors)}
+    assert {"COMPANY_BY_NAME", "VACANCY_NO_SALARY"} <= codes
+    assert status(client, admin, batch_id)["error_rows"] == 0
+    assert client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin).status_code == 200
+    run_worker()
+    assert status(client, admin, batch_id)["status"] == "COMPLETED"
+    found = [
+        i for i in client.get("/api/v1/findings", headers=admin).json()["items"] if i["kind"] == "PERSONNEL_NO_SALARY"
+    ]
+    vaga = next(i for i in found if i["subject"] == "Vaga de ANALISTA PL")
+    fixed = client.post("/api/v1/findings/fix", headers=admin, json={"key": vaga["key"], "amount": 6500})
+    assert fixed.status_code == 200 and fixed.json()["note"] == "Novo salário: R$ 6.500,00"

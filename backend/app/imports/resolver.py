@@ -27,6 +27,10 @@ from app.models import (
 class Dimensions:
     def __init__(self, db: Session) -> None:
         self.companies = {c.code: c.id for c in db.scalars(select(Company))}
+        # empresa escrita por nome ("ATEM", "REAM", "NAVE") em vez do código
+        self.company_names = {
+            (n or "").strip().upper(): c.code for c in db.scalars(select(Company)) for n in (c.name, c.short_name) if n
+        }
         self.branches: dict[tuple[int, str], int] = {}
         self.branch_objs: dict[tuple[int, str], Branch] = {}
         self.branch_names: dict[tuple[int, str], int] = {}
@@ -62,6 +66,10 @@ def _company(rec: Record, dims: Dimensions, default_code: str | None) -> int | N
     if not code:
         rec.error("REQUIRED", "Empresa não informada (coluna Empresa ou opção company_code)", "Empresa")
         return None
+    by_name = getattr(dims, "company_names", {}).get(str(code).strip().upper())
+    if code not in dims.companies and by_name:
+        rec.warn("COMPANY_BY_NAME", f"Empresa '{code}' lida como {by_name}", "Empresa", code)
+        code = by_name
     rec.data["company"] = code
     company_id = dims.companies.get(code)
     if company_id is None:

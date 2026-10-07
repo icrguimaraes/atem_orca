@@ -221,6 +221,8 @@ export const ERROR_LABELS: Record<string, string> = {
   ADJUSTMENT_NO_SALARY: "Reajuste sem novo salário",
   ACTION_NO_MONTH: "Ação sem mês (pendente)",
   ACTION_ALIAS: "Ação fora da lista do template",
+  COMPANY_BY_NAME: "Empresa escrita por nome",
+  VACANCY_NO_SALARY: "Vaga sem salário (pendente)",
 };
 
 export const SUBMISSION_STATUS: Record<string, { label: string; tone: Tone }> = {

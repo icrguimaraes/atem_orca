@@ -1,5 +1,7 @@
 """Quadro de funcionários (template Pessoal) e premissas macroeconômicas."""
 
+import re
+
 from app.domain.rules.common import month_from_label
 from app.domain.rules.personnel import ACTION_NOUNS, MONTH_PENDING_ACTIONS, TEMPLATE_ACTION_ALIASES, TEMPLATE_ACTIONS
 from app.imports.base import (
@@ -144,7 +146,17 @@ def parse_employees(sheets: list[Sheet], options: dict) -> ParseResult:
             }
             if name is None:
                 rec.error("REQUIRED", "Nome obrigatório", "Nome")
-            if salary is None and not rec.issues:
+            # vaga: sem matrícula e marcada como vaga (no nome) ou com INCLUIR
+            is_vacancy = registration is None and (
+                bool(re.search(r"\bVAGA\b", (name or "").upper())) or action == "HIRE"
+            )
+            if salary is None and not rec.issues and is_vacancy and new_salary is None:
+                rec.warn(
+                    "VACANCY_NO_SALARY",
+                    "Vaga sem salário: entra pendente, sem custo, até informar o salário em Apontamentos",
+                    "Salário",
+                )
+            elif salary is None and not rec.issues and not is_vacancy:
                 rec.error("REQUIRED", "Salário obrigatório", "Salário")
             elif salary is not None and salary < 0:
                 rec.error("INVALID_NUMBER", "Salário negativo", "Salário", raw_salary)
@@ -172,7 +184,7 @@ def parse_employees(sheets: list[Sheet], options: dict) -> ParseResult:
                     "Novo Salário",
                 )
             if registration is None:
-                if (name or "").upper().startswith("VAGA") or action == "HIRE":
+                if is_vacancy:
                     rec.record_type = "VACANCY"
                     rec.warn("VACANCY", "Vaga sem matrícula: será tratada como admissão planejada (módulo Pessoal)")
                 else:

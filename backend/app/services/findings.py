@@ -136,7 +136,7 @@ def collect(
                     "PERSONNEL_NO_SALARY",
                     ("PERSONNEL_MOVEMENT", mv.id),
                     label[0].upper() + label[1:],
-                    "Novo salário não veio na planilha: fica sem aumento até você informar o valor",
+                    "Salário não veio na planilha: fica sem aumento (vaga: sem custo) até você informar o valor",
                     fix={"type": "money", "label": "Novo salário mensal (R$)"},
                 )
             for mv, label in personnel_svc.pending_months(db, sub):

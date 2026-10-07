@@ -591,6 +591,7 @@ def load_personnel_actions(db: Session, batch: ImportBatch, user_id: int | None)
                             "contract_type_code": d.get("contract") or "CLT",
                             "reason": d.get("reason"),  # o template não traz justificativa: o gestor informa na tela
                             "source": "TEMPLATE",
+                            "pending_ok": True,  # vaga sem salário entra pendente (Apontamentos)
                         },
                         user_id,
                     )

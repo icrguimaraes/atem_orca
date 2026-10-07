@@ -590,7 +590,8 @@ def save_hire(
     mv = mv or PersonnelMovement(submission_id=sub.id, cost_center_id=sub.cost_center_id, created_by=user_id)
     mv.movement_type = "HIRE"
     mv.effective_month = _month(data.get("month"))
-    mv.new_salary = _money(data.get("new_salary"), "o salário", required=True)
+    salary_pending = bool(data.get("pending_ok")) and data.get("new_salary") in (None, "")
+    mv.new_salary = None if salary_pending else _money(data.get("new_salary"), "o salário", required=True)
     mv.quantity = quantity
     mv.contract_type_code = contract
     mv.position_id = _position_id(db, position_name)
@@ -600,6 +601,9 @@ def save_hire(
         "position_name": position_name,
         "source": data.get("source") or (mv.attributes or {}).get("source") or "SYSTEM",
     }
+    mv.attributes.pop("pending", None)
+    if salary_pending:  # importação: vaga sem salário fica sem custo até informar (Apontamentos)
+        mv.attributes = mv.attributes | {"pending": ["new_salary"]}
     if mv.id is None:
         db.add(mv)
     db.flush()
@@ -642,15 +646,19 @@ def pending_months(db: Session, sub: BudgetSubmission) -> list[tuple[PersonnelMo
 
 
 def pending_salaries(db: Session, sub: BudgetSubmission) -> list[tuple[PersonnelMovement, str]]:
-    """Promoções e reajustes sem novo salário (vieram assim da planilha): ficam sem aumento até informar."""
+    """Promoções, reajustes e vagas sem salário (vieram assim da planilha): sem aumento/custo até informar."""
     out = []
     for mv in db.scalars(
         select(PersonnelMovement).where(
             PersonnelMovement.submission_id == sub.id,
-            PersonnelMovement.movement_type.in_(("PROMOTION", "SALARY_ADJUSTMENT")),
+            PersonnelMovement.movement_type.in_(("PROMOTION", "SALARY_ADJUSTMENT", "HIRE")),
             PersonnelMovement.new_salary.is_(None),
         )
     ):
+        if mv.movement_type == "HIRE":
+            if mv.employee_id is None:
+                out.append((mv, f"vaga de {(mv.attributes or {}).get('position_name') or 'cargo não informado'}"))
+            continue
         emp = db.get(Employee, mv.employee_id) if mv.employee_id else None
         if emp is None or emp.cost_center_id != sub.cost_center_id:
             continue
