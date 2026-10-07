@@ -268,14 +268,46 @@ def _subset(result: ParseResult, *types: str) -> ParseResult:
 
 
 def _keyless_companies(result: ParseResult, dims: Dimensions, options: dict) -> None:
-    """Modelo sem CHAVE (REAM): a linha não traz a empresa. Vale, nesta ordem: o CC já cadastrado em uma só empresa,
-    a filial já cadastrada em uma só empresa, a divisão igual ao código de uma empresa (REAM: divisão 2001 = empresa
-    2001) e a opção company_code. Filial e CC criados a partir das linhas ficam na empresa das linhas."""
+    """Modelo sem CHAVE (REAM, NAVE): a linha não traz a empresa. Vale, nesta ordem: a base de despesas do próprio
+    arquivo (parser), o CC já cadastrado em uma só empresa, a filial já cadastrada em uma só empresa, a divisão igual
+    ao código de uma empresa (REAM: divisão 2001 = empresa 2001) e a opção company_code. Filial e CC criados a partir
+    das linhas ficam na empresa das linhas; conta que não existe no cadastro é criada (com aviso na linha)."""
     code_of = {cid: code for code, cid in dims.companies.items()}
     found: dict[tuple[str, str | None], str] = {}
+    new_accounts: dict[str, Record] = {}
     for rec in result.records:
         d = rec.data
-        if rec.record_type != "BUDGET_LINE" or d.get("company"):
+        if rec.record_type != "BUDGET_LINE" or not d.get("keyless"):
+            continue
+        account = d.get("account")
+        if account and account not in dims.accounts:
+            name = re.sub(r"^[A-Z]-\s*", "", d.get("account_name") or "") or account
+            hint = (d.get("package_hint") or "").strip()
+            package = hint if hint.upper() in dims.packages else None
+            rec.warn(
+                "NEW_ACCOUNT",
+                f"Conta {account} não cadastrada: será criada ({name}{', pacote ' + package if package else ''})",
+                "Conta",
+                account,
+            )
+            if account not in new_accounts:
+                new_accounts[account] = Record(
+                    "ACCOUNT",
+                    rec.sheet,
+                    rec.row_number,
+                    {
+                        "code": account,
+                        "name": name,
+                        "dre_group": None,
+                        "package": package,
+                        "detail": None,
+                        "nature": None,
+                        "from_lines": True,
+                    },
+                )
+        if d.get("company"):
+            found.setdefault(("COST_CENTER", d.get("cost_center")), d["company"])
+            found.setdefault(("BRANCH", d.get("branch")), d["company"])
             continue
         owners = {cid for cid, code in dims.cost_centers if code == d.get("cost_center")}
         if len(owners) != 1 and d.get("branch"):
@@ -293,6 +325,7 @@ def _keyless_companies(result: ParseResult, dims: Dimensions, options: dict) -> 
     for rec in result.records:
         if rec.record_type in ("COST_CENTER", "BRANCH") and rec.data.get("from_lines") and not rec.data.get("company"):
             rec.data["company"] = found.get((rec.record_type, rec.data["code"]))
+    result.records[:0] = list(new_accounts.values())
 
 
 def validate_opex_template(result: ParseResult, dims: Dimensions, options: dict) -> None:

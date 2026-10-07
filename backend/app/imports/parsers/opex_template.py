@@ -21,6 +21,7 @@ from app.imports.base import (
     Sheet,
     clean_code,
     clean_str,
+    find_table,
     norm,
     system_export,
     to_decimal,
@@ -51,8 +52,9 @@ def _header(sheet: Sheet) -> tuple[int, dict[int, int], int, dict[str, int], boo
     Devolve (linha, {mês: coluna}, coluna da CHAVE, demais colunas, é_consolidador). Na aba de Viagens
     há duas colunas CHAVE; a usada é a mais próxima dos meses (o consolidador).
 
-    Modelo sem CHAVE (template da REAM, layout antigo): vale o cabeçalho com JAN..DEZ, CENTRO DE CUSTO e CONTA
-    CONTÁBIL; a coluna da CHAVE volta None e a linha é identificada pelas colunas de código."""
+    Modelo sem CHAVE (templates da REAM e da NAVE, layout antigo): vale o cabeçalho com JAN..DEZ, CENTRO DE CUSTO e
+    CONTA CONTÁBIL; a coluna da CHAVE volta None e a linha é identificada pelas colunas de código. Com dois blocos
+    JAN..DEZ (realizado + orçamento, modelo da NAVE), vale o último."""
     fallback = None
     for idx, row in sheet.iter_rows(1):
         if idx > 80:
@@ -63,9 +65,10 @@ def _header(sheet: Sheet) -> tuple[int, dict[int, int], int, dict[str, int], boo
             if text in MONTH_LABELS and MONTH_LABELS.index(text) + 1 not in months:
                 months[MONTH_LABELS.index(text) + 1] = col
         if len(months) == 12 and "CHAVE" not in texts and fallback is None:
-            before = {norm(v): col for col, v in enumerate(row, start=1) if col < months[1] and norm(v)}
+            last = {MONTH_LABELS.index(t) + 1: col for col, t in enumerate(texts, start=1) if t in MONTH_LABELS}
+            before = {norm(v): col for col, v in enumerate(row, start=1) if col < last[1] and norm(v)}
             if "centro de custo" in before and "conta contabil" in before:
-                fallback = (idx, months, None, before, False)
+                fallback = (idx, last, None, before, False)
         if len(months) == 12 and "CHAVE" in texts:
             first_month = months[1]
             key_cols = [c for c, t in enumerate(texts, start=1) if t == "CHAVE" and c < first_month]
@@ -296,6 +299,7 @@ def parse_package_sheet(sheet: Sheet, result: ParseResult) -> int:
         m = KEY.match(clean_str(get(row, key_col)) or "")
         # sem CHAVE no modelo, a empresa não vem na linha: o resolver identifica (CC, filial ou divisão)
         company, branch, cc, account = m.groups() if m else ("1001" if key_col else None, None, None, None)
+        keyless = key_col is None
         branch = _code(branch, 4) or _code(get(row, cols.get("branch")), 4)
         cc = _code(cc) or _code(get(row, cols.get("cost_center"))) or _sap_code(cc)
         if cc is None and key_col is None:
@@ -318,6 +322,8 @@ def parse_package_sheet(sheet: Sheet, result: ParseResult) -> int:
             "package_hint": package_hint,
             "values": values,
         }
+        if keyless:
+            rec.data["keyless"] = True
         result.records.append(rec)
         count += 1
     return count
@@ -328,7 +334,7 @@ def _master_from_lines(records: list[Record]) -> list[Record]:
     out: dict[tuple[str, str], Record] = {}
     for rec in records:
         d = rec.data
-        if rec.record_type != "BUDGET_LINE" or d.get("company"):
+        if rec.record_type != "BUDGET_LINE" or not d.get("keyless"):
             continue
         if d.get("cost_center") and ("COST_CENTER", d["cost_center"]) not in out:
             out[("COST_CENTER", d["cost_center"])] = Record(
@@ -340,7 +346,7 @@ def _master_from_lines(records: list[Record]) -> list[Record]:
                     "name": d.get("cost_center_name") or d["cost_center"],
                     "manager": None,
                     "manager_email": None,
-                    "company": None,
+                    "company": d.get("company"),
                     "department": None,
                     "area": None,
                     "from_lines": True,
@@ -354,12 +360,49 @@ def _master_from_lines(records: list[Record]) -> list[Record]:
                 {
                     "code": d["branch"],
                     "name": d.get("branch_name") or d["branch"],
-                    "company": None,
+                    "company": d.get("company"),
                     "uf": None,
                     "from_lines": True,
                 },
             )
     return list(out.values())
+
+
+BASE_ALIASES = {
+    "company": ("Empresa",),
+    "branch": ("Filial",),
+    "cost_center": ("Centro de Custos", "Centro de Custo"),
+}
+
+
+def _companies_from_base(sheets: list[Sheet], records: list[Record]) -> None:
+    """Modelo sem CHAVE: a empresa da linha vem da base de despesas do próprio arquivo (aba "Base de dados", com
+    Empresa × Filial × Centro de Custos — ex.: NAVE 1012), pelo CC ou, na falta, pela filial."""
+    by_cc: dict[str, set[str]] = {}
+    by_branch: dict[str, set[str]] = {}
+    for sheet in sheets:
+        if PACKAGE_SHEET.match(sheet.name) or norm(sheet.name).startswith("bd"):
+            continue
+        table = find_table(sheet, BASE_ALIASES, ("company", "cost_center"))
+        if table is None:
+            continue
+        for _, row in table.rows():
+            company = _code(table.value(row, "company"))
+            if not company:
+                continue
+            cc = _code(table.value(row, "cost_center")) or _sap_code(table.value(row, "cost_center"))
+            branch = _code(table.value(row, "branch"), 4)
+            if cc:
+                by_cc.setdefault(cc, set()).add(company)
+            if branch:
+                by_branch.setdefault(branch, set()).add(company)
+    for rec in records:
+        d = rec.data
+        if rec.record_type != "BUDGET_LINE" or not d.get("keyless") or d.get("company"):
+            continue
+        found = by_cc.get(d.get("cost_center") or "") or by_branch.get(d.get("branch") or "") or set()
+        if len(found) == 1:
+            d["company"] = next(iter(found))
 
 
 def check_travel_consolidator(sheet: Sheet, result: ParseResult) -> None:
@@ -424,6 +467,7 @@ def parse_opex_template(sheets: list[Sheet], options: dict) -> ParseResult:
         # modelo sem CHAVE (REAM): a aba BD é outra (várias tabelas empilhadas) e não serve de cadastro; filial e
         # CC vêm das próprias linhas e são criados se faltarem
         master = ParseResult("MASTER_DATA", "TEMPLATE_BD")
+        _companies_from_base(sheets, result.records)
         master.records = _master_from_lines(result.records)
         result.structural.append(
             Issue(

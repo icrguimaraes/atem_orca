@@ -29,7 +29,7 @@ ROLES = {
     "VIEWER": "Consulta",
 }
 
-COMPANIES = [("1001", "ATEM", "ATEM"), ("2001", "REAM", "REAM")]
+COMPANIES = [("1001", "ATEM", "ATEM"), ("2001", "REAM", "REAM"), ("1012", "NAVE", "NAVE")]
 
 # Filiais / locais de negócio (BD-Novo → tabela Filiais), empresa 1001
 BRANCHES = [

@@ -65,6 +65,27 @@ def test_ream_template_without_key_column(client, admin, run_worker):
     assert all(line["branch_id"] for line in lines)  # filial 2001 criada junto
 
 
+def test_nave_template_two_month_blocks_and_new_account(client, admin, run_worker):
+    """Template da NAVE (sem CHAVE): orçamento no segundo bloco JAN..DEZ, empresa 1012 pela aba "Base de dados" e conta
+    fora do cadastro criada com aviso na linha."""
+    batch_id = upload(client, admin, builders.opex_template_nave(), "Template_OPEX 2027_Despesa - NAVE.xlsx")
+    run_worker()
+    b = status(client, admin, batch_id)
+    assert b["error_rows"] == 0, b
+    budget = b["summary"]["comparison"]["budget"]
+    assert [(x["company"], x["cost_center"], x["lines"], x["total"]) for x in budget] == [
+        ("1012", "5010102102", 2, "18000")
+    ]
+    errors = client.get(f"/api/v1/imports/{batch_id}/errors", headers=admin).json()
+    codes = {e["code"] for e in (errors["items"] if isinstance(errors, dict) else errors)}
+    assert "NEW_ACCOUNT" in codes
+    assert client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin).status_code == 200
+    run_worker()
+    assert status(client, admin, batch_id)["status"] == "COMPLETED"
+    account = next(a for a in client.get("/api/v1/accounts?q=6030101999", headers=admin).json())
+    assert account["name"] == "Juros s/ Impostos e Parcelamentos"
+
+
 def test_filled_opex_template_loads_everything(client, admin, run_worker):
     batch_id = upload(client, admin, builders.opex_template_filled(), "Template_OPEX 2027_Gestor.xlsx")
     run_worker()

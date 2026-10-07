@@ -572,3 +572,32 @@ def opex_template_ream() -> bytes:
     logistica.append([None, None, "MATERIAL", *header])  # uma coluna a mais à esquerda
     logistica.append([None, None, None, None, None, *ident, "W-Conduções e Táxis", "6010301025", *[900] * 12, 10800])
     return _bytes(wb)
+
+
+def opex_template_nave() -> bytes:
+    """Template OPEX da NAVE (sem CHAVE): dois blocos JAN..DEZ (o primeiro vazio, o orçamento no segundo), empresa só
+    na aba "Base de dados" (1012) e conta que não existe no cadastro."""
+    wb = Workbook()
+    wb.active.title = "Instruções"
+    wb.create_sheet("BD")["S10"] = "FILIAL"
+    months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"]
+    ident = [" Manaus", "0070", "Contabilidade", "5010102102"]
+    head = ["FILIAL", "DIVISÃO", "DENOMINAÇÃO DO CENTRO DE CUSTO", "CENTRO DE CUSTO", "DESCRIÇÃO DA CONTA CONTÁBIL"]
+    wb.create_sheet("I - Viagens")
+    servicos = wb.create_sheet("II - Serviços de Terceiros")
+    for _ in range(13):
+        servicos.append([])
+    servicos.append([None, "CONTRATO", "FORNECEDOR", *head, "CONTA CONTÁBIL", *months, "REAL_2024", *months, "TOTAL"])
+    servicos.append([None, "-", "KPMG", *ident, "Serviços de Auditoria", "6010201014", *[None] * 12, 0, *[1000] * 12])
+    tributario = wb.create_sheet("X - Tributário")
+    for _ in range(9):
+        tributario.append([])
+    tributario.append([None, "TIPO DE TRIBUTO", *head, "CONTA CONTÁBIL", *months, "REAL_2024", *months, "TOTAL"])
+    juros = [None, "Juros parcelamento", *ident, "Juros s/ Impostos e Parcelamentos", "6030101999"]
+    tributario.append(juros + [None] * 12 + [0] + [500] * 12 + [6000])
+    base = wb.create_sheet("Base de dados")
+    base.append([])
+    base.append([None, "BASE DE DESPESAS"])
+    base.append([None, "Empresa", "Filial", "Nome Filial", "Centro de Custos", "Conta Razão"])
+    base.append([None, "1012", "0070", "Nave - Manaus", "5010102102", "6010201003"])
+    return _bytes(wb)
