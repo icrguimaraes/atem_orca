@@ -3,6 +3,7 @@ import { api, type OpexLine, type OpexOptions } from "../../api";
 import { MONTHS, fmtMoney } from "../../labels";
 import { Alert, Empty } from "../ui";
 import { MoneyInput, parseMoney } from "./MoneyInput";
+import { MoveLineModal } from "./MoveLineModal";
 
 interface Props {
   submissionId: number;
@@ -13,11 +14,15 @@ interface Props {
   editable: boolean;
   onChanged: () => void;
   showSupplier?: boolean;
+  costCenterId?: number;  // com canMove: Controladoria muda o CC do lançamento
+  canMove?: boolean;
 }
 
 /** Grade editável estilo planilha: cada alteração é salva ao sair do campo. */
-export function LinesGrid({ submissionId, packageId, lines, options, companyId, editable, onChanged, showSupplier = true }: Props) {
+export function LinesGrid({ submissionId, packageId, lines, options, companyId, editable, onChanged, showSupplier = true, costCenterId, canMove = false }: Props) {
   const [error, setError] = useState<string | null>(null);
+  const [moving, setMoving] = useState<OpexLine | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState<number | null>(null);
   const accounts = options.accounts.filter((a) => a.package_id === packageId);
   const branches = options.branches.filter((b) => b.company_id === companyId);
@@ -75,6 +80,16 @@ export function LinesGrid({ submissionId, packageId, lines, options, companyId, 
   return (
     <div className="stack">
       {error && <Alert>{error}</Alert>}
+      {notice && <Alert tone="good">{notice}</Alert>}
+      {moving && costCenterId && (
+        <MoveLineModal
+          line={moving}
+          companyId={companyId}
+          currentCostCenterId={costCenterId}
+          onClose={() => setMoving(null)}
+          onDone={(note) => { setMoving(null); setNotice(note); onChanged(); }}
+        />
+      )}
       {generic.length === 0 ? (
         <Empty>Nenhuma linha neste pacote.{editable && " Use “Adicionar linha” para começar."}</Empty>
       ) : (
@@ -145,6 +160,7 @@ export function LinesGrid({ submissionId, packageId, lines, options, companyId, 
                     {editable && (
                       <td className="nowrap">
                         <button className="btn btn-ghost btn-sm" title="Distribuir valor anual pelos 12 meses" onClick={() => spread(line)}>÷12</button>
+                        {canMove && costCenterId && <button className="btn btn-ghost btn-sm" title="Mover para outro centro de custo" onClick={() => setMoving(line)}>⇄</button>}
                         <button className="btn btn-ghost btn-sm danger" title="Excluir linha" onClick={() => remove(line)}>✕</button>
                       </td>
                     )}

@@ -479,6 +479,72 @@ def delete_line(line_id: int, request: Request, db: Session = Depends(get_db), u
     return {"deleted": [i.id for i in removed]}
 
 
+class MoveIn(BaseModel):
+    target_cost_center_id: int
+    reason: str
+
+
+@router.post("/lines/{line_id}/move", summary="Move o lançamento para o OPEX de outro CC (Controladoria), com motivo")
+def move_line(
+    line_id: int,
+    payload: MoveIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    from app.domain.rules.capex import brl
+    from app.services import findings as findings_svc
+
+    ctx, sub, access, line = _line(db, user, line_id)
+    _require_edit(access)
+    if not access.global_:
+        raise HTTPException(403, "Só a Controladoria muda o centro de custo de um lançamento")
+    target_cc = db.get(CostCenter, payload.target_cost_center_id)
+    if target_cc is None:
+        raise HTTPException(404, "Centro de custo não encontrado")
+    source_cc = db.get(CostCenter, sub.cost_center_id)
+    before = [svc.line_out(item) for item in svc.group_lines(db, line)]
+    try:
+        target, moved = svc.move_lines(db, ctx, line, target_cc, payload.reason, user.id)
+    except svc.OpexError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+    svc.mark_in_progress(db, sub, ctx, user.id)
+    svc.mark_in_progress(db, target, ctx, user.id)
+    total = sum((item.total_amount for item in moved), Decimal("0"))
+    acc = db.get(Account, line.account_id)
+    subject = f"{acc.code} {acc.name} · {line.supplier or line.description or 'lançamento'} · {brl(total)}"
+    note = f"Movido de {source_cc.code} para {target_cc.code} · {target_cc.name}: {payload.reason.strip()}"
+    findings_svc.log(
+        db,
+        sub,
+        {
+            "key": f"{sub.id}:BUDGET_LINE:{line.id}:OPEX_MOVED_CC",
+            "kind": "OPEX_MOVED_CC",
+            "severity": "WARNING",
+            "subject": subject,
+            "message": f"Lançamento no CC {source_cc.code} · {source_cc.name}, de outra área",
+        },
+        "CORRECTED",
+        note,
+        user.id,
+    )
+    for item, old in zip(moved, before, strict=False):
+        audit.record(
+            db,
+            user_id=user.id,
+            action="MOVE",
+            entity_type="budget_line",
+            entity_id=item.id,
+            before=old,
+            after=svc.line_out(item),
+            reason=note,
+            ip=client_ip(request),
+        )
+    db.commit()
+    return {"moved": [i.id for i in moved], "target_submission_id": target.id, "note": note}
+
+
 class JustificationIn(BaseModel):
     text: str
 

@@ -63,6 +63,7 @@ KIND_LABELS = {
     "PERSONNEL_NO_MONTH": "Ação sem mês",
     "PERSONNEL_CC_GUESSED": "Centro de custo pelo cargo",
     "STRUCTURE_NO_SECTOR": "CC sem área e setor",
+    "OPEX_MOVED_CC": "Lançamento em CC de outra área",
 }
 FLAG_TEXT = {
     "NEW_ACCOUNT": "Conta nova, sem histórico",

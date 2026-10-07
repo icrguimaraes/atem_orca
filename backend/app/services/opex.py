@@ -600,6 +600,44 @@ def update_line(db: Session, ctx: Context, line: BudgetLine, data: dict, user_id
     return line
 
 
+def move_lines(
+    db: Session, ctx: Context, line: BudgetLine, target_cc: CostCenter, reason: str, user_id: int | None
+) -> tuple[BudgetSubmission, list[BudgetLine]]:
+    """Leva o lançamento (viagem: as 3 contas) para o orçamento OPEX de outro CC da mesma empresa — correção de CC
+    lançado errado na planilha, sem reimportar. Guarda a origem em `attributes.moved_from`."""
+    from app.domain.workflow import EDITABLE, STATUS_LABELS
+
+    if ctx.frozen:
+        raise OpexError(f"Versão {ctx.version.label} congelada")
+    if not reason.strip():
+        raise OpexError("Informe o motivo da mudança de centro de custo")
+    if target_cc.id == line.cost_center_id:
+        raise OpexError("O lançamento já está neste centro de custo")
+    if target_cc.company_id != line.company_id:
+        raise OpexError("O centro de custo de destino precisa ser da mesma empresa do lançamento")
+    if not target_cc.is_active:
+        raise OpexError(f"Centro de custo {target_cc.code} inativo")
+    target = get_submission(db, ctx, target_cc.id)
+    if target.status not in EDITABLE:
+        raise OpexError(
+            f"O orçamento de {target_cc.code} está '{STATUS_LABELS.get(target.status, target.status)}' e não recebe "
+            "lançamentos; peça a devolução para ajuste"
+        )
+    source = db.get(CostCenter, line.cost_center_id)
+    moved = group_lines(db, line)
+    for item in moved:
+        attrs = dict(item.attributes or {})
+        attrs["moved_from"] = {
+            "cost_center": source.code,
+            "submission_id": item.submission_id,
+            "reason": reason.strip(),
+        }
+        item.attributes = attrs
+        item.submission_id, item.cost_center_id, item.updated_by = target.id, target_cc.id, user_id
+    db.flush()
+    return target, moved
+
+
 def group_lines(db: Session, line: BudgetLine) -> list[BudgetLine]:
     if not line.group_ref:
         return [line]

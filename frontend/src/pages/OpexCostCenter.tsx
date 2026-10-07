@@ -287,6 +287,8 @@ export default function OpexCostCenter() {
                 companyId={head.cost_center.company_id}
                 editable={editable}
                 onChanged={() => refresh()}
+                costCenterId={head.cost_center.id}
+                canMove={editable && head.permissions.global}
               />
             </Card>
           </div>

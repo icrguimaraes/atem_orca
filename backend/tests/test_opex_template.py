@@ -236,3 +236,25 @@ def test_preview_opens_on_budget_records(client, admin, run_worker):
     assert {"BRANCH", "ACCOUNT"} <= {r["record_type"] for r in every}
     accounts = client.get(f"/api/v1/imports/{batch_id}/preview?record_type=ACCOUNT", headers=admin).json()["rows"]
     assert accounts and {r["record_type"] for r in accounts} == {"ACCOUNT"}
+
+
+def test_move_line_to_other_cost_center(client, admin, run_worker):
+    """Controladoria corrige no sistema o CC lançado errado na planilha: o lançamento vai para o OPEX do outro CC,
+    com motivo, e fica no registro dos apontamentos (corrigido)."""
+    import_and_load(client, admin, run_worker, builders.opex_template_filled(), "t-move.xlsx")
+    ccs = {c["code"]: c for c in client.get("/api/v1/cost-centers", headers=admin).json()}
+    head = client.get(f"/api/v1/opex/cost-centers/{ccs['1050101011']['id']}", headers=admin).json()
+    lines = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()
+    line = next(x for x in lines if x["line_type"] == "GENERIC")
+    url = f"/api/v1/opex/lines/{line['id']}/move"
+    target = ccs["1050101012"]["id"]
+    assert client.post(url, headers=admin, json={"target_cost_center_id": target, "reason": " "}).status_code == 422
+    moved = client.post(url, headers=admin, json={"target_cost_center_id": target, "reason": "CC da outra área"})
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["note"].startswith("Movido de 1050101011 para 1050101012")
+    left = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()
+    assert line["id"] not in {x["id"] for x in left}
+    there = client.get(f"/api/v1/opex/submissions/{moved.json()['target_submission_id']}/lines", headers=admin).json()
+    assert line["id"] in {x["id"] for x in there}
+    reviews = client.get("/api/v1/findings", headers=admin).json()["reviews"]
+    assert any(r["kind"] == "OPEX_MOVED_CC" and r["action"] == "CORRECTED" for r in reviews)
