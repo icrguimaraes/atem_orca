@@ -28,7 +28,7 @@ const SECTIONS = [
   { key: "monthly", label: "Comparativo mensal" },
   { key: "table", label: "Tabela por pacote, conta e centro de custo" },
   { key: "cumulative", label: "Total acumulado" },
-  { key: "top", label: "Maiores centros de custo e contas" },
+  { key: "top", label: "Maiores centros de custo" },
   { key: "heatmap", label: "Mapa de calor" },
 ];
 
@@ -149,10 +149,6 @@ export default function Painel2() {
     const id = pick(cd, 3);
     if (id) toggleCostCenter(id);
   }, [toggleCostCenter]);
-  const onAccount = useCallback((cd: unknown, label: string) => {
-    const id = pick(cd, 3);
-    if (id) setAccount((a) => (a?.id === id ? null : { id, label }));
-  }, []);
   function onTableRow(level: Breakdown["group_by"], row: BreakdownRow) {
     if (row.id === null) return;
     const id = row.id;
@@ -208,13 +204,6 @@ export default function Painel2() {
   const hasData = Boolean(o && (o.has_actual || o.has_budget));
   const shownYears = years.length ? years : (o?.selected_years ?? []);
   const filtered = Boolean(filters.company_id || filters.cost_center_id || filters.package_id || account || modules.length);
-  // os dois rankings lado a lado com a mesma altura quando têm tamanhos parecidos (o menor ocupa o card inteiro);
-  // com tamanhos muito diferentes, cada um fica com a sua altura (uma linha não vira uma barra gigante)
-  const rows = (fig?: Figure) => ((fig?.data[0] as { y?: unknown[] } | undefined)?.y ?? []).length;
-  const [rowsCC, rowsAcc] = [rows(f?.top_cost_centers), rows(f?.top_accounts)];
-  const rankHeight = f && Math.min(rowsCC, rowsAcc) >= 0.6 * Math.max(rowsCC, rowsAcc)
-    ? Math.max(Number(f.top_cost_centers?.layout.height ?? 0), Number(f.top_accounts?.layout.height ?? 0)) || undefined
-    : undefined;
   const heat = o?.heatmap_all ?? o?.heatmap;
   const heatSelected = heat && filters.cost_center_id ? heat.rows.findIndex((r) => String(r.id) === filters.cost_center_id) : -1;
   const unpick = (label: string, clear: () => void) => (
@@ -457,27 +446,17 @@ export default function Painel2() {
             )}
 
             {shell("top",
-              <div className="grid-2">
-                <Card
-                  title={`Maiores centros de custo · ${mainLabel}`}
-                  actions={filters.cost_center_id ? unpick("Desmarcar", () => setFilters((cur) => ({ ...cur, cost_center_id: "" }))) : undefined}
-                >
-                  <p className="muted small">{hasBase ? `Barra fina: ${baseLabel}. ` : ""}Clique num centro de custo para filtrar; de novo para desmarcar.</p>
-                  {o.top_cost_centers.length ? (
-                    <PlotlyChart figure={f.top_cost_centers} height={rankHeight} onClick={onCostCenter} ariaLabel="Maiores centros de custo" />
-                  ) : (
-                    <Empty>Sem dados.</Empty>
-                  )}
-                </Card>
-                <Card title={`Maiores contas · ${mainLabel}`} actions={account ? unpick("Desmarcar", () => setAccount(null)) : undefined}>
-                  <p className="muted small">{hasBase ? `Barra fina: ${baseLabel}. ` : ""}Clique numa conta para filtrar; de novo para desmarcar.</p>
-                  {o.top_accounts.length ? (
-                    <PlotlyChart figure={f.top_accounts} height={rankHeight} onClick={onAccount} ariaLabel="Maiores contas" />
-                  ) : (
-                    <Empty>Sem dados.</Empty>
-                  )}
-                </Card>
-              </div>,
+              <Card
+                title={`Maiores centros de custo · ${mainLabel}`}
+                actions={filters.cost_center_id ? unpick("Desmarcar", () => setFilters((cur) => ({ ...cur, cost_center_id: "" }))) : undefined}
+              >
+                <p className="muted small">{hasBase ? `Barra fina: ${baseLabel}. ` : ""}Clique num centro de custo para filtrar; de novo para desmarcar.</p>
+                {o.top_cost_centers.length ? (
+                  <PlotlyChart figure={f.top_cost_centers} onClick={onCostCenter} ariaLabel="Maiores centros de custo" />
+                ) : (
+                  <Empty>Sem dados.</Empty>
+                )}
+              </Card>,
             )}
 
             {heat && heat.rows.length > 0 && shell("heatmap",

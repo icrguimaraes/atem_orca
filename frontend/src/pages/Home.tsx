@@ -85,7 +85,7 @@ const SECTIONS = [
   { key: "monthly", label: "Comparativo mensal" },
   { key: "table", label: "Tabela por pacote, conta e centro de custo" },
   { key: "cumulative", label: "Total acumulado" },
-  { key: "top", label: "Maiores centros de custo e contas" },
+  { key: "top", label: "Maiores centros de custo" },
   { key: "heatmap", label: "Mapa de calor" },
 ];
 
@@ -536,16 +536,10 @@ export default function Home() {
 
           {/* ordem padrão por relevância; o usuário pode reordenar em "Organizar painel" */}
           {shell("top",
-          <div className="grid-2">
-            <Card title={`Maiores centros de custo · ${mainLabel}`}>
-              {hasBase && <p className="muted small">Barra fina: {baseLabel}. Percentual: variação em relação à base.</p>}
-              <RankChart rows={o.top_cost_centers} label={mainLabel} baseLabel={hasBase ? baseLabel : null} color={mainColor} baseColor={baseColor} />
-            </Card>
-            <Card title={`Maiores contas · ${mainLabel}`}>
-              {hasBase && <p className="muted small">Barra fina: {baseLabel}. Percentual: variação em relação à base.</p>}
-              <RankChart rows={o.top_accounts} label={mainLabel} baseLabel={hasBase ? baseLabel : null} color={mainColor} baseColor={baseColor} />
-            </Card>
-          </div>,
+          <Card title={`Maiores centros de custo · ${mainLabel}`}>
+            {hasBase && <p className="muted small">Barra fina: {baseLabel}. Percentual: variação em relação à base.</p>}
+            <RankChart rows={o.top_cost_centers} label={mainLabel} baseLabel={hasBase ? baseLabel : null} color={mainColor} baseColor={baseColor} />
+          </Card>,
           )}
 
           {o.heatmap.rows.length > 0 && shell("heatmap",
