@@ -238,18 +238,19 @@ def _add(
 
 
 def _opex(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, add) -> None:
-    # contas com alerta (variação acima do limite, conta nova, sem orçamento) sem justificativa: bloqueiam o envio
+    # contas com alerta (variação acima do limite, conta nova, sem orçamento) sem justificativa: aviso (recomendada,
+    # não bloqueia o envio — o template OPEX só recomenda justificar)
     for row in opex_svc.account_view(db, ctx, sub)["accounts"]:
         if not row["needs_justification"] or (row["justification"] or "").strip():
             continue
         flag = FLAG_TEXT.get(row["flags"][0], row["flags"][0])
         add(
-            "CRITICAL",
+            "WARNING",
             "OPEX_JUSTIFICATION",
             ("OPEX_ACCOUNT", row["account_id"]),
             f"{row['code']} {row['name']}",
             f"{flag}: proposto {brl(Decimal(row['proposed']))} × referência {brl(Decimal(row['variation_base']))}"
-            f"{_pct(row['variation_pct'])}. Justifique a conta para enviar",
+            f"{_pct(row['variation_pct'])}. Justifique a conta (recomendado; não bloqueia o envio)",
             row["proposed"],
             fix={"type": "text", "label": "Justificativa da conta"},
         )

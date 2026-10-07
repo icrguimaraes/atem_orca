@@ -168,7 +168,7 @@ export default function OpexCostCenter() {
         <Stat label={`${y.ref} anualizado`} value={fmtCompact(annualized)} hint={accounts.closed_period ? `realizado até o mês ${accounts.closed_period}` : "sem realizado"} />
         <Stat label={`${y.ref} orçado`} value={fmtCompact(accounts.totals.ref_budget ?? 0)} />
         <Stat label={`${y.target} proposto`} value={fmtCompact(totalProposed)} tone="warn" hint={annualized ? `${fmtPct(String(totalProposed / annualized - 1))} vs ${y.ref} anualizado` : undefined} />
-        <Stat label="Justificativas pendentes" value={accounts.pending_justifications} tone={accounts.pending_justifications ? "bad" : "good"} hint="obrigatórias para enviar" />
+        <Stat label="Justificativas pendentes" value={accounts.pending_justifications} tone={accounts.pending_justifications ? "warn" : "good"} hint="recomendadas (não bloqueiam o envio)" />
       </div>
 
       {head.package_reviews.length > 0 && (

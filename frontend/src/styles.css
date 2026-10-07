@@ -776,3 +776,9 @@ tr.saving { opacity: 0.6; }
   .cc-queue { display: none; }
   .finding-row { grid-template-columns: 1fr; }
 }
+
+.finding-rules { margin: 12px 0 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; }
+.finding-rules summary { cursor: pointer; font-weight: 600; font-size: 13.5px; }
+.finding-rules-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px 24px; margin-top: 10px; }
+.finding-rules ul { margin: 8px 0 4px; padding-left: 18px; font-size: 13px; }
+.finding-rules li { margin-bottom: 4px; }

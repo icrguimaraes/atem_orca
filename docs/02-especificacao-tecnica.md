@@ -385,9 +385,11 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 
 Página **Apontamentos** (`/apontamentos`, `GET /api/v1/findings`, `services/findings.py`): reúne, nos orçamentos
 iniciados e ainda não aprovados da versão em elaboração, tudo o que as telas de CC apontam — **críticos** (bloqueiam o
-envio: conta com variação sem justificativa, cronograma do CAPEX diferente do total, projeto sem tipo/justificativa,
-movimentação de pessoal sem justificativa) e **avisos** (para a análise: passagem zerada, viagem sem tarifa, valor
-baixo, vida útil curta, conta diferente do catálogo de ativos, software no CAPEX). Filtros por módulo, gravidade,
+envio: cronograma do CAPEX diferente do total, projeto sem tipo/justificativa, movimentação de pessoal sem
+justificativa, novo salário ou mês da ação pendentes) e **avisos** (para a análise: conta OPEX com variação acima do
+limite, conta nova ou sem orçamento sem justificativa — recomendada pelo template, não obrigatória desde 07/10/2026 —,
+passagem zerada, viagem sem tarifa, valor baixo, vida útil curta, conta diferente do catálogo de ativos, software no
+CAPEX, CC pelo cargo, CC sem área e setor). A tela traz o quadro "O que bloqueia o envio e o que é só aviso". Filtros por módulo, gravidade,
 tipo e CC; cada linha leva ao orçamento do CC. Respeita o escopo do usuário (gestor vê só os seus CCs).
 
 **Tela** (fila de trabalho): à esquerda, os CCs com críticos/avisos e a barra de progresso (resolvidos ÷ apontados);

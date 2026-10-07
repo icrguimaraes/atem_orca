@@ -312,18 +312,8 @@ def submit_blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[st
     blockers = []
     if not db.scalar(select(func.count()).select_from(BudgetLine).where(BudgetLine.submission_id == sub.id)):
         blockers.append("nenhuma linha orçada")
-    view = account_view(db, ctx, sub)
-    missing = [
-        f"{r['code']} {r['name']}"
-        for r in view["accounts"]
-        if r["needs_justification"] and not (r["justification"] or "").strip()
-    ]
-    if missing:
-        extra = f" e mais {len(missing) - 3}" if len(missing) > 3 else ""
-        blockers.append(
-            f"{len(missing)} conta(s) com variação acima do limite sem justificativa: {'; '.join(missing[:3])}{extra}. "
-            "Preencha a coluna Justificativa na aba Visão por conta (ou use “Não vou orçar esta conta”)"
-        )
+    # justificativa de conta (variação acima do limite, conta nova, sem orçamento) é recomendada, não obrigatória:
+    # o template pede "evite orçar despesas sem histórico ou sem justificativa clara" — fica como aviso em Apontamentos
     return blockers
 
 

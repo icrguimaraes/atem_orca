@@ -91,8 +91,7 @@ def test_opex_full_flow(client, admin, run_worker):
     assert rows["6010301011"]["flags"] == ["NEW_ACCOUNT"]
     assert view["pending_justifications"] == 3
 
-    blocked = client.post(f"/api/v1/opex/submissions/{sub}/actions/submit", headers=mgr, json={})
-    assert blocked.status_code == 409 and "justificativa" in blocked.json()["detail"]
+    # justificativa de conta é recomendada (aviso em Apontamentos), não bloqueia o envio; o gestor justifica antes
     for code in ("6010301001", "6010301011", "6010501002"):
         client.put(
             f"/api/v1/opex/submissions/{sub}/justifications/{acc[code]['id']}",

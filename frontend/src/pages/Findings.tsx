@@ -18,7 +18,7 @@ const MODULE_OPTIONS = [
 ];
 // o que fazer em cada tipo, em uma linha (cabeçalho do grupo)
 const KIND_HINTS: Record<string, string> = {
-  OPEX_JUSTIFICATION: "Conta com variação, conta nova ou sem orçamento: escreva a justificativa para liberar o envio.",
+  OPEX_JUSTIFICATION: "Conta com variação acima do limite, conta nova ou sem orçamento: justificar é recomendado (não bloqueia o envio); a Controladoria pode manter em lote.",
   TRAVEL_NO_FARE: "A planilha não trouxe a passagem: informe o valor (vai para o mês de ida) ou mantenha, se não houver.",
   TRAVEL_RATE: "Diária ou hospedagem sem tarifa no ciclo: confira no orçamento do CC.",
   CAPEX_SCHEDULE_MISMATCH: "A soma dos meses não fecha com o valor do item: distribua o valor nos meses.",
@@ -173,6 +173,30 @@ export default function Findings() {
         extra={<SearchBox value={search} onChange={setSearch} placeholder="Buscar item, pessoa, conta…" />}
       />
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
+      {tab === "open" && (
+        <details className="finding-rules">
+          <summary>O que bloqueia o envio e o que é só aviso</summary>
+          <div className="finding-rules-grid">
+            <div>
+              <Badge tone="bad">Crítico · bloqueia o envio</Badge>
+              <ul>
+                <li><strong>Pessoal:</strong> justificativa de contratação, desligamento e transferência; novo salário e mês da ação que não vieram na planilha.</li>
+                <li><strong>CAPEX:</strong> cronograma diferente do valor do item; projeto sem tipo ou sem justificativa (Instruções do template CAPEX).</li>
+              </ul>
+            </div>
+            <div>
+              <Badge tone="warn">Aviso · não bloqueia</Badge>
+              <ul>
+                <li><strong>OPEX:</strong> justificativa de conta com variação acima do limite, conta nova ou sem orçamento (o template só recomenda); passagem zerada; diária ou hospedagem sem tarifa.</li>
+                <li><strong>CAPEX:</strong> conta diferente do catálogo de ativos, software no CAPEX, valor baixo, vida útil curta.</li>
+                <li><strong>Pessoal:</strong> centro de custo definido pelo cargo (confirmar).</li>
+                <li><strong>Estrutura:</strong> CC sem área e setor (Controladoria).</li>
+              </ul>
+              <p className="muted small">Avisos podem ser corrigidos ou mantidos pela Controladoria com o motivo (um a um ou em lote).</p>
+            </div>
+          </div>
+        </details>
+      )}
 
       {tab === "open" && (items.length === 0 ? (
         <Empty>Nenhum apontamento pendente nos orçamentos em aberto da versão {data.version}.</Empty>
