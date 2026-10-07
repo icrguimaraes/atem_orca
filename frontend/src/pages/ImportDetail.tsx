@@ -230,7 +230,7 @@ export default function ImportDetail() {
             )}
             {summary.record_types && (<><dt>Tipos de registro</dt><dd>
                   {Object.entries(summary.record_types as Record<string, number>)
-                    .map(([k, n]) => `${RECORD_TYPES[k] ?? k}: ${fmtInt(n)}`)
+                    .map(([k, n]) => `${k === "FACT" && batch.dataset_type?.endsWith("_TEMPLATE") ? "Realizado (só referência)" : RECORD_TYPES[k] ?? k}: ${fmtInt(n)}`)
                     .join(" · ")}
                 </dd></>)}
           </dl>

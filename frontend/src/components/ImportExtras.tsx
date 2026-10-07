@@ -88,10 +88,12 @@ export function ErrorsPanel({ batchId, code, onCode, onClose }: { batchId: strin
 const ACTION_LABELS = { CREATE: "Novos", UPDATE: "Alterados", UNCHANGED: "Sem alteração" } as const;
 
 /** O que a carga vai mudar em relação à base vigente. */
-export function ComparisonCard({ comparison }: { comparison: Comparison }) {
+export function ComparisonCard({ comparison, title = "Comparação com a base vigente" }: { comparison: Comparison; title?: string }) {
   if (comparison.kind === "NONE") return null;
   // realizado de template com a base já carregada: não entra (a tabela fica só para conferência)
   const skipped = new Set(comparison.kind === "FINANCIAL" && comparison.template ? comparison.skipped_scopes ?? [] : []);
+  // template de orçamento: a aba "Realizado" é referência para o gestor; com o realizado já na base, não é carregada
+  const actualIgnored = Boolean(comparison.actual?.template && comparison.actual.no_changes && comparison.actual.skipped_scopes?.length);
   if (comparison.kind === "TEMPLATE")
     return (
       <>
@@ -119,6 +121,7 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
               {comparison.module === "CAPEX"
                 ? "Solicitações cadastradas diretamente no sistema não são afetadas. Linhas de projeto com o mesmo tipo e justificativa viram uma solicitação com vários itens."
                 : "Linhas lançadas diretamente no sistema não são afetadas."}
+              {actualIgnored && " A aba “Realizado” do template é só referência para o gestor e não é carregada: o realizado do sistema vem da importação de Realizado (KSB1)."}
             </p>
           </Card>
         )}
@@ -129,12 +132,12 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
             </p>
           </Card>
         )}
-        {comparison.actual && <ComparisonCard comparison={comparison.actual} />}
-        {comparison.master && <ComparisonCard comparison={comparison.master} />}
+        {comparison.actual && !actualIgnored && <ComparisonCard comparison={comparison.actual} title="Realizado do template (primeira carga do ano)" />}
+        {comparison.master && <ComparisonCard comparison={comparison.master} title="Cadastros do template (aba BD-Novo)" />}
       </>
     );
   return (
-    <Card title="Comparação com a base vigente">
+    <Card title={title}>
       {skipped.size > 0 && (
         <Alert tone="info">
           A base já tem realizado para {[...skipped].map((s) => s.replace("ACTUAL:", "").replace(":", " · empresa ")).join(", ")}: a aba
