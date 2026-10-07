@@ -286,9 +286,11 @@ class Facts:
         period: Period,
         parent: dict | None = None,
         account_id: int | None = None,
+        department_id: int | None = None,
     ) -> None:
         self.db = db
         self.account_id = account_id  # filtro por conta (clique nos visuais do Painel 2)
+        self.department_id = department_id  # filtro por área (Controladoria, Tributos…) do CC
         self.visible = visible_cost_center_ids(db, user)
         self.company_id, self.cost_center_id, self.package_id = company_id, cost_center_id, package_id
         self.months = period.months
@@ -310,6 +312,10 @@ class Facts:
             stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id == self.package_id)))
         if self.account_id:
             stmt = stmt.where(model.account_id == self.account_id)
+        if self.department_id:
+            stmt = stmt.where(
+                model.cost_center_id.in_(select(CostCenter.id).where(CostCenter.department_id == self.department_id))
+            )
         if self.modules:
             natures = [n for m in self.modules for n in cons.MODULE_NATURES[m]]
             stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.nature.in_(natures))))
@@ -370,6 +376,8 @@ class Facts:
                 if self.parent.get("account_id") is not None and account_id != self.parent["account_id"]:
                     continue
                 dept_id, area_id = self._structure.get(r.cost_center_id, (None, None))
+                if self.department_id and dept_id != self.department_id:
+                    continue
                 structure = {"department_id": dept_id, "area_id": area_id}
                 if any(
                     (self.parent.get(k) is not None and structure[k] != self.parent[k])
@@ -509,6 +517,7 @@ def overview(
     cost_center_id: int | None = None,
     package_id: int | None = None,
     account_id: int | None = None,
+    department_id: int | None = None,
     year: int | None = None,
     years: str | None = None,
     months: str | None = None,
@@ -524,7 +533,7 @@ def overview(
     tudo. `compare` liga a comparação com o ano anterior (só com um ano escolhido); `same_period` limita a base
     ao último mês fechado do realizado em foco. O ano do ciclo traz o orçamento proposto como orçado."""
     P = _period(db, years, months, modules, compare, same_period, year)
-    f = Facts(db, user, company_id, cost_center_id, package_id, P, account_id=account_id)
+    f = Facts(db, user, company_id, cost_center_id, package_id, P, account_id=account_id, department_id=department_id)
     main_model = _main_model(P)
     actual_total = f.total(ActualEntry, P.years)
     budget_total = f.total(ReferenceBudgetEntry, P.years)
@@ -575,10 +584,21 @@ def overview(
         # Painel 2, como o Power BI: o visual em que se clicou não é filtrado pela própria seleção — mostra todos
         # os itens, com o escolhido em destaque (e clicável de novo para desmarcar); os outros visuais filtram.
         all_months = replace(P, months=None)
-        f_months = Facts(db, user, company_id, cost_center_id, package_id, all_months, account_id=account_id)
-        f_ccs = Facts(db, user, company_id, None, package_id, P, account_id=account_id)
-        f_accounts = Facts(db, user, company_id, cost_center_id, package_id, P)
-        f_heat = Facts(db, user, company_id, None, package_id, all_months, account_id=account_id)
+        f_months = Facts(
+            db,
+            user,
+            company_id,
+            cost_center_id,
+            package_id,
+            all_months,
+            account_id=account_id,
+            department_id=department_id,
+        )
+        f_ccs = Facts(db, user, company_id, None, package_id, P, account_id=account_id, department_id=department_id)
+        f_accounts = Facts(db, user, company_id, cost_center_id, package_id, P, department_id=department_id)
+        f_heat = Facts(
+            db, user, company_id, None, package_id, all_months, account_id=account_id, department_id=department_id
+        )
         data["heatmap_all"] = _heatmap(db, f_heat, main_model, P.years)
         data["figures"] = painel_figures.build(
             data,
@@ -662,6 +682,7 @@ def breakdown(
     cost_center_id: int | None = None,
     package_id: int | None = None,
     account_id: int | None = None,
+    department_id: int | None = None,
     years: str | None = None,
     months: str | None = None,
     modules: str | None = None,
@@ -683,7 +704,9 @@ def breakdown(
         "area_id": parent_area_id,
         "no_area_id": parent_no_area,
     }
-    f = Facts(db, user, company_id, cost_center_id, package_id, P, parent, account_id=account_id)
+    f = Facts(
+        db, user, company_id, cost_center_id, package_id, P, parent, account_id=account_id, department_id=department_id
+    )
     key = {
         "department": "department_id",
         "area": "area_id",

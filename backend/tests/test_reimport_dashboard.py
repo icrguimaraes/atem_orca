@@ -313,6 +313,12 @@ def test_breakdown_by_area_and_sector(client, admin, run_worker):
     assert [(r["name"], r["ref"]) for r in packages["rows"]] == [("Viagens", "350.00")]
     loose = client.get(f"/api/v1/dashboard/breakdown?group_by=area&parent_no_department=true&{q}", headers=admin)
     assert [(r["name"], r["ref"]) for r in loose.json()["rows"]] == [("Sem setor", "80.00")]
+    # filtro por área (botões do Painel): Painel e tabela só com os CCs da área
+    only = client.get(f"/api/v1/dashboard/overview?department_id={dept['id']}&{q}", headers=admin).json()
+    assert only["kpis"]["ref_ytd"] == "350.00"
+    url = f"/api/v1/dashboard/breakdown?group_by=department&department_id={dept['id']}&{q}"
+    table = client.get(url, headers=admin)
+    assert [(r["name"], r["ref"]) for r in table.json()["rows"]] == [("Tributos", "350.00")]
 
 
 def test_breakdown_drills_into_accounts_without_package(client, admin, run_worker):

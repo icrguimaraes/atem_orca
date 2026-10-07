@@ -7,12 +7,12 @@ export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: string; actions?: ReactNode }) {
+export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
   return (
     <header className="page-header">
       <div>
         <h1>{title}</h1>
-        {subtitle && <p className="muted">{subtitle}</p>}
+        {subtitle && (typeof subtitle === "string" ? <p className="muted">{subtitle}</p> : subtitle)}
       </div>
       {actions && <div className="page-actions">{actions}</div>}
     </header>

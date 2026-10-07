@@ -1,6 +1,6 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type Breakdown, type BreakdownRow, type Company, type CostCenter, type Cycle, type Overview, type Package } from "../api";
+import { api, type Breakdown, type BreakdownRow, type Company, type CostCenter, type Cycle, type Department, type Overview, type Package } from "../api";
 import { useAuth } from "../auth";
 import { BudgetProgressCard } from "../components/BudgetProgressCard";
 import { ManagerTasks, PackageReviews, PainelBase } from "../components/PainelBlocks";
@@ -75,6 +75,12 @@ function pick(customdata: unknown, index: number): number | null {
   return v === null || v === undefined || v === "" ? null : Number(v);
 }
 
+/** Saudação pelo horário do navegador. */
+function greeting(): string {
+  const h = new Date().getHours();
+  return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+}
+
 export default function Painel2() {
   const { user, can } = useAuth();
   const isController = can("CONTROLLER");
@@ -100,6 +106,7 @@ export default function Painel2() {
     });
   }
   const [months, setMonths] = useState<number[]>([]);
+  const [department, setDepartment] = useState(""); // área (Controladoria, Tributos…); vazio = todas
   const toggleMonth = useCallback((m: number) => {
     setMonths((cur) => {
       const next = cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m].sort((a, b) => a - b);
@@ -165,24 +172,27 @@ export default function Painel2() {
     setYears([]);
     setMonths([]);
     setModules([]);
+    setDepartment("");
   }
   const activeFilters =
     [filters.company_id, filters.cost_center_id, filters.package_id].filter(Boolean).length +
-    (account ? 1 : 0) + (years.length ? 1 : 0) + (months.length ? 1 : 0) + (modules.length ? 1 : 0);
+    (account ? 1 : 0) + (years.length ? 1 : 0) + (months.length ? 1 : 0) + (modules.length ? 1 : 0) + (department ? 1 : 0);
 
   const base = useLoad(async () => {
-    const [cycles, companies, ccs, packages] = await Promise.all([
+    const [cycles, companies, ccs, packages, departments] = await Promise.all([
       api<Cycle[]>("/cycles"),
       api<Company[]>("/companies"),
       api<CostCenter[]>("/cost-centers"),
       api<Package[]>("/packages"),
+      api<Department[]>("/departments"),
     ]);
-    return { cycle: cycles[0] ?? null, companies, ccs, packages };
+    return { cycle: cycles[0] ?? null, companies, ccs, packages, departments };
   });
   const query = new URLSearchParams(
     Object.entries({
       ...filters,
       account_id: account ? String(account.id) : "",
+      department_id: department,
       years: years.join(","),
       months: months.join(","),
       modules: modules.join(","),
@@ -193,7 +203,7 @@ export default function Painel2() {
   const overview = useLoad(() => api<OverviewWithFigures>(`/dashboard/overview?figures=true${query ? `&${query}` : ""}`), [query]);
 
   if (!base.data) return <Loading />;
-  const { cycle, companies, ccs, packages } = base.data;
+  const { companies, ccs, packages, departments } = base.data;
   const o = overview.data;
   const f = o?.figures;
   const period = o?.period;
@@ -217,11 +227,7 @@ export default function Painel2() {
     <>
       <PageHeader
         title="Painel"
-        subtitle={
-          o && hasData
-            ? `Olá, ${user?.name.split(" ")[0]}. ${mainLabel}${typesTxt}${hasBase ? ` comparado com ${baseLabel}` : ""}.`
-            : `Olá, ${user?.name.split(" ")[0]}. ${cycle ? cycle.name : ""}`
-        }
+        subtitle={<p className="greeting">{greeting()}, {user?.name.split(" ")[0]}!</p>}
         actions={
           <>
             {activeFilters > 0 && (
@@ -255,7 +261,7 @@ export default function Painel2() {
             onChange: (v) => setFilters({ ...filters, cost_center_id: v }),
             options: (d) => [
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
-              ...ccs.filter((c) => !d.company_id || String(c.company_id) === d.company_id).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
+              ...ccs.filter((c) => (!d.company_id || String(c.company_id) === d.company_id) && (!department || String(c.department_id) === department)).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
             ],
           },
         ]}
@@ -264,6 +270,27 @@ export default function Painel2() {
       {o && (
         <>
           <div className="chip-groups" aria-busy={overview.loading}>
+            {departments.length > 0 && (
+              <div className="chip-group">
+                <span className="chip-label">Área</span>
+                <div className="month-chips" role="group" aria-label="Áreas">
+                  <button type="button" className={!department ? "active" : ""} aria-pressed={!department} onClick={() => setDepartment("")}>
+                    Todas
+                  </button>
+                  {[...departments].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      className={department === String(d.id) ? "active" : ""}
+                      aria-pressed={department === String(d.id)}
+                      onClick={() => setDepartment((cur) => (cur === String(d.id) ? "" : String(d.id)))}
+                    >
+                      {d.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="chip-group">
               <span className="chip-label">Ano</span>
               <div className="year-tabs" role="group" aria-label="Anos exibidos (somados)">
@@ -333,8 +360,9 @@ export default function Painel2() {
             </div>
             <div className="inline-controls">
               <span className="selection-note">
-                Selecionado: {mainLabel}{typesTxt}
-                {hasBase ? ` · base: ${baseLabel}` : ""} · clique nos gráficos e na tabela para filtrar
+                Selecionado: <strong>{mainLabel}{typesTxt}</strong>
+                {hasBase && <> · comparado com <strong>{baseLabel}</strong></>}
+                <span className="selection-hint"> · clique nos gráficos e na tabela para filtrar</span>
               </span>
               <button type="button" className="btn btn-ghost btn-sm" aria-pressed={organizing} onClick={() => setOrganizing(!organizing)}>
                 {organizing ? "Concluir" : "Organizar painel"}
