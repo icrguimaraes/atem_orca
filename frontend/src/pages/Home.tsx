@@ -17,7 +17,7 @@ import {
 import { useAuth } from "../auth";
 import { BudgetProgressCard } from "../components/BudgetProgressCard";
 import { FilterBar } from "../components/FilterBar";
-import { CumulativeChart, Heatmap, Legend, MonthlyChart, SERIES, TopBars } from "../components/charts";
+import { CumulativeChart, Heatmap, Legend, MonthlyChart, SERIES, TopBars, TotalColumn } from "../components/charts";
 import { DrillTable } from "../components/DrillTable";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
 import {
@@ -234,6 +234,24 @@ export default function Home() {
   const budgetLabel = period?.budget_label ?? "Orçado";
   // na série mensal o ano anterior aparece como é (sem anualizar)
   const prevSeriesLabel = period?.annualized_base && o?.previous_year ? `Realizado ${o.previous_year}` : baseLabel;
+  // coluna "Total" do comparativo mensal: soma de cada série no período (o orçamento inclui o CAPEX sem cronograma)
+  const monthlyTotals = (() => {
+    if (!o) return { items: [], notes: [] as string[] };
+    const sum = (k: "prev" | "ref" | "budget") => o.monthly.reduce((acc, m) => acc + Number(m[k]), 0);
+    const unscheduled = Number(o.kpis.budget_unscheduled ?? 0);
+    const prev = sum("prev"), ref = sum("ref"), budget = sum("budget") + unscheduled;
+    const items = [
+      ...(o.has_prev ? [{ label: prevSeriesLabel, value: prev, color: SERIES.past }] : []),
+      ...(o.has_actual ? [{ label: actualLabel, value: ref, color: SERIES.ref }] : []),
+      ...(o.has_budget ? [{ label: budgetLabel, value: budget, color: SERIES.budget }] : []),
+    ];
+    const notes = [
+      o.has_prev && o.has_actual && prev > 0 ? `Variação: ${fmtPct(String((ref - prev) / prev))} (${fmtSignedMoney(ref - prev)})` : null,
+      o.has_budget && o.has_actual && budget > 0 && ref > 0 ? `Realizado vs orçado: ${fmtPct(String((ref - budget) / budget))} (${fmtSignedMoney(ref - budget)})` : null,
+      o.has_budget && unscheduled > 0 ? `inclui ${fmtMoney(unscheduled)} de CAPEX sem cronograma mensal` : null,
+    ].filter(Boolean) as string[];
+    return { items, notes };
+  })();
   const isBudgetMain = period?.main === "budget";
   const mainColor = isBudgetMain ? SERIES.budget : SERIES.ref; // azul = realizado; verde = orçamento, sempre
   const baseColor = period?.base_kind === "budget" ? SERIES.budget : SERIES.past;
@@ -492,17 +510,22 @@ export default function Home() {
                 </table>
               </div>
             ) : (
-              <MonthlyChart
-                rows={o.monthly}
-                prevYear={o.has_prev ? o.previous_year : null}
-                refYear={o.reference_year}
-                showRef={o.has_actual}
-                showBudget={o.has_budget}
-                prevColor={SERIES.past}
-                refLabel={actualLabel}
-                prevLabel={prevSeriesLabel}
-                budgetLabel={budgetLabel}
-              />
+              <div className="monthly-split">
+                <MonthlyChart
+                  rows={o.monthly}
+                  prevYear={o.has_prev ? o.previous_year : null}
+                  refYear={o.reference_year}
+                  showRef={o.has_actual}
+                  showBudget={o.has_budget}
+                  prevColor={SERIES.past}
+                  refLabel={actualLabel}
+                  prevLabel={prevSeriesLabel}
+                  budgetLabel={budgetLabel}
+                />
+                <div className="monthly-total">
+                  <TotalColumn items={monthlyTotals.items} notes={monthlyTotals.notes} />
+                </div>
+              </div>
             )}
           </Card>,
           )}

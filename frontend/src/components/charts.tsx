@@ -142,6 +142,51 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget, showRef = tr
   );
 }
 
+/** Coluna "Total" ao lado do comparativo mensal: a soma de cada série no período, com escala própria (no mesmo
+ * gráfico o total esmagaria os meses). Mesma altura e mesmas margens do MonthlyChart, para a base alinhar. */
+export function TotalColumn({ items, notes = [] }: {
+  items: { label: string; value: number; color: string }[]; notes?: string[];
+}) {
+  const [hover, setHover] = useState(false);
+  const W = 200, H = 290, T = 26, B = 28;
+  const plotH = H - T - B;
+  const max = Math.max(...items.map((i) => i.value), 0) || 1;
+  const n = items.length;
+  const barW = 36, gap = 12;
+  const x0 = (W - (barW * n + gap * (n - 1))) / 2;
+  const y = (v: number) => T + plotH - (Math.max(v, 0) / max) * plotH * 0.9;
+  return (
+    <div className="chart" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} role="img" aria-label={`Total do período: ${items.map((i) => `${i.label} ${fmtMoney(i.value)}`).join("; ")}`}>
+        {hover && <rect x={4} y={T} width={W - 8} height={plotH} className="hover-band" />}
+        {items.map((it, j) => {
+          const x = x0 + j * (barW + gap);
+          if (it.value <= 0) return null;
+          return (
+            <g key={it.label}>
+              <path d={roundedTop(x, y(it.value), barW, T + plotH - y(it.value))} fill={it.color} />
+              <text x={x + barW / 2} y={y(it.value) - 6} className="extreme" textAnchor="middle" fill={inkOf(it.color)} pointerEvents="none">
+                {short(it.value)}
+              </text>
+            </g>
+          );
+        })}
+        <text x={W / 2} y={H - 8} className="axis" textAnchor="middle">TOTAL</text>
+        <line x1={4} x2={W - 4} y1={T + plotH} y2={T + plotH} className="baseline" />
+      </svg>
+      {hover && (
+        <div className="tooltip" style={{ left: "50%" }}>
+          <strong>Total do período</strong>
+          {items.map((it) => (
+            <span key={it.label}><i style={{ background: it.color }} />{it.label}: {fmtMoney(it.value)}</span>
+          ))}
+          {notes.map((t) => <span key={t} className="muted">{t}</span>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Total acumulado mês a mês: ano em foco (azul, linha com marcadores) sobre a base (orçado em verde-água
  * ou ano anterior em cinza, área). A série do ano em foco para no último mês com realizado. */
 export function CumulativeChart({ rows, prevYear, refYear, showBudget, prevColor = SERIES.past, refLabel, prevLabel, budgetLabel }: {

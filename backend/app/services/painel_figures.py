@@ -135,6 +135,64 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
     return _fig(data, layout) | {"meta": {"tooltip": "unified"}}
 
 
+def fig_monthly_total(o: dict) -> dict:
+    """Coluna "Total" ao lado do comparativo mensal: a soma de cada série no período, com escala própria (no mesmo
+    gráfico o total esmagaria os meses). O orçamento do ano do ciclo inclui o CAPEX sem cronograma mensal, como o
+    card. Mesmas margens do comparativo, para a base das barras alinhar. customdata = [valor, linhas do tooltip]."""
+    lb = _labels(o)
+    series = []
+    if o["has_prev"]:
+        series.append(("prev", lb["prev_series"], ANTERIOR))
+    if o["has_actual"]:
+        series.append(("ref", lb["actual"], REALIZADO))
+    if o["has_budget"]:
+        series.append(("budget", lb["budget"], ORCADO))
+    totals = {key: sum(_num(r[key]) for r in o["monthly"]) for key, _, _ in series}
+    unscheduled = _num(o["kpis"].get("budget_unscheduled"))
+    if "budget" in totals:
+        totals["budget"] += unscheduled
+    data = []
+    for key, name, color in series:
+        v = totals[key]
+        lines = [[f"{name}: {fmt_money(v)}", color]]
+        if key == "ref" and v:
+            prev, budget = totals.get("prev", 0.0), totals.get("budget", 0.0)
+            if prev:
+                lines.append([f"Variação: {fmt_pct((v - prev) / prev)} ({_signed_money(v - prev)})", ""])
+            if budget:
+                lines.append(
+                    [f"Realizado vs orçado: {fmt_pct((v - budget) / budget)} ({_signed_money(v - budget)})", ""]
+                )
+        if key == "budget" and unscheduled:
+            lines.append([f"inclui {fmt_money(unscheduled)} de CAPEX sem cronograma mensal", ""])
+        data.append(
+            go.Bar(
+                x=["TOTAL"],
+                y=[v],
+                name=name,
+                marker={"color": color, "cornerradius": 4},
+                text=[_short(v) if v > 0 else ""],
+                textposition="outside",
+                cliponaxis=False,
+                textfont={"size": 11, "color": INK[color]},
+                customdata=[[fmt_money(v), lines]],
+                hovertemplate=name + ": <b>%{customdata[0]}</b><extra></extra>",
+            )
+        )
+    top = max(list(totals.values()) + [0.0])
+    layout = _layout(
+        barmode="group",
+        bargap=0.3,
+        bargroupgap=0.12,
+        hovermode="x unified",
+        showlegend=False,
+        yaxis={"visible": False, "range": [0, (top or 1) * 1.12], "fixedrange": True},
+        xaxis={"showgrid": False, "automargin": True, "fixedrange": True},
+        margin={"l": 8, "r": 8, "t": 36, "b": 8},
+    )
+    return _fig(data, layout) | {"meta": {"tooltip": "unified"}}
+
+
 def fig_cumulative(o: dict) -> dict:
     """Total acumulado: linha pontilhada do realizado (até o último mês com valor) sobre a área da base (orçado ou
     ano anterior, até o último mês com valor). Em cada mês, o rótulo da série mais alta fica acima do ponto e o da
@@ -336,6 +394,7 @@ def build(
 
     figures = {
         "monthly": fig_monthly(o, monthly, selected.get("months")),
+        "monthly_total": fig_monthly_total(o),
         "cumulative": fig_cumulative(o),
         "top_cost_centers": fig_rank(
             ranked(o["top_cost_centers"] if top_cost_centers is None else top_cost_centers),

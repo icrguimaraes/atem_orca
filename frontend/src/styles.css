@@ -660,6 +660,14 @@ tr.saving { opacity: 0.6; }
 .findings-table .col-msg { min-width: 320px; }
 .findings-table .col-msg strong { display: block; margin-bottom: 2px; }
 .stat-line { display: block; }
+/* comparativo mensal com a coluna "Total" ao lado (escala própria); no celular a coluna vai para baixo */
+.monthly-split { display: grid; grid-template-columns: minmax(0, 1fr) 200px; gap: 16px; align-items: end; }
+.monthly-split > * { min-width: 0; }
+.monthly-total { border-left: 1px solid var(--border); padding-left: 16px; position: relative; }
+@media (max-width: 860px) {
+  .monthly-split { grid-template-columns: 1fr; }
+  .monthly-total { border-left: 0; padding-left: 0; border-top: 1px solid var(--border); padding-top: 12px; }
+}
 /* Painel: cards por tipo de orçamento logo abaixo do total, um pouco mais baixos */
 .stats-modules { margin-top: 12px; }
 .stats-modules .stat-value { font-size: 22px; }

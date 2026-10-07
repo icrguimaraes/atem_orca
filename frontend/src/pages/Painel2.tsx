@@ -424,7 +424,14 @@ export default function Painel2() {
           <div className="section-stack">
             {shell("monthly",
               <Card title="Comparativo mensal" actions={months.length ? unpick("Desmarcar meses", () => setMonths([])) : undefined}>
-                <PlotlyChart figure={f.monthly} height={360} onClick={onMonth} ariaLabel="Comparativo mensal" />
+                <div className="monthly-split">
+                  <PlotlyChart figure={f.monthly} height={360} onClick={onMonth} ariaLabel="Comparativo mensal" />
+                  {f.monthly_total && (
+                    <div className="monthly-total">
+                      <PlotlyChart figure={f.monthly_total} height={360} ariaLabel="Total do período" />
+                    </div>
+                  )}
+                </div>
               </Card>,
             )}
 

@@ -232,6 +232,10 @@ def test_painel2_figures(client, admin, run_worker):
         "top_accounts",
     }
     assert expected <= set(figs)
+    # coluna "Total" ao lado do comparativo mensal: soma de cada série (2026 até AGO = 430; 2025 até AGO = 860)
+    total = {t["name"]: t for t in figs["monthly_total"]["data"]}
+    assert total["Realizado 2026 até AGO"]["y"] == [430.0] and total["Realizado 2025 até AGO"]["y"] == [860.0]
+    assert total["Realizado 2026 até AGO"]["customdata"][0][1][1] == ["Variação: -50,0% (-R$ 430,00)", ""]
     monthly = {t["name"]: t for t in figs["monthly"]["data"]}
     assert set(monthly) == {"Realizado 2025 até AGO", "Realizado 2026 até AGO"}
     real = monthly["Realizado 2026 até AGO"]
