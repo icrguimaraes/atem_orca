@@ -272,11 +272,21 @@ def test_breakdown_by_area_and_sector(client, admin, run_worker):
     """Tabela do painel: área → setor → pacote → conta, pelo cadastro do centro de custo."""
     _setup(client, admin, run_worker)
     ccs = {c["code"]: c for c in client.get("/api/v1/cost-centers", headers=admin).json()}
-    dept = client.post("/api/v1/departments", headers=admin, json={"name": "Tributos"})
-    assert dept.status_code in (200, 201), dept.text
-    dept = dept.json()
-    sector = client.post("/api/v1/areas", headers=admin, json={"name": "Fiscal", "department_id": dept["id"]}).json()
+    # estrutura inicial da Controladoria vem do seed (áreas e setores do quadro "Por área")
+    depts = {d["name"]: d for d in client.get("/api/v1/departments", headers=admin).json()}
+    assert {"Controladoria", "Tributos"} <= set(depts)
+    dept = depts["Tributos"]
+    sectors_by_name = {a["name"]: a for a in client.get("/api/v1/areas", headers=admin).json()}
+    sector = sectors_by_name["Fiscal"]
     assert sector["department_id"] == dept["id"]
+    assert sectors_by_name["Dados"]["department_id"] == depts["Controladoria"]["id"]
+    # nova área (ex.: Projeção) e setor criados pelo cadastro
+    projecao = client.post("/api/v1/departments", headers=admin, json={"name": "Projeção"})
+    assert projecao.status_code in (200, 201), projecao.text
+    novo = client.post(
+        "/api/v1/areas", headers=admin, json={"name": "Orçamento", "department_id": projecao.json()["id"]}
+    )
+    assert novo.status_code in (200, 201) and novo.json()["department_id"] == projecao.json()["id"]
     patched = client.patch(
         f"/api/v1/cost-centers/{ccs['1050101011']['id']}",
         headers=admin,
