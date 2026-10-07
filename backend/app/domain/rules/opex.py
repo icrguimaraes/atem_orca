@@ -87,6 +87,14 @@ def calculate_travel(data: TravelInput, rates: TravelRates) -> TravelResult:
     )
 
 
+def missing_fare_warning(origin: str | None, destination: str | None, ticket: Decimal | None) -> str | None:
+    """Viagem entre lugares diferentes com passagem zerada: na planilha, a tabela de tarifas (origem × destino)
+    estava vazia ou não tinha a rota e a fórmula devolveu zero. Alerta para a análise; não bloqueia."""
+    if not origin or not destination or origin.strip().upper() == destination.strip().upper() or ticket:
+        return None
+    return f"Passagem orçada em R$ 0: a planilha não trouxe tarifa para {origin} → {destination}"
+
+
 @dataclass(frozen=True)
 class EventInput:
     month: int

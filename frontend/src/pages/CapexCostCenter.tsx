@@ -181,7 +181,7 @@ export default function CapexCostCenter() {
         <Stat label="Em projetos" value={fmtCompact(view.totals.projects_total)} hint={`${fmtInt(view.totals.projects)} projeto(s)`} />
         <Stat label={`Realizado CAPEX ${y.ref}`} value={fmtCompact(view.totals.ref_actual)} hint={`${y.prev}: ${fmtCompact(view.totals.prev_actual)}`} />
         <Stat label="Pendências críticas" value={fmtInt(view.issues.critical)} tone={view.issues.critical ? "bad" : "good"} hint="bloqueiam envio e aprovação" />
-        <Stat label="Avisos" value={fmtInt(view.issues.warning)} tone={view.issues.warning ? "warn" : undefined} hint="enquadramento (valor, vida útil)" />
+        <Stat label="Avisos" value={fmtInt(view.issues.warning)} tone={view.issues.warning ? "warn" : undefined} hint="enquadramento (valor, vida útil, conta)" />
       </div>
 
       <div className="tabs">

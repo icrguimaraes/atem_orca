@@ -35,6 +35,26 @@ def test_travel_missing_fare_warns():
     assert r.ticket == 0 and r.warnings
 
 
+def test_travel_without_fare_between_places_warns():
+    assert opex.missing_fare_warning("AM", "SP", D("0")) == (
+        "Passagem orçada em R$ 0: a planilha não trouxe tarifa para AM → SP"
+    )
+    assert opex.missing_fare_warning("AM", "SP", D("1800")) is None
+    assert opex.missing_fare_warning("AM", "am", D("0")) is None  # viagem local: sem passagem
+    assert opex.missing_fare_warning(None, "SP", D("0")) is None
+
+
+def test_capex_classification_against_catalog_and_software():
+    software = ("1020701002", "Licenças e Software")
+    equipment = ("1020601005", "Equipamentos de Informática")
+    mismatch = capex.check_classification("NOTEBOOK", software, equipment)
+    assert [(i.code, i.severity) for i in mismatch] == [("CAPEX_ACCOUNT_MISMATCH", "WARNING")]
+    assert "1020601005 (Equipamentos de Informática)" in mismatch[0].message
+    assert [i.code for i in capex.check_classification("QIVE", software)] == ["CAPEX_SOFTWARE"]
+    assert capex.check_classification("NOTEBOOK", equipment, equipment) == []
+    assert capex.check_classification("X", None) == []
+
+
 def test_event_meal_by_type_and_month():
     total_value, months = opex.calculate_event(opex.EventInput(6, 50, D("120"), structure=D("1000"), gifts=D("500")))
     assert total_value == D("7500.00")

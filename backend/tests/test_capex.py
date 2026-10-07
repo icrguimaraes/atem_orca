@@ -125,6 +125,7 @@ def test_capex_template_import(client, admin, run_worker):
     errors = client.get(f"/api/v1/imports/{batch_id}/errors", headers=admin).json()
     codes = {e["code"] for e in (errors["items"] if isinstance(errors, dict) else errors)}
     assert {"WRONG_NATURE", "CAPEX_SCHEDULE_MISMATCH", "CAPEX_BELOW_MIN_VALUE", "NEW_ASSET_CLASS"} <= codes
+    assert "CAPEX_SOFTWARE" in codes  # licença de BI na conta de software: avaliar se é assinatura (OPEX)
 
     assert client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin).status_code == 200
     run_worker()
@@ -144,6 +145,18 @@ def test_capex_template_import(client, admin, run_worker):
     assert project["items"][0]["asset_item_id"] is not None
     assert view["totals"]["proposed"] == "34000.00"
     assert view["issues"]["critical"] == 1  # cadeira: cronograma 3.000 × total 4.000
+    licence = project["items"][1]
+    assert [i["code"] for i in licence["issues"]] == ["CAPEX_SOFTWARE"]
+    # notebook levado para a conta de software: diverge do catálogo (aviso, não bloqueia)
+    software_id = next(
+        a["id"]
+        for a in client.get("/api/v1/capex/options", headers=admin).json()["accounts"]
+        if a["code"] == "1020701002"
+    )
+    moved = client.patch(
+        f"/api/v1/capex/items/{project['items'][0]['id']}", headers=admin, json={"account_id": software_id}
+    ).json()
+    assert [(i["code"], i["severity"]) for i in moved["issues"]] == [("CAPEX_ACCOUNT_MISMATCH", "WARNING")]
 
     opts = client.get("/api/v1/capex/options", headers=admin).json()
     notebook = next(a for a in opts["asset_items"] if a["name"] == "NOTEBOOK")

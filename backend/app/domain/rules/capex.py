@@ -1,5 +1,6 @@
 """Regras do template CAPEX."""
 
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -80,6 +81,41 @@ def check_item(
             Issue("CAPEX_SHORT_LIFE", "WARNING", f"Vida útil ≤ {min_useful_life_months} meses não caracteriza CAPEX")
         )
     return CapexItemCheck(value, scheduled, diff, issues)
+
+
+def _plain(text: str | None) -> str:
+    return unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().lower()
+
+
+def check_classification(
+    item_name: str, account: tuple[str, str] | None, catalog_account: tuple[str, str] | None = None
+) -> list[Issue]:
+    """Classificação contábil do item (alertas para a análise da Controladoria; não bloqueiam):
+    - item do catálogo de ativos (aba LISTA ATIVOS) lançado em outra conta (ex.: notebook em Licenças e Software);
+    - software no CAPEX: só a licença de uso permanente é ativo; assinatura mensal ou anual é despesa (OPEX).
+    `account` e `catalog_account` são (código, nome)."""
+    if account is None:
+        return []
+    if catalog_account is not None and catalog_account[0] != account[0]:
+        return [
+            Issue(
+                "CAPEX_ACCOUNT_MISMATCH",
+                "WARNING",
+                f"Conta {account[0]} ({account[1]}) diferente da indicada no catálogo de ativos para "
+                f"{item_name}: {catalog_account[0]} ({catalog_account[1]})",
+            )
+        ]
+    name = _plain(account[1])
+    if "software" in name or "licenc" in name:
+        return [
+            Issue(
+                "CAPEX_SOFTWARE",
+                "WARNING",
+                "Software no CAPEX: só licença de uso permanente é ativo; "
+                "assinatura (mensal ou anual) é despesa (OPEX)",
+            )
+        ]
+    return []
 
 
 def check_project(is_project: bool, project_type: str | None, justification: str | None) -> list[Issue]:

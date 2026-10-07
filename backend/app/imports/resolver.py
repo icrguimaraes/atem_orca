@@ -7,6 +7,8 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.domain.rules import capex as capex_rules
+from app.domain.rules.opex import TRAVEL_TICKET_ACCOUNT, missing_fare_warning
 from app.imports.base import ParseResult, Record
 from app.models import Account, AssetClass, Branch, BudgetPackage, Company, ContractType, CostCenter, LookupValue
 
@@ -326,6 +328,19 @@ def validate_capex_template(result: ParseResult, dims: Dimensions, options: dict
             return infer_nature(code, file_accounts[code].get("dre_group"), file_accounts[code].get("package"))
         return None
 
+    def account_ref(code: str | None) -> tuple[str, str] | None:
+        if not code:
+            return None
+        acc = dims.accounts.get(code)
+        return code, (acc.name if acc else (file_accounts.get(code) or {}).get("name") or code)
+
+    # catálogo de ativos do próprio arquivo (aba LISTA ATIVOS): item → conta da classe
+    catalog = {
+        r.data["name"].upper(): r.data["account"]
+        for r in result.records
+        if r.record_type == "ASSET_ITEM" and r.data.get("account") and nature(r.data["account"]) == "CAPEX"
+    }
+
     for rec in result.records:
         d = rec.data
         if rec.record_type == "ASSET_ITEM":
@@ -356,6 +371,12 @@ def validate_capex_template(result: ParseResult, dims: Dimensions, options: dict
             rec.error("WRONG_NATURE", f"Conta {d['account']} é de {acc_nature}; não entra no CAPEX", "CONTA")
         elif acc_obj is not None and not acc_obj.is_active:
             rec.error("INACTIVE_ACCOUNT", f"Conta {d['account']} está inativa", "CONTA", d["account"])
+        else:
+            item = (d.get("item") or "").strip()
+            for issue in capex_rules.check_classification(
+                item, account_ref(d["account"]), account_ref(catalog.get(item.upper()))
+            ):
+                rec.warn(issue.code, issue.message, "CONTA", d["account"])
         if d.get("branch") and dims.branch_id(company_id, d["branch"]) is None:
             rec.warn("UNKNOWN_BRANCH", f"Filial {d['branch']} não cadastrada (fica sem filial)", "FILIAL", d["branch"])
         if d.get("project_type"):
@@ -434,6 +455,12 @@ def _validate_travel(rec: Record, dims: Dimensions, file_ccs: set, file_cc_names
         rec.warn("TRAVEL_RECALCULATED", "Valores da viagem não vieram no arquivo: calculados pelas tarifas do ciclo")
     elif not d["amounts"]:
         rec.warn("TRAVEL_NO_VALUES", "Viagem sem valores (tarifa não encontrada na planilha)")
+    else:
+        t = d.get("travel") or {}
+        ticket = Decimal(d["amounts"].get(TRAVEL_TICKET_ACCOUNT, "0"))
+        warning = missing_fare_warning(t.get("origin"), t.get("destination"), ticket)
+        if warning:
+            rec.warn("TRAVEL_NO_FARE", warning, "DESPESAS COM PASSAGENS")
 
 
 def validate(result: ParseResult, dims: Dimensions, options: dict) -> None:

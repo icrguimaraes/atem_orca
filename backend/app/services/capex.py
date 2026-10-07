@@ -9,7 +9,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.domain.rules import capex as rules
 from app.domain.rules.common import MONTHS, money
@@ -55,7 +55,24 @@ def item_issues(ctx: Context, item: CapexItem) -> list[dict]:
         useful_life_months=item.useful_life_months,
         min_useful_life_months=min_life,
     )
-    return [{"code": i.code, "severity": i.severity, "message": i.message} for i in check.issues]
+    issues = check.issues + _classification_issues(item)
+    return [{"code": i.code, "severity": i.severity, "message": i.message} for i in issues]
+
+
+def _classification_issues(item: CapexItem) -> list[rules.Issue]:
+    """Conta do item × conta da classe no catálogo de ativos e software no CAPEX."""
+    db = object_session(item)
+    if db is None or item.account_id is None:
+        return []
+    account = db.get(Account, item.account_id)
+    asset = db.get(AssetItem, item.asset_item_id) if item.asset_item_id else None
+    klass = db.get(AssetClass, asset.asset_class_id) if asset else None
+    catalog = db.get(Account, klass.account_id) if klass and klass.account_id else None
+    return rules.check_classification(
+        item.item_name,
+        (account.code, account.name) if account else None,
+        (catalog.code, catalog.name) if catalog else None,
+    )
 
 
 def project_issues(project: CapexProject) -> list[dict]:

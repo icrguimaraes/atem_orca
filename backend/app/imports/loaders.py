@@ -922,6 +922,12 @@ def _travel_from_template(db, ctx, batch, row, sub, cc, company_id, user_id) -> 
         for line in lines:
             line.attributes = (line.attributes or {}) | attributes
         return lines
+    from app.domain.rules.opex import TRAVEL_TICKET_ACCOUNT, missing_fare_warning
+
+    ticket = Decimal(d["amounts"].get(TRAVEL_TICKET_ACCOUNT, "0"))
+    warning = missing_fare_warning(t.get("origin"), t.get("destination"), ticket)
+    if warning:
+        attributes["warnings"] = [warning]
     group = uuid.uuid4().hex[:12]
     lines = []
     for code, amount in d["amounts"].items():

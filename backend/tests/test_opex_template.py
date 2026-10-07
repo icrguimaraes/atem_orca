@@ -42,6 +42,13 @@ def test_filled_opex_template_loads_everything(client, admin, run_worker):
     belem = next(t for t in trips if t["description"] == "Visita base Belém")
     assert belem["attributes"]["destination"] == "PA" and belem["attributes"]["return_month"] is None
     assert belem["values"]["3"] == "2400.00"
+    # passagem zerada entre lugares diferentes: apontada na viagem (tela) e na prévia da importação
+    assert belem["attributes"]["warnings"] == ["Passagem orçada em R$ 0: a planilha não trouxe tarifa para AM → PA"]
+    auditoria = next(t for t in trips if t["description"] == "Auditoria SP")
+    assert auditoria["attributes"]["warnings"] == []
+    errors = client.get(f"/api/v1/imports/{batch_id}/errors", headers=admin).json()
+    codes = {e["code"] for e in (errors["items"] if isinstance(errors, dict) else errors)}
+    assert "TRAVEL_NO_FARE" in codes
     consult = next(line for line in lines if line["supplier"] == "KPMG")
     assert consult["description"] == "Consultoria tributária" and consult["justification"] == "Reajuste IPCA"
 
