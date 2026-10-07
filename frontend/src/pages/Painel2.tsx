@@ -1,6 +1,6 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type BreakdownRow, type Company, type CostCenter, type Cycle, type Overview, type Package } from "../api";
+import { api, type Breakdown, type BreakdownRow, type Company, type CostCenter, type Cycle, type Overview, type Package } from "../api";
 import { useAuth } from "../auth";
 import { FilterBar } from "../components/FilterBar";
 import { Heatmap } from "../components/charts";
@@ -153,12 +153,12 @@ export default function Painel2() {
     const id = pick(cd, 3);
     if (id) setAccount((a) => (a?.id === id ? null : { id, label }));
   }, []);
-  function onTableRow(level: number, row: BreakdownRow) {
+  function onTableRow(level: Breakdown["group_by"], row: BreakdownRow) {
     if (row.id === null) return;
     const id = row.id;
-    if (level === 0) setFilters((f) => ({ ...f, package_id: f.package_id === String(id) ? "" : String(id) }));
-    else if (level === 1) setAccount((a) => (a?.id === id ? null : { id, label: row.code ? `${row.name} · ${row.code}` : row.name }));
-    else toggleCostCenter(id);
+    if (level === "package") setFilters((f) => ({ ...f, package_id: f.package_id === String(id) ? "" : String(id) }));
+    else if (level === "account") setAccount((a) => (a?.id === id ? null : { id, label: row.code ? `${row.name} · ${row.code}` : row.name }));
+    else if (level === "cost_center") toggleCostCenter(id);
   }
   function clearAll() {
     setFilters({ company_id: "", cost_center_id: "", package_id: "" });
@@ -441,7 +441,7 @@ export default function Painel2() {
 
             {shell("table",
               <Card
-                title={`Por pacote GMD, conta e centro de custo · ${mainLabel}${typesTxt}`}
+                title={`Por área, setor, pacote GMD e conta · ${mainLabel}${typesTxt}`}
                 actions={filters.package_id || account || filters.cost_center_id
                   ? unpick("Desmarcar", () => { setFilters((cur) => ({ ...cur, package_id: "", cost_center_id: "" })); setAccount(null); })
                   : undefined}

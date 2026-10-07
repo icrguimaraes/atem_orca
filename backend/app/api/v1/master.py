@@ -192,8 +192,9 @@ _register_crud(
     order_by=ContractType.code,
 )
 _register_crud("/departments", Department, s.NamedIn, s.NamedOut, "department", order_by=Department.name)
+# no Painel: "Área" = departments (Controladoria, Tributos…) e "Setor" = areas (Fiscal, Contabilidade…)
 _register_crud(
-    "/areas", Area, s.NamedIn, s.NamedOut, "area", order_by=Area.name, filters={"department_id": Area.department_id}
+    "/areas", Area, s.AreaIn, s.AreaOut, "area", order_by=Area.name, filters={"department_id": Area.department_id}
 )
 _register_crud(
     "/package-managers",

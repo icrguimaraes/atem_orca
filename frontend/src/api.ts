@@ -87,7 +87,12 @@ export interface Branch { id: number; company_id: number; code: string; name: st
 export interface CostCenter {
   id: number; company_id: number; code: string; name: string; manager_user_id: number | null;
   manager_name: string | null; is_csc: boolean; is_backoffice: boolean; is_active: boolean;
+  department_id?: number | null; area_id?: number | null;  // área e setor (página Áreas e setores)
 }
+/** Área (Controladoria, Tributos…) — tabela `departments`. */
+export interface Department { id: number; name: string }
+/** Setor (Fiscal, Contabilidade…) dentro de uma área — tabela `areas`. */
+export interface Sector { id: number; name: string; department_id: number | null }
 export interface Package {
   id: number; code: string; name: string; roman: string | null; package_type: number; nature: string;
   form_type: string; sort_order: number; is_active: boolean;
@@ -190,7 +195,7 @@ export interface BreakdownRow {
   share_base: string | null; var: string; var_pct: string | null; has_children: boolean;
 }
 export interface Breakdown {
-  group_by: "package" | "account" | "cost_center"; reference_year: number; previous_year: number | null;
+  group_by: "department" | "area" | "package" | "account" | "cost_center"; reference_year: number; previous_year: number | null;
   last_closed_period: number | null; period: PeriodInfo; base: "prev" | "budget" | null; base_label: string | null; main_label: string;
   thresholds: { growth: number; reduction: number }; rows: BreakdownRow[];
   total: { ref: string; base: string; var: string; var_pct: string | null };

@@ -20,6 +20,7 @@ import MasterData from "./pages/MasterData";
 import OpexCostCenter from "./pages/OpexCostCenter";
 import PersonnelCostCenter from "./pages/PersonnelCostCenter";
 import PersonnelSimulation from "./pages/PersonnelSimulation";
+import Structure from "./pages/Structure";
 import Users from "./pages/Users";
 
 function Protected({ children, roles }: { children: ReactNode; roles?: string[] }) {
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="consolidacao" element={<Consolidation />} />
             <Route path="apontamentos" element={<Findings />} />
             <Route path="cadastros" element={<MasterData />} />
+            <Route path="estrutura" element={<Protected roles={["CONTROLLER"]}><Structure /></Protected>} />
             <Route path="ciclo" element={<CyclePage />} />
             <Route path="usuarios" element={<Protected roles={["CONTROLLER"]}><Users /></Protected>} />
             <Route path="auditoria" element={<Protected roles={["CONTROLLER"]}><Audit /></Protected>} />

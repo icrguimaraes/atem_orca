@@ -14,6 +14,7 @@ from app.db import SessionLocal
 from app.models import (
     Account,
     AccountDetail,
+    Area,
     AssetClass,
     BenefitType,
     Branch,
@@ -22,7 +23,9 @@ from app.models import (
     BudgetVersion,
     Company,
     ContractType,
+    CostCenter,
     CycleParameter,
+    Department,
     LookupValue,
     PackageManager,
     PersonnelScenario,
@@ -93,6 +96,7 @@ def seed(db: Session, *, fiscal_year: int = 2027) -> None:
             account_id = accounts[account_code].id if account_code else None
             db.add(BenefitType(code=code, name=name, account_id=account_id, calc_mode=mode))
     db.flush()
+    _cost_center_structure(db)
 
     cycle = _get(db, BudgetCycle, fiscal_year=fiscal_year)
     if cycle is None:
@@ -152,6 +156,38 @@ def seed(db: Session, *, fiscal_year: int = 2027) -> None:
         db.flush()
         db.add(UserRole(user_id=admin.id, role_code="ADMIN"))
     db.commit()
+
+
+def _cost_center_structure(db: Session) -> None:
+    """Área e setor dos CCs da Controladoria (S.CC_STRUCTURE), só onde o cadastro ainda está vazio."""
+    sectors: dict[tuple[str, str], Area] = {}
+    for dept_name, sector_name in {*S.CC_STRUCTURE.values(), *(t for _, t in S.CC_STRUCTURE_BY_NAME)}:
+        dept = _get(db, Department, name=dept_name)
+        if dept is None:
+            dept = Department(name=dept_name)
+            db.add(dept)
+            db.flush()
+        sector = _get(db, Area, name=sector_name, department_id=dept.id)
+        if sector is None:
+            sector = Area(name=sector_name, department_id=dept.id)
+            db.add(sector)
+            db.flush()
+        sectors[(dept_name, sector_name)] = sector
+    atem = _get(db, Company, code="1001")
+    if atem is None:
+        return
+    for cc in db.scalars(
+        select(CostCenter).where(
+            CostCenter.company_id == atem.id, CostCenter.department_id.is_(None), CostCenter.area_id.is_(None)
+        )
+    ):
+        target = S.CC_STRUCTURE.get(cc.code)
+        if target is None and cc.code.startswith(S.CC_STRUCTURE_PREFIX):
+            target = next((t for key, t in S.CC_STRUCTURE_BY_NAME if key in cc.name.upper()), None)
+        if target is not None:
+            sector = sectors[target]
+            cc.department_id, cc.area_id = sector.department_id, sector.id
+    db.flush()
 
 
 def main() -> None:

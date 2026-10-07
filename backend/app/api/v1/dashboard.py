@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Literal
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_user, require_roles, visible_cost_center_ids
@@ -19,12 +19,14 @@ from app.db import get_db
 from app.models import (
     Account,
     ActualEntry,
+    Area,
     BudgetCycle,
     BudgetPackage,
     Company,
     ContractType,
     CostCenter,
     DatasetVersion,
+    Department,
     Employee,
     ImportBatch,
     MacroAssumption,
@@ -271,7 +273,8 @@ class Facts:
 
     Realizado e orçado de referência vêm do banco; o orçado do ano do ciclo (orçamento proposto) vem da
     consolidação (`consolidation.rows_for`) — o painel soma e compara anos de fontes diferentes por um único
-    caminho. Chaves de agrupamento: "package_id", "cost_center_id", "account_id" e "period"."""
+    caminho. Chaves de agrupamento: "package_id", "cost_center_id", "account_id", "period", "department_id"
+    (área do CC) e "area_id" (setor do CC)."""
 
     def __init__(
         self,
@@ -293,6 +296,7 @@ class Facts:
         self.target_year = period.target_year
         self.parent = parent or {}  # filtros do drill-down (filhos de um pacote ou de uma conta)
         self._target: list[tuple] | None = None
+        self._structure: dict[int, tuple[int | None, int | None]] = {}  # CC → (área, setor)
 
     def _filtered(self, model, stmt: Select) -> Select:
         stmt = stmt.join(DatasetVersion, DatasetVersion.id == model.dataset_version_id).where(DatasetVersion.is_current)
@@ -319,6 +323,17 @@ class Facts:
             stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id.is_(None))))
         if self.parent.get("account_id") is not None:
             stmt = stmt.where(model.account_id == self.parent["account_id"])
+        for key in ("department_id", "area_id"):  # área e setor do centro de custo (drill-down)
+            column = getattr(CostCenter, key)
+            if self.parent.get(key) is not None:
+                stmt = stmt.where(model.cost_center_id.in_(select(CostCenter.id).where(column == self.parent[key])))
+            elif self.parent.get(f"no_{key}"):
+                stmt = stmt.where(
+                    or_(
+                        model.cost_center_id.is_(None),
+                        model.cost_center_id.in_(select(CostCenter.id).where(column.is_(None))),
+                    )
+                )
         return stmt
 
     def _target_rows(self) -> list[tuple]:
@@ -332,6 +347,7 @@ class Facts:
             companies = {c.id: c.code for c in self.db.scalars(select(Company))}
             accounts = {a.code: a.id for a in self.db.scalars(select(Account))}
             packages = {p.name.upper(): p.id for p in self.db.scalars(select(BudgetPackage))}
+            self._structure = {c.id: (c.department_id, c.area_id) for c in self.db.scalars(select(CostCenter))}
             company_code = companies.get(self.company_id) if self.company_id else None
             out = []
             for r in rows:
@@ -353,6 +369,14 @@ class Facts:
                     continue
                 if self.parent.get("account_id") is not None and account_id != self.parent["account_id"]:
                     continue
+                dept_id, area_id = self._structure.get(r.cost_center_id, (None, None))
+                structure = {"department_id": dept_id, "area_id": area_id}
+                if any(
+                    (self.parent.get(k) is not None and structure[k] != self.parent[k])
+                    or (self.parent.get(f"no_{k}") and structure[k] is not None)
+                    for k in structure
+                ):
+                    continue
                 out.append((r, account_id, pkg_id))
             self._target = out
         return self._target
@@ -360,7 +384,14 @@ class Facts:
     def _target_sums(self, keys: tuple[str, ...], max_period: int | None) -> dict[tuple, Decimal]:
         out: dict[tuple, Decimal] = defaultdict(lambda: ZERO)
         for r, account_id, pkg_id in self._target_rows():
-            attrs = {"cost_center_id": r.cost_center_id, "account_id": account_id, "package_id": pkg_id}
+            dept_id, area_id = self._structure.get(r.cost_center_id, (None, None))
+            attrs = {
+                "cost_center_id": r.cost_center_id,
+                "account_id": account_id,
+                "package_id": pkg_id,
+                "department_id": dept_id,
+                "area_id": area_id,
+            }
             for m, amount in enumerate(r.values, start=1):
                 if not amount or (self.months and m not in self.months) or (max_period and m > max_period):
                     continue
@@ -415,7 +446,11 @@ class Facts:
 
     @staticmethod
     def _column(model, key: str):
-        return Account.package_id if key == "package_id" else getattr(model, key)
+        if key == "package_id":
+            return Account.package_id
+        if key in ("department_id", "area_id"):  # área e setor vêm do cadastro do centro de custo
+            return getattr(CostCenter, key)
+        return getattr(model, key)
 
     def sums(self, model, years, *keys: str, max_period: int | None = None) -> list[tuple]:
         """Soma por grupo nos anos informados (somados). O orçado do ano do ciclo vem do orçamento proposto."""
@@ -428,6 +463,8 @@ class Facts:
             stmt = select(*cols, func.sum(model.amount)).select_from(model).where(model.fiscal_year.in_(sql_years))
             if "package_id" in keys:
                 stmt = stmt.join(Account, Account.id == model.account_id)
+            if {"department_id", "area_id"} & set(keys):
+                stmt = stmt.outerjoin(CostCenter, CostCenter.id == model.cost_center_id)
             if max_period:
                 stmt = stmt.where(model.period <= max_period)
             stmt = self._filtered(model, stmt)
@@ -613,7 +650,11 @@ def _ranking(db: Session, f: Facts, P: Period, key: str, label_model, limit: int
 
 @router.get("/breakdown", summary="Tabela do painel com drill-down: pacote GMD → conta → centro de custo")
 def breakdown(
-    group_by: Literal["package", "account", "cost_center"] = "package",
+    group_by: Literal["department", "area", "package", "account", "cost_center"] = "package",
+    parent_department_id: int | None = None,
+    parent_no_department: bool = False,
+    parent_area_id: int | None = None,
+    parent_no_area: bool = False,
     parent_package_id: int | None = None,
     parent_no_package: bool = False,
     parent_account_id: int | None = None,
@@ -633,14 +674,34 @@ def breakdown(
     participação (AV %), variação e variação %. `parent_*` restringem aos filhos de uma linha expandida
     (drill-down). `thresholds` traz os limiares do ciclo usados no semáforo (alert.growth_pct / reduction_pct)."""
     P = _period(db, years, months, modules, compare, same_period)
-    parent = {"package_id": parent_package_id, "no_package": parent_no_package, "account_id": parent_account_id}
+    parent = {
+        "package_id": parent_package_id,
+        "no_package": parent_no_package,
+        "account_id": parent_account_id,
+        "department_id": parent_department_id,
+        "no_department_id": parent_no_department,
+        "area_id": parent_area_id,
+        "no_area_id": parent_no_area,
+    }
     f = Facts(db, user, company_id, cost_center_id, package_id, P, parent, account_id=account_id)
-    key = {"package": "package_id", "account": "account_id", "cost_center": "cost_center_id"}[group_by]
+    key = {
+        "department": "department_id",
+        "area": "area_id",
+        "package": "package_id",
+        "account": "account_id",
+        "cost_center": "cost_center_id",
+    }[group_by]
     cur = dict(f.sums(_main_model(P), P.years, key))
     base = _base_sums(f, P, key)
 
     ids = [k for k in set(cur) | set(base) if k is not None]
-    if group_by == "package":
+    if group_by == "department":  # Área (Controladoria, Tributos…)
+        objs = {d.id: (None, d.name) for d in db.scalars(select(Department).where(Department.id.in_(ids or [-1])))}
+        missing = (None, "Sem área")
+    elif group_by == "area":  # Setor (Fiscal, Contabilidade…)
+        objs = {a.id: (None, a.name) for a in db.scalars(select(Area).where(Area.id.in_(ids or [-1])))}
+        missing = (None, "Sem setor")
+    elif group_by == "package":
         objs = {
             p.id: (None, p.name) for p in db.scalars(select(BudgetPackage).where(BudgetPackage.id.in_(ids or [-1])))
         }
@@ -673,7 +734,8 @@ def breakdown(
                 "var_pct": _pct(c, b) if P.base_kind else None,
                 # "Sem pacote" (id nulo) também detalha: os filhos vêm com parent_no_package; já uma conta
                 # sem cadastro (só no orçamento proposto) não tem como ser filtrada
-                "has_children": group_by == "package" or (group_by == "account" and k is not None),
+                "has_children": group_by in ("department", "area", "package")
+                or (group_by == "account" and k is not None),
             }
         )
     rows.sort(key=lambda r: Decimal(r["ref"]), reverse=True)

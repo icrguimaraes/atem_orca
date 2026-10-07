@@ -3,6 +3,23 @@
 São valores iniciais: todos editáveis no sistema (cadastros/parâmetros) e substituíveis por importação.
 """
 
+# Estrutura da Controladoria (quadro "Por área", 07/10/2026): Área → Setor de cada centro de custo da ATEM (1001).
+# No modelo, a Área fica em `departments` e o Setor em `areas`. O seed só preenche CCs ainda sem área e setor;
+# depois disso vale o que estiver em Cadastros (Projeção e novos setores entram por lá).
+CC_STRUCTURE = {
+    "1050101000": ("Controladoria", "Diretoria"),
+    "1050101001": ("Controladoria", "Controladoria"),
+    "1050101002": ("Controladoria", "Contabilidade"),
+    "1050101004": ("Controladoria", "Custos"),
+    "1050101006": ("Controladoria", "Auditoria Externa"),
+    "1050101003": ("Tributos", "Fiscal"),
+    "1050101007": ("Tributos", "Planejamento Tributário"),
+    "1050101008": ("Tributos", "Comex"),
+}
+# demais CCs da faixa da Controladoria (1050101…), pelo nome
+CC_STRUCTURE_PREFIX = "1050101"
+CC_STRUCTURE_BY_NAME = (("CSC", ("Controladoria", "CSC")), ("DADOS", ("Controladoria", "Dados")))
+
 ROLES = {
     "ADMIN": "Administrador",
     "CONTROLLER": "Validador / Controladoria",

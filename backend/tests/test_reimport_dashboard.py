@@ -268,6 +268,39 @@ def test_painel2_figures(client, admin, run_worker):
     assert real_jan["y"][1] == 210.0 and real_jan["marker"]["opacity"][:2] == [1.0, 0.3]
 
 
+def test_breakdown_by_area_and_sector(client, admin, run_worker):
+    """Tabela do painel: área → setor → pacote → conta, pelo cadastro do centro de custo."""
+    _setup(client, admin, run_worker)
+    ccs = {c["code"]: c for c in client.get("/api/v1/cost-centers", headers=admin).json()}
+    dept = client.post("/api/v1/departments", headers=admin, json={"name": "Tributos"})
+    assert dept.status_code in (200, 201), dept.text
+    dept = dept.json()
+    sector = client.post("/api/v1/areas", headers=admin, json={"name": "Fiscal", "department_id": dept["id"]}).json()
+    assert sector["department_id"] == dept["id"]
+    patched = client.patch(
+        f"/api/v1/cost-centers/{ccs['1050101011']['id']}",
+        headers=admin,
+        json={"department_id": dept["id"], "area_id": sector["id"]},
+    )
+    assert patched.status_code == 200, patched.text
+    q = "years=2026&compare=false"
+    areas = client.get(f"/api/v1/dashboard/breakdown?group_by=department&{q}", headers=admin).json()
+    assert {(r["name"], r["ref"]) for r in areas["rows"]} == {("Tributos", "350.00"), ("Sem área", "80.00")}
+    assert all(r["has_children"] for r in areas["rows"])
+    sectors = client.get(
+        f"/api/v1/dashboard/breakdown?group_by=area&parent_department_id={dept['id']}&{q}", headers=admin
+    ).json()
+    assert [(r["name"], r["ref"]) for r in sectors["rows"]] == [("Fiscal", "350.00")]
+    packages = client.get(
+        f"/api/v1/dashboard/breakdown?group_by=package&parent_department_id={dept['id']}"
+        f"&parent_area_id={sector['id']}&{q}",
+        headers=admin,
+    ).json()
+    assert [(r["name"], r["ref"]) for r in packages["rows"]] == [("Viagens", "350.00")]
+    loose = client.get(f"/api/v1/dashboard/breakdown?group_by=area&parent_no_department=true&{q}", headers=admin)
+    assert [(r["name"], r["ref"]) for r in loose.json()["rows"]] == [("Sem setor", "80.00")]
+
+
 def test_breakdown_drills_into_accounts_without_package(client, admin, run_worker):
     """A linha "Sem pacote" da tabela do painel também abre (contas sem pacote → centros de custo)."""
     _setup(client, admin, run_worker)

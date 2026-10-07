@@ -508,7 +508,7 @@ export default function Home() {
           )}
 
           {shell("table",
-          <Card title={`Por pacote GMD, conta e centro de custo · ${mainLabel}${typesTxt}`}>
+          <Card title={`Por área, setor, pacote GMD e conta · ${mainLabel}${typesTxt}`}>
             <DrillTable query={query} refLabel={mainLabel} />
           </Card>,
           )}

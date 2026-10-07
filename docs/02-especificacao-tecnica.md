@@ -381,6 +381,16 @@ ficam em `finding_reviews` (migração `0005`) e na auditoria. **Arquivos:** rel
 (`GET /findings/export.xlsx`: resumo por CC, pendentes, corrigidos e mantidos com motivo, usuário e data) e o template
 corrigido de cada CC (exportação OPEX/CAPEX já existente, reimportável).
 
+### 15.0.1 Áreas e setores (estrutura do Painel)
+
+A tabela do Painel abre por **Área → Setor → Pacote GMD → Conta** (`/dashboard/breakdown?group_by=department|area|package|account`,
+com os filtros dos níveis de cima acumulados: `parent_department_id`, `parent_area_id`, `parent_package_id` e os
+"Sem …" via `parent_no_*`). A área e o setor vêm do cadastro do centro de custo — no banco, Área = `departments` e
+Setor = `areas` (setor pertence a uma área). Página **Áreas e setores** (`/estrutura`, Controladoria; gravação pelo
+Administrador): criar/renomear área e setor e escolher o setor de cada CC (a área vem do setor). O seed preenche a
+estrutura inicial da Controladoria (`seed_data.CC_STRUCTURE`: Controladoria = Contabilidade, Controladoria, CSC, Custos,
+Diretoria, Dados, Auditoria Externa; Tributos = Comex, Fiscal, Planejamento Tributário) só nos CCs ainda sem setor.
+
 ### 15.1 Exportação do template preenchido (ida e volta Excel)
 
 `services/template_export.py` gera, por centro de custo, uma planilha no layout que o importador reconhece:

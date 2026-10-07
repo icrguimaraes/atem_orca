@@ -15,6 +15,7 @@ const NAV = [
   { to: "/apontamentos", label: "Apontamentos" },
   { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"] },
   { to: "/cadastros", label: "Cadastros", roles: ["CONTROLLER"] },
+  { to: "/estrutura", label: "Áreas e setores", roles: ["CONTROLLER"] },
   { to: "/ciclo", label: "Ciclo e parâmetros", roles: ["CONTROLLER"] },
   { to: "/usuarios", label: "Usuários", roles: ["CONTROLLER"] },
   { to: "/auditoria", label: "Auditoria", roles: ["CONTROLLER"] },

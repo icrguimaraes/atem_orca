@@ -167,12 +167,22 @@ class ContractTypeOut(ContractTypeIn, ORM):
 
 class NamedIn(BaseModel):
     name: str
-    department_id: int | None = None
 
 
 class NamedOut(ORM):
     id: int
     name: str
+
+
+class AreaIn(BaseModel):
+    """Setor (tabela `areas`), dentro de uma área (tabela `departments`)."""
+
+    name: str
+    department_id: int | None = None
+
+
+class AreaOut(AreaIn, ORM):
+    id: int
 
 
 class AssetClassIn(BaseModel):

@@ -4,7 +4,19 @@ import { fmtMoney, fmtPct, fmtShare } from "../labels";
 import { Empty, Loading } from "./ui";
 
 type Sort = "value_desc" | "value_asc" | "name" | "var";
-const LEVELS: Breakdown["group_by"][] = ["package", "account", "cost_center"];
+type Level = Breakdown["group_by"];
+// Área → Setor (cadastro do centro de custo) → Pacote GMD → Conta
+const LEVELS: Level[] = ["department", "area", "package", "account"];
+// filtro que cada nível passa aos filhos: [com id, linha "Sem …"]
+const PARENT: Record<Level, [string, string]> = {
+  department: ["parent_department_id", "parent_no_department"],
+  area: ["parent_area_id", "parent_no_area"],
+  package: ["parent_package_id", "parent_no_package"],
+  account: ["parent_account_id", ""],
+  cost_center: ["", ""],
+};
+// níveis em que clicar no nome filtra o painel inteiro
+const FILTERABLE: Level[] = ["package", "account", "cost_center"];
 const SORT_LABELS: Record<Sort, string> = {
   value_desc: "Maior valor",
   value_asc: "Menor valor",
@@ -41,25 +53,29 @@ function VarCell({ pct, t }: { pct: string | null; t: { growth: number; reductio
   );
 }
 
-function childParams(level: number, row: BreakdownRow): string {
-  if (level === 0) return row.id === null ? "parent_no_package=true" : `parent_package_id=${row.id}`;
-  return `parent_account_id=${row.id}`;
+function ownParam(level: Level, row: BreakdownRow): string {
+  const [byId, none] = PARENT[level];
+  if (row.id === null) return none ? `${none}=true` : "";
+  return byId ? `${byId}=${row.id}` : "";
 }
 
-/** Tabela do painel com drill-down (pacote GMD → conta → centro de custo) e drill-up (recolher).
- * `query` traz os filtros da página (empresa, CC, pacote, anos, meses); cada nível é buscado ao expandir. */
+/** Tabela do painel com drill-down (área → setor → pacote GMD → conta) e drill-up (recolher).
+ * `query` traz os filtros da página (empresa, CC, pacote, anos, meses); cada nível é buscado ao expandir,
+ * filtrado por toda a linha de cima (ex.: contas do pacote Viagens no setor Fiscal da área Tributos). */
 export function DrillTable({ query, refLabel, onSelect }: {
-  query: string; refLabel: string; onSelect?: (level: number, row: BreakdownRow) => void;
+  query: string; refLabel: string; onSelect?: (level: Level, row: BreakdownRow) => void;
 }) {
   const [root, setRoot] = useState<Breakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [children, setChildren] = useState<Record<string, BreakdownRow[] | "loading">>({});
+  const [chains, setChains] = useState<Record<string, string>>({});  // filtros acumulados de cada linha aberta
   const [sort, setSort] = useState<Sort>("value_desc");
 
   useEffect(() => {
     let alive = true;
     setChildren({});
-    api<Breakdown>(`/dashboard/breakdown?group_by=package${query ? `&${query}` : ""}`)
+    setChains({});
+    api<Breakdown>(`/dashboard/breakdown?group_by=${LEVELS[0]}${query ? `&${query}` : ""}`)
       .then((d) => alive && (setRoot(d), setError(null)))
       .catch((e: Error) => alive && setError(e.message));
     return () => {
@@ -67,16 +83,18 @@ export function DrillTable({ query, refLabel, onSelect }: {
     };
   }, [query]);
 
-  async function toggle(key: string, level: number, row: BreakdownRow) {
+  async function toggle(key: string, level: number, row: BreakdownRow, parentChain: string) {
     if (children[key]) {
       // drill-up: recolhe a linha e tudo abaixo dela
       setChildren((c) => Object.fromEntries(Object.entries(c).filter(([k]) => k !== key && !k.startsWith(`${key}/`))));
       return;
     }
     setChildren((c) => ({ ...c, [key]: "loading" }));
+    const chain = [parentChain, ownParam(LEVELS[level], row)].filter(Boolean).join("&");
+    setChains((c) => ({ ...c, [key]: chain }));
     try {
       const d = await api<Breakdown>(
-        `/dashboard/breakdown?group_by=${LEVELS[level + 1]}&${childParams(level, row)}${query ? `&${query}` : ""}`,
+        `/dashboard/breakdown?group_by=${LEVELS[level + 1]}${chain ? `&${chain}` : ""}${query ? `&${query}` : ""}`,
       );
       setChildren((c) => ({ ...c, [key]: d.rows }));
     } catch (e) {
@@ -93,28 +111,28 @@ export function DrillTable({ query, refLabel, onSelect }: {
   const th = root.thresholds;
   const pctLabel = (v: number) => `${Math.round(v * 100)}%`;
 
-  function renderRows(rows: BreakdownRow[], level: number, parentKey: string): JSX.Element[] {
+  function renderRows(rows: BreakdownRow[], level: number, parentKey: string, parentChain = ""): JSX.Element[] {
     return sortRows(rows, sort).flatMap((r) => {
       const key = `${parentKey}/${r.id ?? "none"}`;
       const kids = children[key];
       const line = (
         <tr key={key} className={`drill-level-${level}`}>
           <td>
-            {r.has_children ? (
+            {r.has_children && level < LEVELS.length - 1 ? (
               <button
                 type="button"
                 className="drill-toggle"
                 aria-expanded={Boolean(kids)}
                 aria-label={kids ? `Recolher ${r.name}` : `Detalhar ${r.name}`}
-                onClick={() => toggle(key, level, r)}
+                onClick={() => toggle(key, level, r, parentChain)}
               >
                 {kids ? "−" : "+"}
               </button>
             ) : (
               <span className="drill-toggle drill-leaf" aria-hidden="true" />
             )}
-            {onSelect && r.id !== null ? (
-              <button type="button" className="row-filter" title="Filtrar o painel por esta linha" onClick={() => onSelect(level, r)}>
+            {onSelect && r.id !== null && FILTERABLE.includes(LEVELS[level]) ? (
+              <button type="button" className="row-filter" title="Filtrar o painel por esta linha" onClick={() => onSelect(LEVELS[level], r)}>
                 {r.name}
               </button>
             ) : (
@@ -144,7 +162,7 @@ export function DrillTable({ query, refLabel, onSelect }: {
           </tr>,
         ];
       }
-      return kids ? [line, ...renderRows(kids, level + 1, key)] : [line];
+      return kids ? [line, ...renderRows(kids, level + 1, key, chains[key] ?? "")] : [line];
     });
   }
 
@@ -152,7 +170,7 @@ export function DrillTable({ query, refLabel, onSelect }: {
     <>
       <div className="section-tools">
         <span className="muted small">
-          {onSelect ? "Clique no nome para filtrar o painel e no + para detalhar" : "Clique em + para detalhar"} (pacote → conta → centro de custo). AV %: participação no total da coluna.
+          {onSelect ? "Clique no + para detalhar (área → setor → pacote → conta) e no nome do pacote ou da conta para filtrar o painel." : "Clique em + para detalhar (área → setor → pacote → conta)."} AV %: participação no total da coluna.
           {hasBase && (
             <>
               {" "}Semáforo: <span className="dot good" aria-hidden="true" />dentro da faixa (de −{pctLabel(th.reduction)} a +{pctLabel(th.growth)}),{" "}
