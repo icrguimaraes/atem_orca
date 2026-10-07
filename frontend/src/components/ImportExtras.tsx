@@ -90,6 +90,8 @@ const ACTION_LABELS = { CREATE: "Novos", UPDATE: "Alterados", UNCHANGED: "Sem al
 /** O que a carga vai mudar em relação à base vigente. */
 export function ComparisonCard({ comparison }: { comparison: Comparison }) {
   if (comparison.kind === "NONE") return null;
+  // realizado de template com a base já carregada: não entra (a tabela fica só para conferência)
+  const skipped = new Set(comparison.kind === "FINANCIAL" && comparison.template ? comparison.skipped_scopes ?? [] : []);
   if (comparison.kind === "TEMPLATE")
     return (
       <>
@@ -133,7 +135,14 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
     );
   return (
     <Card title="Comparação com a base vigente">
-      {comparison.no_changes && (
+      {skipped.size > 0 && (
+        <Alert tone="info">
+          A base já tem realizado para {[...skipped].map((s) => s.replace("ACTUAL:", "").replace(":", " · empresa ")).join(", ")}: a aba
+          “Realizado” deste template <strong>não</strong> será carregada e a base continua como está. A tabela abaixo é só para
+          conferência (diferença entre o template e a base). Para atualizar o realizado, importe o arquivo pela opção “Realizado”.
+        </Alert>
+      )}
+      {comparison.no_changes && skipped.size === 0 && (
         <Alert tone="warn">Nenhuma diferença em relação aos dados já carregados. Confirmar só criaria uma versão idêntica.</Alert>
       )}
       {comparison.kind === "FINANCIAL" && comparison.scopes && (
@@ -176,7 +185,13 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
                       )}
                     </td>
                     <td className="right">{fmtMoney(s.current_total)}</td>
-                    <td className="right"><strong>{fmtMoney(s.after_total)}</strong></td>
+                    <td className="right">
+                      {skipped.has(s.scope) ? (
+                        <><strong>{fmtMoney(s.current_total)}</strong><div className="muted small">não muda (ignorado)</div></>
+                      ) : (
+                        <strong>{fmtMoney(s.after_total)}</strong>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -189,12 +204,6 @@ export function ComparisonCard({ comparison }: { comparison: Comparison }) {
             </Alert>
           )}
         </>
-      )}
-      {comparison.kind === "FINANCIAL" && comparison.template && (comparison.skipped_scopes?.length ?? 0) > 0 && (
-        <Alert tone="info">
-          A base já tem realizado para {comparison.skipped_scopes!.map((s) => s.replace("ACTUAL:", "").replace(":", " · empresa ")).join(", ")}: a aba
-          “Realizado” deste template <strong>não</strong> será carregada. Para atualizar o realizado, importe o arquivo pela opção “Realizado”.
-        </Alert>
       )}
       {comparison.kind === "MASTER" && comparison.template && (
         <p className="muted small">Template de gestor só cria cadastros novos; filiais, centros de custo e contas já existentes não são alterados.</p>
