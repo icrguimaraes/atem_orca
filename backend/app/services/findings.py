@@ -2,21 +2,41 @@
 
 Reúne o que cada tela de centro de custo já calcula (pendências do CAPEX, alertas das viagens, contas com
 variação sem justificativa, movimentações de pessoal sem justificativa) para a Controladoria analisar e o
-gestor corrigir. Crítico = bloqueia o envio; aviso = para a análise (não bloqueia)."""
+gestor corrigir. Crítico = bloqueia o envio; aviso = para a análise (não bloqueia).
 
+Cada apontamento tem uma chave estável (`{orçamento}:{entidade}:{id}:{tipo}`) e, quando dá, a correção direta
+(`fix`) feita na própria página; avisos podem ser mantidos com justificativa. Correções e avisos mantidos ficam
+em `finding_reviews` (registro da análise, exportado no relatório)."""
+
+import io
 from collections import defaultdict
+from datetime import UTC, datetime, timedelta, timezone
 from decimal import Decimal
 from functools import partial
 
+from openpyxl import Workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domain.rules.capex import brl
-from app.domain.rules.common import MONTH_LABELS, money
-from app.models import BudgetLine, BudgetSubmission, CostCenter
+from app.domain.rules.common import MONTH_LABELS, MONTHS, money
+from app.domain.workflow import STATUS_LABELS
+from app.models import (
+    Account,
+    BudgetLine,
+    BudgetSubmission,
+    CapexItem,
+    CapexProject,
+    CostCenter,
+    FindingReview,
+    LookupValue,
+    PersonnelMovement,
+    User,
+)
 from app.services import capex as capex_svc
 from app.services import opex as opex_svc
 from app.services import personnel as personnel_svc
+from app.services.exports import _sheet
 
 # orçamentos iniciados e ainda não aprovados (aprovado = divergências já aceitas na análise)
 OPEN = ("IN_PROGRESS", "ADJUSTMENT_REQUESTED", "SUBMITTED", "UNDER_REVIEW")
@@ -43,7 +63,15 @@ FLAG_TEXT = {
     "GROWTH_ABOVE": "Crescimento acima do limite",
     "REDUCTION_ABOVE": "Redução acima do limite",
 }
+ACTION_LABELS = {"CORRECTED": "Corrigido", "KEPT": "Mantido"}
+SEVERITY_LABELS = {"CRITICAL": "Crítico", "WARNING": "Aviso"}
 SEVERITY_ORDER = {"CRITICAL": 0, "WARNING": 1}
+MANAUS = timezone(timedelta(hours=-4))  # horário de Manaus (sem horário de verão)
+ZERO = Decimal("0")
+
+
+class FindingError(Exception):
+    """Correção recusada (mensagem pronta para o usuário)."""
 
 
 def _pct(value: str | None) -> str:
@@ -53,8 +81,13 @@ def _pct(value: str | None) -> str:
     return f" ({'+' if n > 0 else ''}{n:.1f}%)".replace(".", ",")
 
 
-def collect(db: Session, ctx: opex_svc.Context, cc_ids: set[int] | None) -> list[dict]:
-    """Apontamentos da versão em elaboração nos CCs visíveis (`cc_ids` None = todos)."""
+# ------------------------------------------------------------------ apontamentos
+
+
+def collect(
+    db: Session, ctx: opex_svc.Context, cc_ids: set[int] | None, kept: set[str] | frozenset = frozenset()
+) -> list[dict]:
+    """Apontamentos da versão em elaboração nos CCs visíveis (`cc_ids` None = todos), sem os avisos mantidos."""
     stmt = select(BudgetSubmission).where(
         BudgetSubmission.version_id == ctx.version.id, BudgetSubmission.status.in_(OPEN)
     )
@@ -73,8 +106,16 @@ def collect(db: Session, ctx: opex_svc.Context, cc_ids: set[int] | None) -> list
         elif sub.module == "CAPEX":
             _capex(db, ctx, sub, add)
         elif sub.module == "PERSONNEL":
-            for text in personnel_svc.blockers(db, ctx, sub):
-                add("CRITICAL", "PERSONNEL_JUSTIFICATION", "Movimentações do quadro", text[0].upper() + text[1:])
+            for mv, label in personnel_svc.missing_reasons(db, sub):
+                add(
+                    "CRITICAL",
+                    "PERSONNEL_JUSTIFICATION",
+                    ("PERSONNEL_MOVEMENT", mv.id),
+                    label[0].upper() + label[1:],
+                    "Justificativa obrigatória para enviar (análise da Controladoria e do RH)",
+                    fix={"type": "text", "label": "Justificativa da movimentação"},
+                )
+    items = [i for i in items if i["key"] not in kept]
     items.sort(key=lambda i: (SEVERITY_ORDER[i["severity"]], i["cost_center"], i["module"], i["kind"], i["subject"]))
     return items
 
@@ -85,13 +126,20 @@ def _add(
     cc: CostCenter,
     severity: str,
     kind: str,
+    entity: tuple[str, object],
     subject: str,
     message: str,
     amount=None,
     detail: str | None = None,
+    fix: dict | None = None,
+    suffix: str = "",
 ) -> None:
     items.append(
         {
+            "key": f"{sub.id}:{entity[0]}:{entity[1]}:{kind}{suffix}",
+            "entity": entity[0],
+            "entity_id": str(entity[1]),
+            "submission_id": sub.id,
             "severity": severity,
             "module": sub.module,
             "module_label": MODULE_LABELS.get(sub.module, sub.module),
@@ -105,6 +153,8 @@ def _add(
             "message": message,
             "amount": None if amount is None else str(money(amount)),
             "link": f"{ROUTES[sub.module]}/{cc.id}" if sub.module in ROUTES else None,
+            "fix": fix,
+            "can_keep": severity == "WARNING",
         }
     )
 
@@ -118,43 +168,331 @@ def _opex(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, add) -> Non
         add(
             "CRITICAL",
             "OPEX_JUSTIFICATION",
+            ("OPEX_ACCOUNT", row["account_id"]),
             f"{row['code']} {row['name']}",
             f"{flag}: proposto {brl(Decimal(row['proposed']))} × referência {brl(Decimal(row['variation_base']))}"
             f"{_pct(row['variation_pct'])}. Justifique a conta para enviar",
             row["proposed"],
+            fix={"type": "text", "label": "Justificativa da conta"},
         )
-    # alertas das viagens (passagem zerada, diária ou hospedagem sem tarifa): um por viagem
+    # alertas das viagens (passagem zerada, diária ou hospedagem sem tarifa): um por alerta da viagem
     trips: dict[str, list[BudgetLine]] = defaultdict(list)
     for line in db.scalars(
         select(BudgetLine).where(BudgetLine.submission_id == sub.id, BudgetLine.line_type == "TRAVEL")
     ):
-        trips[line.group_ref or str(line.id)].append(line)
-    for lines in trips.values():
+        trips[line.group_ref or f"L{line.id}"].append(line)
+    for group, lines in trips.items():
         attrs = lines[0].attributes or {}
-        warnings = attrs.get("warnings") or []
-        if not warnings:
-            continue
         month = attrs.get("departure_month")
         when = f" · {MONTH_LABELS[int(month) - 1]}" if month else ""
-        subject = f"{lines[0].description or 'Viagem'} · {attrs.get('origin')} → {attrs.get('destination')}{when}"
-        total = sum((line.total_amount for line in lines), Decimal(0))
-        for warning in warnings:
+        route = f"{attrs.get('origin')} → {attrs.get('destination')}"
+        subject = f"{lines[0].description or 'Viagem'} · {route}{when}"
+        total = sum((line.total_amount for line in lines), ZERO)
+        for n, warning in enumerate(attrs.get("warnings") or []):
             fare = warning.startswith(("Passagem", "Tarifa de passagem"))
-            add("WARNING", "TRAVEL_NO_FARE" if fare else "TRAVEL_RATE", subject, warning, total)
+            add(
+                "WARNING",
+                "TRAVEL_NO_FARE" if fare else "TRAVEL_RATE",
+                ("TRAVEL", group),
+                subject,
+                warning,
+                total,
+                fix={"type": "ticket", "route": route} if fare and lines[0].group_ref else None,
+                suffix=f":{n}" if n else "",
+            )
 
 
 def _capex(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, add) -> None:
     for project in capex_svc.projects(db, sub):
         for issue in capex_svc.project_issues(project):
-            total = sum((i.total_value for i in project.items), Decimal(0))
-            add(issue["severity"], issue["code"], f"{project.code} · {project.title}", issue["message"], total)
+            fix = None
+            if issue["code"] == "CAPEX_NO_JUSTIFICATION":
+                fix = {"type": "text", "label": "Justificativa da solicitação"}
+            elif issue["code"] == "CAPEX_NO_PROJECT_TYPE":
+                fix = {"type": "project_type"}
+            add(
+                issue["severity"],
+                issue["code"],
+                ("CAPEX_PROJECT", project.id),
+                f"{project.code} · {project.title}",
+                issue["message"],
+                sum((i.total_value for i in project.items), ZERO),
+                fix=fix,
+            )
         for item in project.items:
             for issue in capex_svc.item_issues(ctx, item):
+                fix = None
+                if issue["code"] == "CAPEX_SCHEDULE_MISMATCH":
+                    current = {v.month: v.amount for v in item.values}
+                    fix = {
+                        "type": "schedule",
+                        "total": str(money(item.total_value)),
+                        "values": {str(m): str(money(current.get(m, ZERO))) for m in MONTHS},
+                    }
+                elif issue["code"] == "CAPEX_ACCOUNT_MISMATCH":
+                    catalog = capex_svc.catalog_account(db, item)
+                    if catalog is not None:
+                        fix = {
+                            "type": "account",
+                            "account_id": catalog.id,
+                            "account": f"{catalog.code} · {catalog.name}",
+                        }
                 add(
                     issue["severity"],
                     issue["code"],
+                    ("CAPEX_ITEM", item.id),
                     f"{project.code} · {item.item_name}",
                     issue["message"],
                     item.total_value,
                     item.description,
+                    fix=fix,
                 )
+
+
+# ------------------------------------------------------------------ correção na página
+
+
+def apply_fix(
+    db: Session, sub: BudgetSubmission, finding: dict, data: dict, user_id: int | None
+) -> tuple[str, dict | None, dict | None]:
+    """Aplica a correção do apontamento. Devolve (descrição da correção, antes, depois) para o registro."""
+    kind, ident = finding["kind"], finding["entity_id"]
+    text = (data.get("text") or "").strip()
+
+    def need_text() -> str:
+        if not text:
+            raise FindingError("Escreva a justificativa")
+        return text
+
+    if kind == "CAPEX_SCHEDULE_MISMATCH":
+        item = db.get(CapexItem, int(ident))
+        values = {int(m): money(v) for m, v in (data.get("values") or {}).items() if v not in (None, "")}
+        if any(m not in MONTHS for m in values) or any(v < 0 for v in values.values()):
+            raise FindingError("Cronograma inválido: use valores positivos de JAN a DEZ")
+        scheduled = sum(values.values(), ZERO)
+        if abs(scheduled - item.total_value) > Decimal("0.01"):
+            raise FindingError(
+                f"A soma dos meses ({brl(scheduled)}) precisa fechar com o total do item ({brl(item.total_value)})"
+            )
+        before = {"values": {str(v.month): str(v.amount) for v in item.values}}
+        capex_svc.update_item(db, item, {"values": {str(m): values.get(m, ZERO) for m in MONTHS}})
+        note = "Cronograma: " + ", ".join(f"{MONTH_LABELS[m - 1]} {brl(v)}" for m, v in sorted(values.items()) if v)
+        return note, before, {"values": {str(m): str(v) for m, v in values.items() if v}}
+    if kind == "CAPEX_ACCOUNT_MISMATCH":
+        item = db.get(CapexItem, int(ident))
+        old = db.get(Account, item.account_id)
+        new = capex_svc.catalog_account(db, item)
+        if new is None:
+            raise FindingError("O item não está no catálogo de ativos")
+        capex_svc.update_item(db, item, {"account_id": new.id})
+        note = f"Conta {old.code} ({old.name}) → {new.code} ({new.name}), como no catálogo de ativos"
+        return note, {"account": old.code}, {"account": new.code}
+    if kind == "CAPEX_NO_JUSTIFICATION":
+        project = db.get(CapexProject, int(ident))
+        before = {"justification": project.justification}
+        capex_svc.update_project(db, project, {"justification": need_text()}, user_id)
+        return f"Justificativa: {text}", before, {"justification": text}
+    if kind == "CAPEX_NO_PROJECT_TYPE":
+        project = db.get(CapexProject, int(ident))
+        code = (data.get("project_type_code") or "").strip()
+        if not code:
+            raise FindingError("Escolha o tipo de projeto")
+        capex_svc.update_project(db, project, {"project_type_code": code}, user_id)
+        return f"Tipo de projeto: {project.project_type_code}", None, {"project_type": project.project_type_code}
+    if kind == "OPEX_JUSTIFICATION":
+        out = opex_svc.set_justification(db, sub, int(ident), need_text(), user_id)
+        return f"Justificativa: {text}", out["before"], out["after"]
+    if kind == "TRAVEL_NO_FARE":
+        raw = data.get("ticket_amount")
+        amount = money(raw) if raw not in (None, "") else ZERO
+        opex_svc.set_trip_ticket(db, sub, ident, amount, user_id)
+        return f"Passagem incluída: {brl(amount)}", None, {"ticket_amount": str(amount)}
+    if kind == "PERSONNEL_JUSTIFICATION":
+        mv = db.get(PersonnelMovement, int(ident))
+        before = {"reason": mv.reason}
+        mv.reason, mv.updated_by = need_text(), user_id
+        db.flush()
+        return f"Justificativa: {text}", before, {"reason": text}
+    raise FindingError("Este apontamento não tem correção direta: abra o orçamento do centro de custo")
+
+
+def log(db: Session, sub: BudgetSubmission, finding: dict, action: str, note: str, user_id: int | None) -> None:
+    db.add(
+        FindingReview(
+            submission_id=sub.id,
+            finding_key=finding["key"],
+            kind=finding["kind"],
+            action=action,
+            severity=finding["severity"],
+            subject=finding["subject"][:300],
+            message=finding["message"],
+            note=note,
+            user_id=user_id,
+        )
+    )
+
+
+def kept_keys(db: Session, ctx: opex_svc.Context) -> set[str]:
+    return set(
+        db.scalars(
+            select(FindingReview.finding_key)
+            .join(BudgetSubmission, BudgetSubmission.id == FindingReview.submission_id)
+            .where(BudgetSubmission.version_id == ctx.version.id, FindingReview.action == "KEPT")
+        )
+    )
+
+
+def reviews(db: Session, ctx: opex_svc.Context, cc_ids: set[int] | None) -> list[dict]:
+    """Registro da análise na versão em elaboração: correções feitas na página e avisos mantidos."""
+    stmt = (
+        select(FindingReview, BudgetSubmission)
+        .join(BudgetSubmission, BudgetSubmission.id == FindingReview.submission_id)
+        .where(BudgetSubmission.version_id == ctx.version.id)
+        .order_by(FindingReview.created_at.desc(), FindingReview.id.desc())
+    )
+    if cc_ids is not None:
+        stmt = stmt.where(BudgetSubmission.cost_center_id.in_(cc_ids or {-1}))
+    rows = db.execute(stmt).all()
+    ccs = {
+        c.id: c
+        for c in db.scalars(select(CostCenter).where(CostCenter.id.in_({s.cost_center_id for _, s in rows} or {-1})))
+    }
+    users = {u.id: u.name for u in db.scalars(select(User).where(User.id.in_({r.user_id for r, _ in rows} or {-1})))}
+    out = []
+    for review, sub in rows:
+        cc = ccs[sub.cost_center_id]
+        created = review.created_at if review.created_at.tzinfo else review.created_at.replace(tzinfo=UTC)
+        out.append(
+            {
+                "id": review.id,
+                "action": review.action,
+                "action_label": ACTION_LABELS.get(review.action, review.action),
+                "kind": review.kind,
+                "kind_label": KIND_LABELS.get(review.kind, review.kind),
+                "severity": review.severity,
+                "module": sub.module,
+                "module_label": MODULE_LABELS.get(sub.module, sub.module),
+                "cost_center_id": cc.id,
+                "cost_center": f"{cc.code} · {cc.name}",
+                "subject": review.subject,
+                "message": review.message,
+                "note": review.note,
+                "user": users.get(review.user_id),
+                "created_at": created.isoformat(),
+                "link": f"{ROUTES[sub.module]}/{cc.id}" if sub.module in ROUTES else None,
+            }
+        )
+    return out
+
+
+def cost_centers(db: Session, ctx: opex_svc.Context, cc_ids: set[int]) -> list[dict]:
+    """CCs com apontamento ou correção, com os orçamentos OPEX e CAPEX para baixar o template corrigido."""
+    subs: dict[int, dict[str, int]] = defaultdict(dict)
+    for sub in db.scalars(
+        select(BudgetSubmission).where(
+            BudgetSubmission.version_id == ctx.version.id, BudgetSubmission.cost_center_id.in_(cc_ids or {-1})
+        )
+    ):
+        subs[sub.cost_center_id][sub.module] = sub.id
+    out = []
+    for cc in db.scalars(select(CostCenter).where(CostCenter.id.in_(cc_ids or {-1})).order_by(CostCenter.code)):
+        out.append(
+            {
+                "id": cc.id,
+                "code": cc.code,
+                "label": f"{cc.code} · {cc.name}",
+                "opex_submission_id": subs[cc.id].get("OPEX"),
+                "capex_submission_id": subs[cc.id].get("CAPEX"),
+            }
+        )
+    return out
+
+
+def project_types(db: Session) -> list[dict]:
+    return [
+        {"value": lv.code, "label": lv.label}
+        for lv in db.scalars(
+            select(LookupValue)
+            .where(LookupValue.domain == "CAPEX_PROJECT_TYPE", LookupValue.is_active)
+            .order_by(LookupValue.sort_order, LookupValue.label)
+        )
+    ]
+
+
+# ------------------------------------------------------------------ relatório Excel
+
+
+def workbook(ctx: opex_svc.Context, items: list[dict], logged: list[dict]) -> bytes:
+    """Relatório dos apontamentos: resumo por CC, pendentes e o que foi corrigido ou mantido (por quem e quando)."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    summary: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
+    for i in items:
+        summary[i["cost_center"]][0 if i["severity"] == "CRITICAL" else 1] += 1
+    for r in logged:
+        summary[r["cost_center"]][2 if r["action"] == "CORRECTED" else 3] += 1
+    _sheet(
+        wb,
+        "Resumo",
+        ["Centro de custo", "Críticos pendentes", "Avisos pendentes", "Corrigidos", "Mantidos"],
+        [[cc, *counts] for cc, counts in sorted(summary.items())],
+        widths={1: 46, 2: 18, 3: 18, 4: 14, 5: 14},
+    )
+    _sheet(
+        wb,
+        "Pendentes",
+        ["Gravidade", "Centro de custo", "Módulo", "Situação", "Tipo", "Item", "Detalhe", "Apontamento", "Valor"],
+        [
+            [
+                SEVERITY_LABELS[i["severity"]],
+                i["cost_center"],
+                i["module_label"],
+                STATUS_LABELS.get(i["status"], i["status"]),
+                i["kind_label"],
+                i["subject"],
+                i["detail"],
+                i["message"],
+                float(i["amount"]) if i["amount"] is not None else None,
+            ]
+            for i in items
+        ],
+        money_cols={9},
+        widths={2: 40, 4: 20, 5: 28, 6: 40, 7: 30, 8: 70},
+    )
+
+    def when(iso: str) -> str:
+        return datetime.fromisoformat(iso).astimezone(MANAUS).strftime("%d/%m/%Y %H:%M")
+
+    _sheet(
+        wb,
+        "Corrigidos e mantidos",
+        [
+            "Data (Manaus)",
+            "Centro de custo",
+            "Módulo",
+            "Tipo",
+            "Item",
+            "Apontamento",
+            "Ação",
+            "Correção ou motivo",
+            "Por",
+        ],
+        [
+            [
+                when(r["created_at"]),
+                r["cost_center"],
+                r["module_label"],
+                r["kind_label"],
+                r["subject"],
+                r["message"],
+                r["action_label"],
+                r["note"],
+                r["user"],
+            ]
+            for r in logged
+        ],
+        widths={1: 17, 2: 40, 4: 28, 5: 40, 6: 60, 7: 12, 8: 60, 9: 24},
+    )
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()

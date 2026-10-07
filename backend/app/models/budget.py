@@ -88,6 +88,26 @@ class PackageReview(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
+class FindingReview(Base):
+    """Apontamento analisado na página Apontamentos: corrigido ali (CORRECTED) ou mantido com justificativa (KEPT).
+
+    Registro da análise para o relatório; um aviso mantido sai da lista de pendentes da versão."""
+
+    __tablename__ = "finding_reviews"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    submission_id: Mapped[int] = mapped_column(ForeignKey("budget_submissions.id", ondelete="CASCADE"), index=True)
+    finding_key: Mapped[str] = mapped_column(String(160))
+    kind: Mapped[str] = mapped_column(String(40))
+    action: Mapped[str] = mapped_column(String(20))  # CORRECTED | KEPT
+    severity: Mapped[str] = mapped_column(String(20))
+    subject: Mapped[str] = mapped_column(String(300))
+    message: Mapped[str] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
 class WorkflowEvent(Base):
     __tablename__ = "workflow_events"
 

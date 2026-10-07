@@ -590,6 +590,15 @@ def save_hire(
 
 def blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[str]:
     """Contratações e desligamentos precisam de justificativa para o envio (análise da Controladoria/RH)."""
+    missing = [label for _, label in missing_reasons(db, sub)]
+    if missing:
+        extra = f" e mais {len(missing) - 5}" if len(missing) > 5 else ""
+        return [f"justificativa obrigatória: {', '.join(missing[:5])}{extra}"]
+    return []
+
+
+def missing_reasons(db: Session, sub: BudgetSubmission) -> list[tuple[PersonnelMovement, str]]:
+    """Contratações, desligamentos e transferências sem justificativa, com o rótulo ("desligamento de Fulano")."""
     missing = []
     for mv in db.scalars(select(PersonnelMovement).where(PersonnelMovement.submission_id == sub.id)):
         if mv.employee_id:
@@ -602,8 +611,5 @@ def blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[str]:
                 emp = db.get(Employee, mv.employee_id)
                 who = emp.name if emp else f"#{mv.employee_id}"
             label = "contratação" if mv.movement_type == "HIRE" else MOVE_LABELS[mv.movement_type].lower()
-            missing.append(f"{label} de {who}")
-    if missing:
-        extra = f" e mais {len(missing) - 5}" if len(missing) > 5 else ""
-        return [f"justificativa obrigatória: {', '.join(missing[:5])}{extra}"]
-    return []
+            missing.append((mv, f"{label} de {who}"))
+    return missing

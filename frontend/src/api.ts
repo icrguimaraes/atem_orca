@@ -439,12 +439,29 @@ export interface AttentionPoint {
   severity: "high" | "medium" | "low" | "info"; module: string; module_label: string; kind: string;
   cost_center_id: number | null; cost_center: string | null; message: string; link: string | null;
 }
+export interface FindingFix {
+  type: "schedule" | "account" | "text" | "project_type" | "ticket";
+  total?: string; values?: Record<string, string>; account_id?: number; account?: string; label?: string; route?: string;
+}
 export interface Finding {
+  key: string; entity: string; entity_id: string; submission_id: number;
   severity: "CRITICAL" | "WARNING"; module: string; module_label: string; kind: string; kind_label: string;
   cost_center_id: number; cost_center: string; status: string; subject: string; detail: string | null;
   message: string; amount: string | null; link: string | null;
+  fix: FindingFix | null; can_keep: boolean; editable: boolean;
 }
-export interface Findings { version: string; items: Finding[]; counts: { critical: number; warning: number; cost_centers: number } }
+export interface FindingReviewItem {
+  id: number; action: "CORRECTED" | "KEPT"; action_label: string; kind: string; kind_label: string; severity: string;
+  module: string; module_label: string; cost_center_id: number; cost_center: string; subject: string; message: string;
+  note: string | null; user: string | null; created_at: string; link: string | null;
+}
+export interface Findings {
+  version: string; target_year: number; items: Finding[];
+  counts: { critical: number; warning: number; cost_centers: number };
+  reviews: FindingReviewItem[];
+  cost_centers: { id: number; code: string; label: string; opex_submission_id: number | null; capex_submission_id: number | null }[];
+  can_review: boolean; project_types: { value: string; label: string }[];
+}
 export interface VersionCompare {
   from: { id: number; label: string; status: string; total: string };
   to: { id: number; label: string; status: string; total: string };

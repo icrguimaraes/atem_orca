@@ -572,8 +572,9 @@ tr.saving { opacity: 0.6; }
 .findings-table td { vertical-align: top; }
 .findings-table .col-cc { min-width: 170px; }
 .findings-table .col-item { min-width: 190px; }
-.findings-table .col-msg { min-width: 340px; }
+.findings-table .col-msg { min-width: 320px; }
 .findings-table .col-msg strong { display: block; margin-bottom: 2px; }
+.findings-table .finding-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 /* tooltip próprio dos gráficos Plotly (mesmo desenho do tooltip dos gráficos em SVG) */
 .plotly-wrap { position: relative; }
 .plotly-wrap .tooltip { top: 0; left: 0; transform: none; }

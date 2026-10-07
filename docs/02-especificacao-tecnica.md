@@ -366,6 +366,15 @@ movimentação de pessoal sem justificativa) e **avisos** (para a análise: pass
 baixo, vida útil curta, conta diferente do catálogo de ativos, software no CAPEX). Filtros por módulo, gravidade,
 tipo e CC; cada linha leva ao orçamento do CC. Respeita o escopo do usuário (gestor vê só os seus CCs).
 
+**Correção na própria página** (`POST /api/v1/findings/fix`, mesma regra de edição das telas do CC — orçamento em
+edição e versão não congelada): cronograma do CAPEX (fecha com o total), conta do item pela do catálogo de ativos,
+justificativa da solicitação, tipo de projeto, justificativa da conta OPEX, valor da passagem da viagem (cria a linha
+de passagem no mês de ida e tira o alerta) e justificativa da movimentação de pessoal. **Avisos** podem ser
+**mantidos** pela Controladoria com o motivo (`POST /findings/keep`; "Reabrir" desfaz). Correções e avisos mantidos
+ficam em `finding_reviews` (migração `0005`) e na auditoria. **Arquivos:** relatório dos apontamentos
+(`GET /findings/export.xlsx`: resumo por CC, pendentes, corrigidos e mantidos com motivo, usuário e data) e o template
+corrigido de cada CC (exportação OPEX/CAPEX já existente, reimportável).
+
 ### 15.1 Exportação do template preenchido (ida e volta Excel)
 
 `services/template_export.py` gera, por centro de custo, uma planilha no layout que o importador reconhece:

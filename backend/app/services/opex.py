@@ -354,6 +354,72 @@ def _set_values(line: BudgetLine, values: dict[int, Decimal]) -> None:
     line.total_amount = money(sum(values.values(), ZERO))
 
 
+def set_justification(db: Session, sub: BudgetSubmission, account_id: int, text: str, user_id: int | None) -> dict:
+    """Grava (ou apaga, com texto vazio) a justificativa da conta. Devolve o texto anterior para a auditoria."""
+    just = db.get(AccountJustification, (sub.id, account_id))
+    before = {"text": just.text} if just else None
+    text = (text or "").strip()
+    if not text:
+        if just:
+            db.delete(just)
+    elif just:
+        just.text, just.updated_by = text, user_id
+    else:
+        db.add(AccountJustification(submission_id=sub.id, account_id=account_id, text=text, updated_by=user_id))
+    db.flush()
+    return {"before": before, "after": {"text": text}}
+
+
+def set_trip_ticket(
+    db: Session, sub: BudgetSubmission, group_ref: str, amount: Decimal, user_id: int | None
+) -> list[BudgetLine]:
+    """Passagem informada para uma viagem já lançada (ex.: importada com a tabela de tarifas vazia): cria ou
+    atualiza a linha de passagem no mês de ida e tira o alerta de passagem zerada."""
+    lines = list(
+        db.scalars(
+            select(BudgetLine).where(
+                BudgetLine.submission_id == sub.id, BudgetLine.group_ref == group_ref, BudgetLine.line_type == "TRAVEL"
+            )
+        )
+    )
+    if not lines:
+        raise OpexError("Viagem não encontrada")
+    if amount is None or amount <= 0:
+        raise OpexError("Informe o valor da passagem")
+    ticket_acc = db.scalar(select(Account).where(Account.code == calc.TRAVEL_TICKET_ACCOUNT))
+    if ticket_acc is None:
+        raise OpexError(f"Conta de viagem {calc.TRAVEL_TICKET_ACCOUNT} não cadastrada")
+    attrs = dict(lines[0].attributes or {})
+    month = attrs.get("departure_month") or next((v.month for v in lines[0].values if v.amount), None)
+    if not month:
+        raise OpexError("Viagem sem mês de ida")
+    attrs["ticket_amount"] = str(money(amount))
+    attrs["warnings"] = [w for w in attrs.get("warnings") or [] if not w.startswith(("Passagem", "Tarifa de passagem"))]
+    ticket = next((line for line in lines if line.account_id == ticket_acc.id), None)
+    if ticket is None:
+        first = lines[0]
+        ticket = BudgetLine(
+            submission_id=sub.id,
+            company_id=first.company_id,
+            branch_id=first.branch_id,
+            cost_center_id=first.cost_center_id,
+            account_id=ticket_acc.id,
+            package_id=ticket_acc.package_id,
+            line_type="TRAVEL",
+            group_ref=group_ref,
+            description=first.description,
+            created_by=user_id,
+        )
+        db.add(ticket)
+        lines.append(ticket)
+    _set_values(ticket, {int(month): money(amount)})
+    for line in lines:
+        line.attributes = dict(attrs)
+        line.updated_by = user_id
+    db.flush()
+    return lines
+
+
 def _branch(db: Session, cc: CostCenter, branch_id: int | None) -> int | None:
     if branch_id is None:
         return None

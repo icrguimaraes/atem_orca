@@ -2,6 +2,42 @@ from tests import builders
 from tests.test_imports import import_and_load, status, upload
 
 
+def test_findings_fix_travel_fare_and_account_justification(client, admin, run_worker):
+    """Página Apontamentos: passagem informada na viagem importada sem tarifa e justificativa da conta."""
+    import_and_load(client, admin, run_worker, builders.opex_template_filled(), "template.xlsx")
+    found = client.get("/api/v1/findings", headers=admin).json()
+    fare = next(i for i in found["items"] if i["kind"] == "TRAVEL_NO_FARE")
+    assert fare["fix"] == {"type": "ticket", "route": "AM → PA"} and fare["editable"] is True
+    zero = client.post("/api/v1/findings/fix", headers=admin, json={"key": fare["key"], "ticket_amount": 0})
+    assert zero.status_code == 422
+    fixed = client.post("/api/v1/findings/fix", headers=admin, json={"key": fare["key"], "ticket_amount": 1500})
+    assert fixed.status_code == 200, fixed.text
+    assert fixed.json()["note"] == "Passagem incluída: R$ 1.500,00"
+    cc = next(c for c in client.get("/api/v1/cost-centers", headers=admin).json() if c["code"] == "1050101011")
+    head = client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=admin).json()
+    lines = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()
+    belem = [line for line in lines if line["line_type"] == "TRAVEL" and line["description"] == "Visita base Belém"]
+    assert sorted(line["values"]["3"] for line in belem) == ["1500.00", "2400.00"]
+    assert all(line["attributes"]["warnings"] == [] for line in belem)
+    assert all(line["attributes"]["ticket_amount"] == "1500.00" for line in belem)
+    after = client.get("/api/v1/findings", headers=admin).json()
+    assert not any(i["kind"] == "TRAVEL_NO_FARE" for i in after["items"])
+    assert after["reviews"][0]["note"] == "Passagem incluída: R$ 1.500,00"
+
+    # conta sem justificativa é crítica: não dá para "manter", só justificar (direto no apontamento)
+    account = next(i for i in after["items"] if i["kind"] == "OPEX_JUSTIFICATION")
+    assert account["severity"] == "CRITICAL" and account["can_keep"] is False
+    assert (
+        client.post("/api/v1/findings/keep", headers=admin, json={"key": account["key"], "note": "x"}).status_code
+        == 409
+    )
+    ok = client.post("/api/v1/findings/fix", headers=admin, json={"key": account["key"], "text": "Auditorias em 2027"})
+    assert ok.status_code == 200, ok.text
+    assert account["key"] not in {i["key"] for i in client.get("/api/v1/findings", headers=admin).json()["items"]}
+    template = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/template.xlsx", headers=admin)
+    assert template.status_code == 200  # template corrigido para devolver à área
+
+
 def test_filled_opex_template_loads_everything(client, admin, run_worker):
     batch_id = upload(client, admin, builders.opex_template_filled(), "Template_OPEX 2027_Gestor.xlsx")
     run_worker()

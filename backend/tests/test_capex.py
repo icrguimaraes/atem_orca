@@ -1,3 +1,7 @@
+import io
+
+from openpyxl import load_workbook
+
 from tests import builders
 from tests.test_imports import import_and_load, status, upload
 from tests.test_opex import CC, _user
@@ -154,6 +158,43 @@ def test_capex_template_import(client, admin, run_worker):
     assert found["counts"]["critical"] >= 1 and found["counts"]["cost_centers"] >= 1
     _, outsider = _user(client, admin, "sem-cc@t.com", ["MANAGER"])
     assert client.get("/api/v1/findings", headers=outsider).json()["items"] == []  # gestor só vê os seus CCs
+
+    # correção na própria página: cronograma da cadeira (4 × R$ 1.000) fecha com o total
+    cadeira = mine[0]
+    assert cadeira["fix"]["type"] == "schedule" and cadeira["fix"]["total"] == "4000.00" and cadeira["editable"]
+    assert client.post("/api/v1/findings/fix", headers=outsider, json={"key": cadeira["key"]}).status_code == 403
+    short = client.post("/api/v1/findings/fix", headers=admin, json={"key": cadeira["key"], "values": {"5": 3000}})
+    assert short.status_code == 422 and "precisa fechar" in short.json()["detail"]
+    fixed = client.post(
+        "/api/v1/findings/fix", headers=admin, json={"key": cadeira["key"], "values": {"5": 2000, "6": 2000}}
+    )
+    assert fixed.status_code == 200, fixed.text
+    assert fixed.json()["note"] == "Cronograma: MAI R$ 2.000,00, JUN R$ 2.000,00"
+    found = client.get("/api/v1/findings", headers=admin).json()
+    assert cadeira["key"] not in {i["key"] for i in found["items"]}
+    assert (found["reviews"][0]["action"], found["reviews"][0]["kind"]) == ("CORRECTED", "CAPEX_SCHEDULE_MISMATCH")
+    assert found["cost_centers"][0]["capex_submission_id"] == head["submission_id"]
+
+    # aviso mantido pela Controladoria com o motivo; sai dos pendentes e entra no relatório; reabrir devolve
+    software = next(i for i in found["items"] if i["kind"] == "CAPEX_SOFTWARE")
+    blank = client.post("/api/v1/findings/keep", headers=admin, json={"key": software["key"], "note": " "})
+    assert blank.status_code == 422
+    kept = client.post(
+        "/api/v1/findings/keep", headers=admin, json={"key": software["key"], "note": "Licença perpétua"}
+    )
+    assert kept.status_code == 200, kept.text
+    found = client.get("/api/v1/findings", headers=admin).json()
+    assert software["key"] not in {i["key"] for i in found["items"]}
+    assert (found["reviews"][0]["action"], found["reviews"][0]["note"]) == ("KEPT", "Licença perpétua")
+    report = client.get("/api/v1/findings/export.xlsx", headers=admin)
+    assert report.status_code == 200
+    assert report.headers["content-disposition"].endswith('filename="Apontamentos_2027_v1.0.xlsx"')
+    wb = load_workbook(io.BytesIO(report.content))
+    assert wb.sheetnames == ["Resumo", "Pendentes", "Corrigidos e mantidos"]
+    done = wb["Corrigidos e mantidos"]
+    assert {done.cell(r, 7).value for r in range(2, done.max_row + 1)} == {"Corrigido", "Mantido"}
+    assert client.delete(f"/api/v1/findings/reviews/{found['reviews'][0]['id']}", headers=admin).status_code == 200
+    assert software["key"] in {i["key"] for i in client.get("/api/v1/findings", headers=admin).json()["items"]}
     licence = project["items"][1]
     assert [i["code"] for i in licence["issues"]] == ["CAPEX_SOFTWARE"]
     # notebook levado para a conta de software: diverge do catálogo (aviso, não bloqueia)
@@ -166,6 +207,15 @@ def test_capex_template_import(client, admin, run_worker):
         f"/api/v1/capex/items/{project['items'][0]['id']}", headers=admin, json={"account_id": software_id}
     ).json()
     assert [(i["code"], i["severity"]) for i in moved["issues"]] == [("CAPEX_ACCOUNT_MISMATCH", "WARNING")]
+    # e volta para a conta do catálogo direto no apontamento
+    mismatch = next(
+        i
+        for i in client.get("/api/v1/findings", headers=admin).json()["items"]
+        if i["kind"] == "CAPEX_ACCOUNT_MISMATCH"
+    )
+    assert mismatch["fix"]["account"] == "1020601005 · Equipamentos de Informática"
+    back = client.post("/api/v1/findings/fix", headers=admin, json={"key": mismatch["key"]})
+    assert back.status_code == 200 and back.json()["note"].startswith("Conta 1020701002")
 
     opts = client.get("/api/v1/capex/options", headers=admin).json()
     notebook = next(a for a in opts["asset_items"] if a["name"] == "NOTEBOOK")

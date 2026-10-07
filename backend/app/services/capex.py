@@ -59,15 +59,20 @@ def item_issues(ctx: Context, item: CapexItem) -> list[dict]:
     return [{"code": i.code, "severity": i.severity, "message": i.message} for i in issues]
 
 
+def catalog_account(db: Session, item: CapexItem) -> Account | None:
+    """Conta da classe do item no catálogo de ativos (None se o item não está no catálogo)."""
+    asset = db.get(AssetItem, item.asset_item_id) if item.asset_item_id else None
+    klass = db.get(AssetClass, asset.asset_class_id) if asset else None
+    return db.get(Account, klass.account_id) if klass and klass.account_id else None
+
+
 def _classification_issues(item: CapexItem) -> list[rules.Issue]:
     """Conta do item × conta da classe no catálogo de ativos e software no CAPEX."""
     db = object_session(item)
     if db is None or item.account_id is None:
         return []
     account = db.get(Account, item.account_id)
-    asset = db.get(AssetItem, item.asset_item_id) if item.asset_item_id else None
-    klass = db.get(AssetClass, asset.asset_class_id) if asset else None
-    catalog = db.get(Account, klass.account_id) if klass and klass.account_id else None
+    catalog = catalog_account(db, item)
     return rules.check_classification(
         item.item_name,
         (account.code, account.name) if account else None,

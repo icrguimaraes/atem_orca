@@ -17,7 +17,6 @@ from app.domain.workflow import EDITABLE, STATUS_LABELS, WorkflowError, availabl
 from app.models import (
     Account,
     AccountDetail,
-    AccountJustification,
     ActualEntry,
     Branch,
     BudgetLine,
@@ -497,16 +496,7 @@ def set_justification(
     _require_edit(access)
     if db.get(Account, account_id) is None:
         raise HTTPException(404, "Conta não encontrada")
-    just = db.get(AccountJustification, (sub.id, account_id))
-    before = {"text": just.text} if just else None
-    text = payload.text.strip()
-    if not text:
-        if just:
-            db.delete(just)
-    elif just:
-        just.text, just.updated_by = text, user.id
-    else:
-        db.add(AccountJustification(submission_id=sub.id, account_id=account_id, text=text, updated_by=user.id))
+    change = svc.set_justification(db, sub, account_id, payload.text, user.id)
     svc.mark_in_progress(db, sub, ctx, user.id)
     audit.record(
         db,
@@ -514,12 +504,12 @@ def set_justification(
         action="JUSTIFY",
         entity_type="account_justification",
         entity_id=f"{sub.id}:{account_id}",
-        before=before,
-        after={"text": text},
+        before=change["before"],
+        after=change["after"],
         ip=client_ip(request),
     )
     db.commit()
-    return {"account_id": account_id, "text": text or None}
+    return {"account_id": account_id, "text": change["after"]["text"] or None}
 
 
 # ------------------------------------------------------------------ workflow
