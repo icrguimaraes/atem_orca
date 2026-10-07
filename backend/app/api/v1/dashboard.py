@@ -621,9 +621,14 @@ def _evolution_options(db: Session, f: Facts, P: Period) -> list[dict]:
     realizado, como no slide da diretoria): Realizado de cada ano carregado (ano cheio ou "até MÊS"; o ano em curso
     também anualizado), Orçado de cada ano com orçamento de referência e o Orçamento do ciclo (proposto). Os filtros de
     ano e mês não se aplicam (`f` vem sem meses); empresa, área, CC, pacote, conta e tipo valem. Marco zerado fica de
-    fora. Chave: "actual:2025", "actual_ann:2026", "budget:2026", "target:2027"."""
+    fora. Chave: "actual:2025", "actual_ann:2026", "budget:2026", "target:2027"; os orçados também "até MÊS"
+    ("budget_ytd:2026", "target_ytd:2027"), somados até o último mês fechado do realizado — comparação com o mesmo
+    período do realizado em curso (sem o CAPEX sem cronograma, que não tem mês)."""
     target = P.target_year or (max(P.actual_years) + 1 if P.actual_years else None)
     out: list[dict] = []
+    # último mês fechado do realizado mais recente: corte do "mesmo período" para os orçados
+    cut = _last_closed(db, max(P.actual_years)) if P.actual_years else None
+    cut = cut if cut and cut < 12 else None
 
     def add(key: str, kind: str, word: str, year: int, value: Decimal, note: str | None = None, **extra) -> None:
         if value:
@@ -634,6 +639,9 @@ def _evolution_options(db: Session, f: Facts, P: Period) -> list[dict]:
     budget_years = {y for y in P.budget_years if y != target}
     for year in sorted(set(P.actual_years) | budget_years):
         if year in budget_years:
+            if cut:
+                note = f"até {MONTH_ABBR[cut - 1]}"
+                add(f"budget_ytd:{year}", "budget", "Orçado", year, f.total(ReferenceBudgetEntry, [year], cut), note)
             add(f"budget:{year}", "budget", "Orçado", year, f.total(ReferenceBudgetEntry, [year]))
         if year in P.actual_years:
             closed = _last_closed(db, year)
@@ -654,6 +662,15 @@ def _evolution_options(db: Session, f: Facts, P: Period) -> list[dict]:
             else:
                 add(f"actual:{year}", "actual", "Realizado", year, ytd)
     if target is not None and P.target_year == target:
+        if cut:
+            add(
+                f"target_ytd:{target}",
+                "budget",
+                "Orçamento",
+                target,
+                f.total(ReferenceBudgetEntry, [target], cut),
+                f"proposto até {MONTH_ABBR[cut - 1]}",
+            )
         add(
             f"target:{target}",
             "budget",

@@ -342,7 +342,20 @@ def test_painel_evolution_matches_kpis(client, admin, run_worker):
     # marcos escolhidos no próprio visual (endpoint leve): opções em ordem cronológica, escolha livre (mín. 2)
     full = client.get("/api/v1/dashboard/evolution", headers=admin).json()
     keys = [o["key"] for o in full["options"]]
-    assert keys == ["actual:2025", "budget:2026", "actual:2026", "actual_ann:2026", "target:2027"]
+    assert keys == [
+        "actual:2025",
+        "budget_ytd:2026",
+        "budget:2026",
+        "actual:2026",
+        "actual_ann:2026",
+        "target_ytd:2027",
+        "target:2027",
+    ]
+    # mesmo período: orçamento 2027 até AGO (último mês fechado do realizado) × realizado 2026 até AGO
+    same = client.get("/api/v1/dashboard/evolution?marks=actual:2026,target_ytd:2027", headers=admin).json()
+    assert [m["label"] for m in same["milestones"]] == ["Realizado 2026 (até AGO)", "Orçamento 2027 (proposto até AGO)"]
+    ytd = client.get("/api/v1/dashboard/overview?years=2027&months=1,2,3,4,5,6,7,8", headers=admin).json()
+    assert float(same["milestones"][1]["value"]) == float(ytd["kpis"]["ref_ytd"])
     assert full["selected"] == ["actual:2025", "budget:2026", "actual_ann:2026", "target:2027"]
     pick = client.get("/api/v1/dashboard/evolution?marks=actual:2025,actual:2026,target:2027", headers=admin).json()
     assert pick["selected"] == ["actual:2025", "actual:2026", "target:2027"]
