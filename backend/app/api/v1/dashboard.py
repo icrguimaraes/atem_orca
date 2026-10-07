@@ -48,6 +48,11 @@ def _pct(new: Decimal, base: Decimal) -> str | None:
     return None if not base else str(((new - base) / abs(base)).quantize(Decimal("0.0001")))
 
 
+def _share(part: Decimal, total: Decimal) -> str | None:
+    """Participação no total (análise vertical): 0,523 = 52,3%."""
+    return None if not total else str((part / total).quantize(Decimal("0.0001")))
+
+
 MONTH_ABBR = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"]
 
 
@@ -661,8 +666,9 @@ def breakdown(
                 "name": name,
                 "ref": _money(c),
                 "base": _money(b),
-                "share_ref": _pct(c, total_cur) if total_cur else None,
-                "share_base": _pct(b, total_base) if total_base else None,
+                # AV %: participação no total da coluna (não é variação)
+                "share_ref": _share(c, total_cur),
+                "share_base": _share(b, total_base),
                 "var": _money(c - b),
                 "var_pct": _pct(c, b) if P.base_kind else None,
                 # "Sem pacote" (id nulo) também detalha: os filhos vêm com parent_no_package; já uma conta

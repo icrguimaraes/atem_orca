@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Breakdown, type BreakdownRow } from "../api";
-import { fmtMoney, fmtPct } from "../labels";
+import { fmtMoney, fmtPct, fmtShare } from "../labels";
 import { Empty, Loading } from "./ui";
 
 type Sort = "value_desc" | "value_asc" | "name" | "var";
@@ -123,9 +123,9 @@ export function DrillTable({ query, refLabel, onSelect }: {
             {r.code && <span className="muted small mono"> {r.code}</span>}
           </td>
           <td className="right nowrap">{fmtMoney(r.ref)}</td>
-          <td className="right nowrap muted">{r.share_ref !== null ? fmtPct(r.share_ref) : "—"}</td>
+          <td className="right nowrap muted">{fmtShare(r.share_ref)}</td>
           {hasBase && <td className="right nowrap">{fmtMoney(r.base)}</td>}
-          {hasBase && <td className="right nowrap muted">{r.share_base !== null ? fmtPct(r.share_base) : "—"}</td>}
+          {hasBase && <td className="right nowrap muted">{fmtShare(r.share_base)}</td>}
           {hasBase && <td className="right nowrap">{fmtMoney(r.var)}</td>}
           {hasBase && (
             <td className="right nowrap">

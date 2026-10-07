@@ -158,6 +158,10 @@ export const fmtCompact = (v: string | number) => {
   return `R$ ${n.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
 };
 
+/** Participação (AV %), sem sinal: 0,523 → 52,3%. */
+export const fmtShare = (v: string | null | undefined) =>
+  v === null || v === undefined ? "—" : `${(Number(v) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+
 export const fmtPct = (v: string | null | undefined) =>
   v === null || v === undefined
     ? "—"

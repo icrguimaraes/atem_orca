@@ -176,6 +176,8 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     by_name = {r["name"]: r for r in bd["rows"]}
     assert by_name["Viagens"]["ref"] == "350.00" and by_name["Viagens"]["base"] == "700.00"
     assert by_name["Viagens"]["var_pct"] == "-0.5000" and by_name["Viagens"]["has_children"] is True
+    # AV %: participação no total da coluna (350 de 430), não variação
+    assert (by_name["Viagens"]["share_ref"], by_name["Viagens"]["share_base"]) == ("0.8140", "0.8140")
     assert bd["total"]["ref"] == "430.00" and bd["total"]["base"] == "860.00"
     pkg = by_name["Viagens"]["id"]
     accounts = client.get(
