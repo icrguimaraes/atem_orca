@@ -82,6 +82,11 @@ export type Tone = "good" | "warn" | "bad" | "info" | "neutral";
 export const fmtInt = (n: number) => n.toLocaleString("pt-BR");
 export const fmtMoney = (v: string | number) =>
   Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+/** Diferença em reais com sinal, por extenso: +R$ 1.234,56 · -R$ 1.234,56. */
+export const fmtSignedMoney = (v: string | number) => {
+  const n = Number(v);
+  return `${n > 0 ? "+" : n < 0 ? "-" : ""}${fmtMoney(Math.abs(n))}`;
+};
 export const fmtDate = (iso: string | null) =>
   iso ? new Date(iso.length === 10 ? `${iso}T12:00:00` : iso).toLocaleDateString("pt-BR") : "—";
 export const fmtDateTime = (iso: string | null) =>

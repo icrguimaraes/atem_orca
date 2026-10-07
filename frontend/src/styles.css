@@ -574,6 +574,7 @@ tr.saving { opacity: 0.6; }
 .findings-table .col-item { min-width: 190px; }
 .findings-table .col-msg { min-width: 320px; }
 .findings-table .col-msg strong { display: block; margin-bottom: 2px; }
+.stat-line { display: block; }
 /* Painel: cards por tipo de orçamento logo abaixo do total, um pouco mais baixos */
 .stats-modules { margin-top: 12px; }
 .stats-modules .stat-value { font-size: 22px; }

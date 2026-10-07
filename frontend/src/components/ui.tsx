@@ -29,7 +29,13 @@ export function BackButton({ fallback = "/" }: { fallback?: string }) {
   );
 }
 
-export function Stat({ label, value, tone, hint }: { label: string; value: ReactNode; tone?: Tone; hint?: string }) {
+/** Rodapé do card em linhas: valor por extenso na primeira, contexto (variação, base…) nas seguintes. */
+export function lines(...parts: (string | null | false | undefined)[]): ReactNode {
+  const items = parts.filter(Boolean) as string[];
+  return items.length ? items.map((p, i) => <span key={i} className="stat-line">{p}</span>) : undefined;
+}
+
+export function Stat({ label, value, tone, hint }: { label: string; value: ReactNode; tone?: Tone; hint?: ReactNode }) {
   return (
     <div className={`stat ${tone ? `stat-${tone}` : ""}`}>
       <span className="stat-label">{label}</span>

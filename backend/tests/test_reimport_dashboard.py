@@ -240,7 +240,7 @@ def test_painel2_figures(client, admin, run_worker):
     assert figs["monthly"]["meta"] == {"tooltip": "unified"} and figs["top_cost_centers"]["meta"] == {
         "tooltip": "point"
     }
-    assert real["customdata"][0][2] == [["Realizado 2026: R$ 110,00", "#4472c4"], ["Variação: -50,0%", ""]]
+    assert real["customdata"][0][2] == [["Realizado 2026: R$ 110,00", "#4472c4"], ["Variação: -50,0% (-R$ 110,00)", ""]]
     assert real["textfont"]["color"] == "#3a64b4"  # rótulo no tom escuro do azul
     ccs = figs["top_cost_centers"]["data"]
     assert ccs[0]["customdata"][0][3] == data["top_cost_centers"][0]["id"]  # id do CC para o clique filtrar o painel

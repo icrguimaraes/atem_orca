@@ -29,6 +29,11 @@ def _rgba(color: str, alpha: float) -> str:
     return f"rgba({int(h[0:2], 16)},{int(h[2:4], 16)},{int(h[4:6], 16)},{alpha:.2f})"
 
 
+def _signed_money(value: float) -> str:
+    """Diferença em reais com sinal, por extenso: +R$ 1.234,56 · -R$ 1.234,56."""
+    return f"{'+' if value > 0 else '-' if value < 0 else ''}{fmt_money(abs(value))}"
+
+
 def _tip_label(label: str | None) -> str:
     """Rótulo curto para o tooltip mensal: sem "até SET" e sem o parêntese (o mês já está no título)."""
     return re.sub(r" \(.*\)$| até [A-Z]{3}$", "", label or "").strip()
@@ -91,9 +96,11 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
             if key == "ref" and v:
                 prev, budget = values_by.get("prev", zeros)[i], values_by.get("budget", zeros)[i]
                 if prev:
-                    lines.append([f"Variação: {fmt_pct((v - prev) / prev)}", ""])
+                    lines.append([f"Variação: {fmt_pct((v - prev) / prev)} ({_signed_money(v - prev)})", ""])
                 if budget:
-                    lines.append([f"Realizado vs orçado: {fmt_pct((v - budget) / budget)}", ""])
+                    lines.append(
+                        [f"Realizado vs orçado: {fmt_pct((v - budget) / budget)} ({_signed_money(v - budget)})", ""]
+                    )
             tips.append(lines)
         data.append(
             go.Bar(
@@ -224,7 +231,10 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
     cats = [_category(r["name"], r.get("code")) for r in rows]
     values = [_num(r["value"]) for r in rows]
     bases = [_num(r.get("base")) for r in rows]
-    variations = [fmt_pct(r["var_pct"]) if r.get("var_pct") is not None else "—" for r in rows]
+    variations = [
+        f"{fmt_pct(r['var_pct'])} ({_signed_money(v - b)})" if r.get("var_pct") is not None else "—"
+        for r, v, b in zip(rows, values, bases, strict=True)
+    ]
     opacity = [1.0 if (selected is None or r.get("id") == selected) else 0.3 for r in rows]
 
     def text(value: float, var) -> str:

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { MONTHS, fmtCompact, fmtMoney, fmtPct } from "../labels";
+import { MONTHS, fmtCompact, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
 
 /** Séries: ano de referência (slot 1), ano anterior (slot 2), orçamento (slot 3). Cores em styles.css. */
 export const SERIES = {
@@ -134,8 +134,8 @@ export function MonthlyChart({ rows, prevYear, refYear, showBudget, showRef = tr
           {series.map((s) => (
             <span key={s.key}><i style={{ background: s.color }} />{s.label}: {fmtMoney(h[s.key])}</span>
           ))}
-          {prevYear !== null && Number(h.prev) > 0 && Number(h.ref) > 0 && <span className="muted">Variação: {fmtPct(String((Number(h.ref) - Number(h.prev)) / Number(h.prev)))}</span>}
-          {showBudget && Number(h.budget) > 0 && Number(h.ref) > 0 && <span className="muted">Realizado vs orçado: {fmtPct(String((Number(h.ref) - Number(h.budget)) / Number(h.budget)))}</span>}
+          {prevYear !== null && Number(h.prev) > 0 && Number(h.ref) > 0 && <span className="muted">Variação: {fmtPct(String((Number(h.ref) - Number(h.prev)) / Number(h.prev)))} ({fmtSignedMoney(Number(h.ref) - Number(h.prev))})</span>}
+          {showBudget && Number(h.budget) > 0 && Number(h.ref) > 0 && <span className="muted">Realizado vs orçado: {fmtPct(String((Number(h.ref) - Number(h.budget)) / Number(h.budget)))} ({fmtSignedMoney(Number(h.ref) - Number(h.budget))})</span>}
         </div>
       )}
     </div>
@@ -280,6 +280,9 @@ export function TopBars({ rows, label, prevLabel, prevColor = SERIES.past, color
               <strong>{r.label}</strong>
               <span><i style={{ background: color }} />{label}: {fmtMoney(r.value)}</span>
               {prevLabel && r.prev !== undefined && <span><i style={{ background: prevColor }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
+              {prevLabel && r.prev !== undefined && r.prev > 0 && (
+                <span className="muted">Variação: {fmtPct(String((r.value - r.prev) / r.prev))} ({fmtSignedMoney(r.value - r.prev)})</span>
+              )}
             </div>
           )}
         </div>
