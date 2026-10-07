@@ -167,6 +167,8 @@ def test_capex_template_import(client, admin, run_worker):
     panel = client.get("/api/v1/dashboard/overview?years=2027", headers=admin).json()
     assert (panel["kpis"]["ref_ytd"], panel["kpis"]["budget_unscheduled"]) == ("34000.00", "1000.00")
     assert sum(float(r["budget"]) for r in panel["monthly"]) == 33000.0
+    capex_card = next(m for m in panel["by_module"] if m["module"] == "CAPEX")
+    assert (capex_card["main"], capex_card["unscheduled"]) == ("34000.00", "1000.00")
     assert (
         client.get("/api/v1/dashboard/overview?years=2027&months=5", headers=admin).json()["kpis"]["ref_ytd"]
         == "3000.00"

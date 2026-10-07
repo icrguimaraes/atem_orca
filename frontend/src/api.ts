@@ -160,7 +160,9 @@ export interface PackageRow {
   package_id: number | null; package: string; package_type: number | null; prev_total: string; prev_ytd: string;
   ref_ytd: string; ref_annualized: string; budget: string; ytd_var_pct: string | null;
 }
+export interface ModuleKpi { module: string; label: string; main: string; base: string; var_pct: string | null; unscheduled: string }
 export interface Overview {
+  by_module: ModuleKpi[];
   reference_year: number; previous_year: number | null; selected_years: number[]; selected_months: number[];
   last_closed_period: number | null; years_loaded: number[]; target_year: number | null; period: PeriodInfo;
   budget_years: number[]; available_years: number[]; has_actual: boolean; has_prev: boolean; has_budget: boolean;

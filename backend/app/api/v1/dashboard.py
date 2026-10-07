@@ -365,6 +365,43 @@ class Facts:
                 out[tuple(attrs[k] for k in keys)] += r.unscheduled
         return out
 
+    def by_module(self, model, years, max_period: int | None = None) -> dict[str, Decimal]:
+        """Soma por tipo de orçamento (OPEX, CAPEX, Pessoal) nos mesmos filtros: realizado/orçado pela natureza da
+        conta; orçamento proposto do ano do ciclo pelo módulo da linha (inclui o CAPEX sem cronograma no total)."""
+        years = list(years)
+        from_target = model is ReferenceBudgetEntry and self.target_year in years
+        sql_years = [y for y in years if not (from_target and y == self.target_year)]
+        out: dict[str, Decimal] = defaultdict(lambda: ZERO)
+        if sql_years:
+            stmt = (
+                select(Account.nature, func.sum(model.amount))
+                .select_from(model)
+                .join(Account, Account.id == model.account_id)
+                .where(model.fiscal_year.in_(sql_years))
+            )
+            if max_period:
+                stmt = stmt.where(model.period <= max_period)
+            stmt = self._filtered(model, stmt).group_by(Account.nature)
+            for nature, amount in self.db.execute(stmt):
+                module = cons.module_of_nature(nature)
+                if module:
+                    out[module] += amount or ZERO
+        if from_target:
+            for r, _, _ in self._target_rows():
+                for m, amount in enumerate(r.values, start=1):
+                    if amount and not (self.months and m not in self.months) and not (max_period and m > max_period):
+                        out[r.module] += amount
+                if r.unscheduled and not self.months and max_period is None:
+                    out[r.module] += r.unscheduled
+        return out
+
+    def unscheduled_by_module(self) -> dict[str, Decimal]:
+        out: dict[str, Decimal] = defaultdict(lambda: ZERO)
+        if not self.months:
+            for r, _, _ in self._target_rows():
+                out[r.module] += r.unscheduled
+        return out
+
     def unscheduled_total(self) -> Decimal:
         """Orçamento proposto sem mês (CAPEX sem cronograma) no escopo e nos filtros."""
         if self.months:
@@ -485,6 +522,7 @@ def overview(
             # parcela do orçamento do ano do ciclo sem mês (CAPEX sem cronograma): está no total, não no mensal
             "budget_unscheduled": _money(f.unscheduled_total() if P.target_year in P.years else ZERO),
         },
+        "by_module": _by_module(f, P),
         "monthly": _monthly(f, P),
         "top_cost_centers": _ranking(db, f, P, "cost_center_id", CostCenter),
         "top_accounts": _ranking(db, f, P, "account_id", Account),
@@ -508,6 +546,32 @@ def overview(
             selected={"months": sorted(P.months or []), "cost_center_id": cost_center_id, "account_id": account_id},
         )
     return data
+
+
+def _by_module(f: Facts, P: Period) -> list[dict]:
+    """Cards por tipo de orçamento: série principal e base de comparação por módulo. Com o filtro de tipo
+    ativo, o card do total já é o do tipo: a lista vem vazia."""
+    if P.modules:
+        return []
+    main = f.by_module(_main_model(P), P.years)
+    if P.base_kind == "prev":
+        base = {k: v * P.base_scale for k, v in f.by_module(ActualEntry, P.prev_years, P.base_cap).items()}
+    elif P.base_kind == "budget":
+        base = f.by_module(ReferenceBudgetEntry, P.years, P.base_cap)
+    else:
+        base = {}
+    unscheduled = f.unscheduled_by_module() if (P.main == "budget" and P.target_year in P.years) else {}
+    return [
+        {
+            "module": m,
+            "label": cons.MODULE_LABELS[m],
+            "main": _money(main.get(m, ZERO)),
+            "base": _money(base.get(m, ZERO)),
+            "var_pct": _pct(main.get(m, ZERO), base.get(m, ZERO)) if P.base_kind else None,
+            "unscheduled": _money(unscheduled.get(m, ZERO)),
+        }
+        for m in cons.MODULES
+    ]
 
 
 def _monthly(f: Facts, P: Period) -> list[dict]:

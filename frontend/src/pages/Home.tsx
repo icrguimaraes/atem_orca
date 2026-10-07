@@ -416,6 +416,22 @@ export default function Home() {
               />
             )}
           </div>
+          {o.by_module.length > 0 && (
+            <div className="stats stats-modules">
+              {o.by_module.map((m) => (
+                <Stat
+                  key={m.module}
+                  label={`${m.label} · ${mainLabel}`}
+                  value={fmtCompact(m.main)}
+                  hint={[
+                    fmtMoney(m.main),
+                    hasBase && m.var_pct !== null && Number(m.base) > 0 ? `${fmtPct(m.var_pct)} vs ${baseLabel}` : null,
+                    Number(m.unscheduled) > 0 ? `inclui ${fmtCompact(m.unscheduled)} sem cronograma mensal` : null,
+                  ].filter(Boolean).join(" · ")}
+                />
+              ))}
+            </div>
+          )}
 
           <div className="section-stack">
           {shell("monthly",

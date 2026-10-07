@@ -120,6 +120,15 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     assert data["period"]["compare_available"] is True and data["period"]["same_period_available"] is True
     assert data["kpis"]["ref_ytd"] == "430.00" and data["kpis"]["prev_ytd"] == "860.00"
     assert data["kpis"]["ytd_var_pct"] == "-0.5000"
+    # cards por tipo: as contas do fixture são OPEX; CAPEX e Pessoal zerados, mas presentes
+    by_module = {m["module"]: m for m in data["by_module"]}
+    assert set(by_module) == {"OPEX", "CAPEX", "PERSONNEL"} and by_module["OPEX"]["label"] == "OPEX"
+    assert (by_module["OPEX"]["main"], by_module["OPEX"]["base"], by_module["OPEX"]["var_pct"]) == (
+        "430.00",
+        "860.00",
+        "-0.5000",
+    )
+    assert by_module["CAPEX"]["main"] == "0.00" and by_module["PERSONNEL"]["main"] == "0.00"
     assert data["kpis"]["ref_annualized"] == "645.00"
     assert data["monthly"][0] == {"month": 1, "prev": "220.00", "ref": "110.00", "budget": "0.00"}
     assert [c["code"] for c in data["top_cost_centers"]] == ["1050101011", "1050101012"]
@@ -157,6 +166,7 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     opex = client.get("/api/v1/dashboard/overview?years=2026&modules=OPEX", headers=admin).json()
     people = client.get("/api/v1/dashboard/overview?years=2026&modules=PERSONNEL", headers=admin).json()
     assert opex["kpis"]["ref_ytd"] == "430.00" and opex["period"]["modules"] == ["OPEX"]
+    assert opex["by_module"] == []  # com o filtro de tipo, o card do total já é o do tipo
     assert people["kpis"]["ref_ytd"] == "0.00" and people["top_accounts"] == []
 
     # tabela com drill-down: pacote → conta → centro de custo, base = ano anterior no mesmo período
