@@ -42,7 +42,16 @@ class _Finder:
         self.kept = svc.kept_keys(db, ctx)
         self.cache: dict[int, list[dict]] = {}
 
-    def get(self, key: str) -> tuple[BudgetSubmission, dict]:
+    def get(self, key: str) -> tuple[BudgetSubmission | None, dict]:
+        if key.startswith("0:"):  # sem orçamento de CC (colaborador sem CC): só a Controladoria
+            if not is_global(self.user):
+                raise HTTPException(403, "Só a Controladoria corrige este apontamento")
+            if 0 not in self.cache:
+                self.cache[0] = svc.employees_without_cost_center(self.db)
+            finding = next((f for f in self.cache[0] if f["key"] == key), None)
+            if finding is None:
+                raise HTTPException(404, "Apontamento não encontrado ou já resolvido")
+            return None, finding
         try:
             sub = self.db.get(BudgetSubmission, int(key.split(":", 1)[0]))
         except ValueError:
@@ -72,8 +81,8 @@ def findings(db: Session = Depends(get_db), user: User = Depends(get_current_use
     items = svc.collect(db, ctx, scope, svc.kept_keys(db, ctx), structure=is_global(user))
     editable: dict[int, bool] = {}
     for i in items:
-        if i["kind"] == "STRUCTURE_NO_SECTOR":
-            i["editable"] = is_global(user)  # estrutura do CC: Controladoria, mesmo com o orçamento enviado
+        if i["kind"] in ("STRUCTURE_NO_SECTOR", "PERSONNEL_NO_CC"):
+            i["editable"] = is_global(user)  # estrutura e CC do colaborador: Controladoria
             continue
         if i["submission_id"] not in editable:
             access, _ = _access(db, ctx, user, db.get(BudgetSubmission, i["submission_id"]))
@@ -107,6 +116,7 @@ class FixFields(BaseModel):
     amount: Decimal | None = None  # novo salário (promoção pendente)
     month: int | None = None  # mês da ação (importada sem mês)
     area_id: int | None = None  # setor do CC (CC sem área e setor)
+    cost_center_id: int | None = None  # CC do colaborador sem centro de custo
 
 
 class FixIn(FixFields):
@@ -118,9 +128,35 @@ class FixManyIn(FixFields):
 
 
 def _fix_one(
-    db: Session, ctx: opex_svc.Context, user: User, sub: BudgetSubmission, finding: dict, data: dict, ip: str | None
+    db: Session,
+    ctx: opex_svc.Context,
+    user: User,
+    sub: BudgetSubmission | None,
+    finding: dict,
+    data: dict,
+    ip: str | None,
 ) -> str:
     """Aplica uma correção (mesma regra de edição das telas do CC) e registra na análise e na auditoria."""
+    if finding["kind"] == "PERSONNEL_NO_CC":
+        if not is_global(user):
+            raise HTTPException(403, "Só a Controladoria define o centro de custo do colaborador")
+        note, before, after = svc.apply_fix(db, None, finding, data, user.id)
+        # registro no orçamento de pessoal do CC escolhido (que passa a ter o colaborador)
+        sub = opex_svc.get_submission(db, ctx, after["cost_center_id"], module="PERSONNEL")
+        opex_svc.mark_in_progress(db, sub, ctx, user.id)
+        svc.log(db, sub, finding, "CORRECTED", note, user.id)
+        audit.record(
+            db,
+            user_id=user.id,
+            action="FINDING_FIX",
+            entity_type="finding",
+            entity_id=finding["key"],
+            before=before,
+            after=after,
+            reason=note,
+            ip=ip,
+        )
+        return note
     if finding["kind"] == "STRUCTURE_NO_SECTOR":
         if not is_global(user):
             raise HTTPException(403, "Só a Controladoria define a área e o setor do centro de custo")

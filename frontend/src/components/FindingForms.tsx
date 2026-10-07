@@ -244,12 +244,13 @@ function fixBody(type: FindingFix["type"], value: string): Record<string, unknow
     case "text": return { text: value };
     case "project_type": return { project_type_code: value };
     case "sector": return { area_id: Number(value) };
+    case "cost_center": return { cost_center_id: Number(value) };
     default: return {};
   }
 }
 
 function needsValue(type: FindingFix["type"]) {
-  return ["month", "money", "ticket", "text", "project_type", "sector"].includes(type);
+  return ["month", "money", "ticket", "text", "project_type", "sector", "cost_center"].includes(type);
 }
 
 /** Campo da correção (mês, setor, tipo de projeto, valor ou texto). */
@@ -271,6 +272,14 @@ function FixControl({ fix, value, onChange, projectTypes, sectors, compact }: {
       <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
         <option value="">Setor…</option>
         {sectors.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+      </select>
+    );
+  }
+  if (fix.type === "cost_center") {
+    return (
+      <select value={value} onChange={(e) => onChange(e.target.value)} aria-label={label}>
+        <option value="">Centro de custo…</option>
+        {(fix.options ?? []).map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
       </select>
     );
   }
@@ -326,7 +335,7 @@ export function InlineFix({ finding, projectTypes, sectors, onDone, onSchedule }
 /** O grupo aceita a mesma correção para todos (valores individuais, como passagem e salário, não). */
 export function canBulkFix(items: Finding[]) {
   const type = items[0]?.fix?.type;
-  return items.length > 1 && !!type && ["confirm", "account", "month", "sector", "project_type", "text"].includes(type);
+  return items.length > 1 && !!type && ["confirm", "account", "month", "sector", "cost_center", "project_type", "text"].includes(type);
 }
 
 /** Mesma correção para todos os itens do grupo (confirmar, mês, setor, tipo de projeto, conta do catálogo, texto). */

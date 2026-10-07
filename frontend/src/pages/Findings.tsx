@@ -30,6 +30,7 @@ const KIND_HINTS: Record<string, string> = {
   PERSONNEL_NO_MONTH: "A planilha não trouxe o mês da ação: escolha o mês (até lá, não mexe no custo).",
   PERSONNEL_CC_GUESSED: "O CC veio vazio e o sistema definiu pelo cargo: confirme; se estiver errado, corrija na planilha e importe de novo.",
   STRUCTURE_NO_SECTOR: "O CC não tem área e setor e aparece em \"Sem setor\" no Painel: escolha o setor.",
+  PERSONNEL_NO_CC: "Colaborador ativo sem centro de custo fica fora do orçamento: escolha o CC. Se a planilha trazia promoção, desligamento ou vaga, reimporte o quadro com o CC padrão.",
 };
 type Tab = "open" | "done" | "files";
 
@@ -191,6 +192,7 @@ export default function Findings() {
                 <li><strong>CAPEX:</strong> conta diferente do catálogo de ativos, software no CAPEX, valor baixo, vida útil curta.</li>
                 <li><strong>Pessoal:</strong> centro de custo definido pelo cargo (confirmar).</li>
                 <li><strong>Estrutura:</strong> CC sem área e setor (Controladoria).</li>
+                <li><strong>Pessoal:</strong> colaborador sem centro de custo — fica fora do orçamento até escolher o CC (Controladoria).</li>
               </ul>
               <p className="muted small">Avisos podem ser corrigidos ou mantidos pela Controladoria com o motivo (um a um ou em lote).</p>
             </div>

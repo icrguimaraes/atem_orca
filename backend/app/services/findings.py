@@ -63,6 +63,7 @@ KIND_LABELS = {
     "PERSONNEL_NO_MONTH": "Ação sem mês",
     "PERSONNEL_CC_GUESSED": "Centro de custo pelo cargo",
     "STRUCTURE_NO_SECTOR": "CC sem área e setor",
+    "PERSONNEL_NO_CC": "Colaborador sem centro de custo",
     "OPEX_MOVED_CC": "Lançamento em CC de outra área",
 }
 FLAG_TEXT = {
@@ -183,9 +184,61 @@ def collect(
     sectors = {o["id"]: o["label"] for o in sector_options(db)}
     for i in items:
         i["sector"] = sectors.get(ccs[i["cost_center_id"]].area_id)
+    if structure and cc_ids is None:
+        items += employees_without_cost_center(db)
     items = [i for i in items if i["key"] not in kept]
     items.sort(key=lambda i: (SEVERITY_ORDER[i["severity"]], i["cost_center"], i["module"], i["kind"], i["subject"]))
     return items
+
+
+def employees_without_cost_center(db: Session) -> list[dict]:
+    """Colaboradores ativos sem CC (a planilha veio sem CC e o cargo não indicou setor): ficam fora do orçamento de
+    pessoal. Sem orçamento de CC, o apontamento usa a chave "0:EMPLOYEE:{id}" e só a Controladoria vê e corrige."""
+    from app.models import Company, JobPosition
+
+    options: dict[int, list[dict]] = {}
+    out = []
+    for emp in db.scalars(
+        select(Employee).where(Employee.is_active, Employee.cost_center_id.is_(None)).order_by(Employee.name)
+    ):
+        if emp.company_id not in options:
+            options[emp.company_id] = [
+                {"id": c.id, "label": f"{c.code} · {c.name}"}
+                for c in db.scalars(
+                    select(CostCenter)
+                    .where(CostCenter.company_id == emp.company_id, CostCenter.is_active)
+                    .order_by(CostCenter.code)
+                )
+            ]
+        position = db.get(JobPosition, emp.position_id).name if emp.position_id else None
+        company = db.get(Company, emp.company_id)
+        out.append(
+            {
+                "key": f"0:EMPLOYEE:{emp.id}:PERSONNEL_NO_CC",
+                "entity": "EMPLOYEE",
+                "entity_id": str(emp.id),
+                "submission_id": None,
+                "severity": "WARNING",
+                "module": "PERSONNEL",
+                "module_label": MODULE_LABELS["PERSONNEL"],
+                "kind": "PERSONNEL_NO_CC",
+                "kind_label": KIND_LABELS["PERSONNEL_NO_CC"],
+                "cost_center_id": 0,
+                "cost_center": f"Sem centro de custo · {company.code if company else ''}".strip(" ·"),
+                "sector": None,
+                "status": "",
+                "subject": f"{emp.name} · {position or 'cargo não informado'}",
+                "detail": None,
+                "message": "Colaborador ativo sem centro de custo: está fora do orçamento de pessoal. Escolha o CC. "
+                "Promoção, desligamento ou vaga da planilha não entraram — se houver, reimporte o quadro com o CC "
+                "padrão",
+                "amount": None,
+                "link": None,
+                "fix": {"type": "cost_center", "label": "Centro de custo", "options": options[emp.company_id]},
+                "can_keep": False,
+            }
+        )
+    return out
 
 
 def sector_options(db: Session) -> list[dict]:
@@ -429,6 +482,19 @@ def apply_fix(
         db.flush()
         label = next(o["label"] for o in sector_options(db) if o["id"] == area.id)
         return f"Setor: {label}", before, {"department_id": cc.department_id, "area_id": cc.area_id}
+    if kind == "PERSONNEL_NO_CC":
+        emp = db.get(Employee, int(ident))
+        cc = db.get(CostCenter, int(data.get("cost_center_id") or 0)) if data.get("cost_center_id") else None
+        if cc is None or not cc.is_active:
+            raise FindingError("Escolha o centro de custo")
+        if cc.company_id != emp.company_id:
+            raise FindingError("O centro de custo precisa ser da empresa do colaborador")
+        emp.cost_center_id = cc.id
+        attrs = dict(emp.attributes or {})
+        attrs.pop("pending_cc", None)
+        emp.attributes = attrs or None
+        db.flush()
+        return f"Centro de custo: {cc.code} · {cc.name}", {"cost_center_id": None}, {"cost_center_id": cc.id}
     if kind == "PERSONNEL_JUSTIFICATION":
         mv = db.get(PersonnelMovement, int(ident))
         before = {"reason": mv.reason}

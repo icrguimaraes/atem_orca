@@ -404,3 +404,31 @@ def test_quadro_company_by_name_and_vacancy_without_salary(client, admin, run_wo
     vaga = next(i for i in found if i["subject"] == "Vaga de ANALISTA PL")
     fixed = client.post("/api/v1/findings/fix", headers=admin, json={"key": vaga["key"], "amount": 6500})
     assert fixed.status_code == 200 and fixed.json()["note"] == "Novo salário: R$ 6.500,00"
+
+
+def test_employee_without_cost_center_finding(client, admin, run_worker):
+    """Colaborador ativo sem CC (planilha sem CC e cargo sem setor) aparece para a Controladoria em Apontamentos e é
+    corrigido escolhendo o CC; o gestor não vê."""
+    ccs, mgr, _ = _setup(client, admin, run_worker)
+    rows = [("990", "ZECA", "CARGO SEM SETOR", "1001", None, None, 5000, "MANTER", None, None, None, "CLT", None, None)]
+    import_and_load(client, admin, run_worker, builders.quadro_funcionarios(rows), "q-semcc.xlsx")
+    data = client.get("/api/v1/findings", headers=admin).json()
+    item = next(i for i in data["items"] if i["kind"] == "PERSONNEL_NO_CC")
+    assert item["subject"] == "ZECA · CARGO SEM SETOR" and item["editable"] is True and item["can_keep"] is False
+    assert any(o["label"].startswith(CC1) for o in item["fix"]["options"])
+    assert not any(i["kind"] == "PERSONNEL_NO_CC" for i in client.get("/api/v1/findings", headers=mgr).json()["items"])
+    assert (
+        client.post("/api/v1/findings/fix", headers=mgr, json={"key": item["key"], "cost_center_id": 1}).status_code
+        == 403
+    )
+    fixed = client.post(
+        "/api/v1/findings/fix", headers=admin, json={"key": item["key"], "cost_center_id": ccs[CC1]["id"]}
+    )
+    assert fixed.status_code == 200, fixed.text
+    assert fixed.json()["note"].startswith(f"Centro de custo: {CC1}")
+    after = client.get("/api/v1/findings", headers=admin).json()
+    assert not any(i["kind"] == "PERSONNEL_NO_CC" for i in after["items"])
+    assert any(r["kind"] == "PERSONNEL_NO_CC" and r["action"] == "CORRECTED" for r in after["reviews"])
+    head = client.get(f"/api/v1/personnel/cost-centers/{ccs[CC1]['id']}", headers=admin).json()
+    view = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).json()
+    assert "ZECA" in {p["name"] for p in view["positions"]}

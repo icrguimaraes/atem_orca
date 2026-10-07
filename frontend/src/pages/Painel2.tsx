@@ -265,32 +265,34 @@ export default function Painel2() {
             ],
           },
         ]}
+        extra={
+          departments.length > 0 && (
+            <div className="chip-group">
+              <span className="chip-label">Área</span>
+              <div className="month-chips" role="group" aria-label="Áreas">
+                <button type="button" className={!department ? "active" : ""} aria-pressed={!department} onClick={() => setDepartment("")}>
+                  Todas
+                </button>
+                {[...departments].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    className={department === String(d.id) ? "active" : ""}
+                    aria-pressed={department === String(d.id)}
+                    onClick={() => setDepartment((cur) => (cur === String(d.id) ? "" : String(d.id)))}
+                  >
+                    {d.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )
+        }
       />
 
       {o && (
         <>
           <div className="chip-groups" aria-busy={overview.loading}>
-            {departments.length > 0 && (
-              <div className="chip-group">
-                <span className="chip-label">Área</span>
-                <div className="month-chips" role="group" aria-label="Áreas">
-                  <button type="button" className={!department ? "active" : ""} aria-pressed={!department} onClick={() => setDepartment("")}>
-                    Todas
-                  </button>
-                  {[...departments].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      className={department === String(d.id) ? "active" : ""}
-                      aria-pressed={department === String(d.id)}
-                      onClick={() => setDepartment((cur) => (cur === String(d.id) ? "" : String(d.id)))}
-                    >
-                      {d.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             <div className="chip-group">
               <span className="chip-label">Ano</span>
               <div className="year-tabs" role="group" aria-label="Anos exibidos (somados)">

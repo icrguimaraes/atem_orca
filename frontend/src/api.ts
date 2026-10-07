@@ -462,11 +462,12 @@ export interface AttentionPoint {
   cost_center_id: number | null; cost_center: string | null; message: string; link: string | null;
 }
 export interface FindingFix {
-  type: "schedule" | "account" | "text" | "project_type" | "ticket" | "money" | "month" | "sector" | "confirm";
+  type: "schedule" | "account" | "text" | "project_type" | "ticket" | "money" | "month" | "sector" | "cost_center" | "confirm";
   total?: string; values?: Record<string, string>; account_id?: number; account?: string; label?: string; route?: string;
+  options?: { id: number; label: string }[];
 }
 export interface Finding {
-  key: string; entity: string; entity_id: string; submission_id: number;
+  key: string; entity: string; entity_id: string; submission_id: number | null;
   severity: "CRITICAL" | "WARNING"; module: string; module_label: string; kind: string; kind_label: string;
   cost_center_id: number; cost_center: string; sector?: string | null; status: string; subject: string; detail: string | null;
   message: string; amount: string | null; link: string | null;
