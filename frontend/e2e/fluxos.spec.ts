@@ -47,6 +47,9 @@ test("consolidação: exportar Excel e abrir o CC a partir da matriz", async ({ 
 
 test("menu: alterar senha valida confirmação", async ({ page }) => {
   await login(page);
+  // desktop: menu da conta no rodapé do menu lateral; celular: folha "Mais"
+  if (await page.locator(".side-user-btn").isVisible()) await page.click(".side-user-btn");
+  else await page.click(".tabbar button:has-text('Mais')");
   await page.click("button:has-text('Alterar senha')");
   const modal = page.locator(".modal");
   await expect(modal).toBeVisible();

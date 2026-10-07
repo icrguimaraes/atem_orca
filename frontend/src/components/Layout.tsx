@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { api } from "../api";
 import { BrandMark } from "./Brand";
@@ -7,21 +7,58 @@ import { useAuth } from "../auth";
 import { ROLE_LABELS } from "../labels";
 import { ThemeSwitch, useTheme, type Theme } from "../theme";
 
-const NAV = [
-  { to: "/", label: "Painel", end: true },
-  { to: "/painel-2", label: "Painel 2 (Plotly)" },
-  { to: "/analise", label: "Análise orçamentária" },
-  { to: "/consolidacao", label: "Consolidação e exportação" },
-  { to: "/apontamentos", label: "Apontamentos" },
-  { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"] },
-  { to: "/cadastros", label: "Cadastros", roles: ["CONTROLLER"] },
-  { to: "/estrutura", label: "Áreas e setores", roles: ["CONTROLLER"] },
-  { to: "/ciclo", label: "Ciclo e parâmetros", roles: ["CONTROLLER"] },
-  { to: "/usuarios", label: "Usuários", roles: ["CONTROLLER"] },
-  { to: "/auditoria", label: "Auditoria", roles: ["CONTROLLER"] },
-];
+interface NavItem { to: string; label: string; icon: string; end?: boolean; roles?: string[] }
 
-const SOON: string[] = [];
+// traço de 24 px (stroke), o mesmo desenho no menu lateral, na barra de abas e na folha "Mais"
+// (mesmo padrão do menu do projeto Movimentação de Pessoal)
+const ICON = {
+  painel: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z",
+  painel2: "M4 19h16M5 15l4-4 3 3 7-7M15 7h4v4",
+  analise: "M4 19h16M6 16V9m4 7V5m4 11v-6m4 6V7",
+  consolidacao: "M12 3 3 7.5l9 4.5 9-4.5L12 3zM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5",
+  apontamentos: "M12 4 2.5 20h19L12 4zM12 10v4M12 17h.01",
+  importacoes: "M12 15V4m0 0-4 4m4-4 4 4M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4",
+  cadastros: "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6",
+  estrutura: "M9 3h6v5H9zM12 8v3M6 14v-3h12v3M3 14h6v5H3zM15 14h6v5h-6z",
+  ciclo: "M4 6h9m4 0h3M4 12h3m4 0h9M4 18h11m4 0h1M15 4v4M9 10v4M17 16v4",
+  usuarios: "M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7",
+  auditoria: "M12 3 5 6v5c0 4.5 3 8.3 7 9.5 4-1.2 7-5 7-9.5V6l-7-3zM9 12l2 2 4-4",
+  senha: "M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4",
+  sair: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
+  mais: "M5 12h.01M12 12h.01M19 12h.01",
+};
+
+const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
+  {
+    title: "Orçamento",
+    items: [
+      { to: "/", label: "Painel", end: true, icon: ICON.painel },
+      { to: "/painel-2", label: "Painel 2 (Plotly)", icon: ICON.painel2 },
+      { to: "/analise", label: "Análise orçamentária", icon: ICON.analise },
+      { to: "/consolidacao", label: "Consolidação e exportação", icon: ICON.consolidacao },
+      { to: "/apontamentos", label: "Apontamentos", icon: ICON.apontamentos },
+    ],
+  },
+  {
+    title: "Administração",
+    items: [
+      { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"], icon: ICON.importacoes },
+      { to: "/cadastros", label: "Cadastros", roles: ["CONTROLLER"], icon: ICON.cadastros },
+      { to: "/estrutura", label: "Áreas e setores", roles: ["CONTROLLER"], icon: ICON.estrutura },
+      { to: "/ciclo", label: "Ciclo e parâmetros", roles: ["CONTROLLER"], icon: ICON.ciclo },
+      { to: "/usuarios", label: "Usuários", roles: ["CONTROLLER"], icon: ICON.usuarios },
+      { to: "/auditoria", label: "Auditoria", roles: ["CONTROLLER"], icon: ICON.auditoria },
+    ],
+  },
+];
+const NAV = NAV_GROUPS.flatMap((g) => g.items);
+
+/** Iniciais do nome (primeiro e último), para o avatar do rodapé do menu. */
+function initials(name?: string) {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
 
 function PasswordModal({ onClose }: { onClose: () => void }) {
   const [current, setCurrent] = useState("");
@@ -73,54 +110,126 @@ export default function Layout() {
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <BrandMark size={56} />
+          <BrandMark size={44} />
           <div>
             <strong>Orçamento 2027</strong>
-            <span>Ciclo orçamentário</span>
+            <span>Controladoria · Grupo Atem</span>
           </div>
         </div>
-        <nav id="main-nav">
-          {NAV.filter((n) => !n.roles || can(...n.roles)).map((n) => (
-            <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")}>
-              {n.label}
-            </NavLink>
-          ))}
-          {SOON.length > 0 && <div className="nav-section">Próximas fases</div>}
-          {SOON.map((s) => (
-            <span key={s} className="nav-disabled">
-              {s}
-            </span>
-          ))}
+        <nav id="main-nav" aria-label="Navegação principal">
+          {NAV_GROUPS.map((g) => {
+            const items = g.items.filter((n) => !n.roles || can(...n.roles));
+            if (!items.length) return null;
+            return (
+              <div className="nav-group" key={g.title}>
+                <div className="nav-section">{g.title}</div>
+                {items.map((n) => (
+                  <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")}>
+                    <Icon d={n.icon} size={18} />
+                    <span>{n.label}</span>
+                  </NavLink>
+                ))}
+              </div>
+            );
+          })}
         </nav>
         <div className="sidebar-foot">
-          <div className="user-name">{user?.name}</div>
-          <div className="muted small">{user?.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</div>
-          <div className="inline-controls">
-            <button className="btn btn-ghost btn-sm" onClick={() => setPwd(true)}>Alterar senha</button>
-            <button className="btn btn-ghost btn-sm" onClick={logout}>Sair</button>
-          </div>
-          <div className="theme-row"><span className="lab">Tema</span><ThemeSwitch theme={theme} onChange={setTheme} /></div>
-          {pwd && <PasswordModal onClose={() => setPwd(false)} />}
+          <UserMenu
+            name={user?.name}
+            roles={user?.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}
+            theme={theme}
+            setTheme={setTheme}
+            onPassword={() => setPwd(true)}
+            onLogout={logout}
+          />
         </div>
       </aside>
       <main className="content">
         <Outlet />
       </main>
+      {pwd && <PasswordModal onClose={() => setPwd(false)} />}
       <MobileTabs can={can} more={more} setMore={setMore} onPassword={() => setPwd(true)} onLogout={logout} userName={user?.name} theme={theme} setTheme={setTheme} />
+    </div>
+  );
+}
+
+/**
+ * Conta no rodapé do menu: o cartão abre (para cima) senha e tema; o botão ao lado sai do sistema direto.
+ */
+function UserMenu({ name, roles, theme, setTheme, onPassword, onLogout }: {
+  name?: string; roles?: string; theme: Theme; setTheme: (t: Theme) => void; onPassword: () => void; onLogout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const location = useLocation();
+  useEffect(() => setOpen(false), [location.pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        toggle.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const run = (fn: () => void) => () => {
+    setOpen(false);
+    fn();
+  };
+  return (
+    <div className="side-user-wrap" ref={wrap}>
+      {open && (
+        <div className="side-menu" id="side-user-menu">
+          <button type="button" onClick={run(onPassword)}><Icon d={ICON.senha} size={16} />Alterar senha</button>
+          <div className="side-menu-theme"><span>Tema</span><ThemeSwitch theme={theme} onChange={setTheme} /></div>
+          <hr />
+          <button type="button" onClick={run(onLogout)}><Icon d={ICON.sair} size={16} />Sair</button>
+        </div>
+      )}
+      <div className="side-user">
+        <button
+          ref={toggle}
+          type="button"
+          className="side-user-btn"
+          aria-expanded={open}
+          aria-controls={open ? "side-user-menu" : undefined}
+          onClick={() => setOpen(!open)}
+          title="Minha conta: senha, tema e sair"
+        >
+          <span className="side-avatar" aria-hidden>{initials(name)}</span>
+          <span className="side-user-text">
+            <strong title={name}>{name}</strong>
+            <span>{roles}</span>
+          </span>
+        </button>
+        <button type="button" className="side-lock" onClick={onLogout} title="Sair" aria-label="Sair">
+          <Icon d={ICON.sair} size={18} />
+        </button>
+      </div>
     </div>
   );
 }
 
 // Barra de abas inferior (celular): destinos principais + "Mais" com o restante da navegação e a conta.
 const TABS = [
-  { to: "/", label: "Painel", end: true, icon: "M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" },
-  { to: "/analise", label: "Análise", icon: "M4 19h16M6 16V9m4 7V5m4 11v-6m4 6V7" },
-  { to: "/consolidacao", label: "Consolidação", icon: "M12 3 3 7.5l9 4.5 9-4.5L12 3zM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5" },
+  { to: "/", label: "Painel", end: true, icon: ICON.painel },
+  { to: "/analise", label: "Análise", icon: ICON.analise },
+  { to: "/consolidacao", label: "Consolidação", icon: ICON.consolidacao },
 ];
 
-function Icon({ d }: { d: string }) {
+function Icon({ d, size = 22 }: { d: string; size?: number }) {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
       <path d={d} />
     </svg>
   );
@@ -140,6 +249,7 @@ function MobileTabs({ can, more, setMore, onPassword, onLogout, userName, theme,
             <nav className="sheet-nav">
               {rest.map((n) => (
                 <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")}>
+                  <Icon d={n.icon} size={20} />
                   {n.label}
                 </NavLink>
               ))}
@@ -161,7 +271,7 @@ function MobileTabs({ can, more, setMore, onPassword, onLogout, userName, theme,
           </NavLink>
         ))}
         <button type="button" className={more ? "active" : ""} aria-expanded={more} onClick={() => setMore(!more)}>
-          <Icon d="M5 12h.01M12 12h.01M19 12h.01" />
+          <Icon d={ICON.mais} />
           <span>Mais</span>
         </button>
       </nav>
