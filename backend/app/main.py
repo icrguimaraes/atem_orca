@@ -25,6 +25,7 @@ from app.api.v1 import (
     personnel,
     rules,
     users,
+    validation,
 )
 from app.config import get_settings
 from app.db import SessionLocal, engine
@@ -95,6 +96,7 @@ for module in (
     consolidation,
     analytics,
     findings,
+    validation,
 ):
     api.include_router(module.router)
 app.include_router(api)

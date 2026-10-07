@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api, download, type Finding, type Findings as FindingsData } from "../api";
 import { FilterBar } from "../components/FilterBar";
 import { BulkFix, FixModal, InlineFix, KeepModal, canBulkFix } from "../components/FindingForms";
@@ -43,7 +43,8 @@ export default function Findings() {
   const [tab, setTab] = useState<Tab>("open");
   const [module, setModule] = useState("");
   const [severity, setSeverity] = useState("");
-  const [cc, setCc] = useState("");
+  const [params] = useSearchParams();
+  const [cc, setCc] = useState(params.get("cc") ?? ""); // ?cc= vem da Validação ("Corrigir em Apontamentos")
   const [search, setSearch] = useState("");
   const [schedule, setSchedule] = useState<Finding | null>(null);
   const [keeping, setKeeping] = useState<Finding[] | null>(null);
@@ -280,6 +281,11 @@ export default function Findings() {
                           )}
                           {i.fix && !i.editable && <span className="muted small">Fora de edição: solicite ajuste para corrigir</span>}
                           {!i.fix && i.link && <Link className="btn btn-sm" to={i.link}>Abrir o orçamento</Link>}
+                          {i.source && data.can_review && (
+                            <Link className="btn btn-ghost btn-sm" to={`/validacao/${i.source.batch_id}?sheet=${encodeURIComponent(i.source.sheet)}&row=${i.source.row}`} title={`${i.source.sheet}, linha ${i.source.row}`}>
+                              Ver no Excel
+                            </Link>
+                          )}
                           {i.can_keep && data.can_review && (
                             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setKeeping([i])}>Manter</button>
                           )}

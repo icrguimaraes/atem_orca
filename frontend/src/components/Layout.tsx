@@ -17,6 +17,7 @@ const ICON = {
   analise: "M4 19h16M6 16V9m4 7V5m4 11v-6m4 6V7",
   consolidacao: "M12 3 3 7.5l9 4.5 9-4.5L12 3zM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5",
   apontamentos: "M12 4 2.5 20h19L12 4zM12 10v4M12 17h.01",
+  validacao: "M4 4h16v16H4zM4 9h16M4 14h16M9 4v16M14 4v16",
   importacoes: "M12 15V4m0 0-4 4m4-4 4 4M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4",
   cadastros: "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6",
   estrutura: "M9 3h6v5H9zM12 8v3M6 14v-3h12v3M3 14h6v5H3zM15 14h6v5h-6z",
@@ -36,6 +37,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { to: "/analise", label: "Análise orçamentária", icon: ICON.analise },
       { to: "/consolidacao", label: "Consolidação e exportação", icon: ICON.consolidacao },
       { to: "/apontamentos", label: "Apontamentos", icon: ICON.apontamentos },
+      { to: "/validacao", label: "Validação", roles: ["CONTROLLER"], icon: ICON.validacao },
     ],
   },
   {

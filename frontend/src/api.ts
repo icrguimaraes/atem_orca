@@ -472,6 +472,7 @@ export interface Finding {
   cost_center_id: number; cost_center: string; sector?: string | null; status: string; subject: string; detail: string | null;
   message: string; amount: string | null; link: string | null;
   fix: FindingFix | null; can_keep: boolean; editable: boolean;
+  source?: { batch_id: number; sheet: string; row: number } | null;  // linha da planilha (Validação)
 }
 export interface FindingReviewItem {
   id: number; action: "CORRECTED" | "KEPT"; action_label: string; kind: string; kind_label: string; severity: string;
@@ -493,4 +494,23 @@ export interface VersionCompare {
   cost_centers: { cost_center_id: number; code: string; label: string | null; from: string; to: string; difference: string; difference_pct: string | null }[];
   accounts: { cost_center_id: number; cost_center: string; module: string; account: string; label: string | null; from: string; to: string; difference: string; difference_pct: string | null }[];
   changed_accounts: number;
+}
+
+/* Validação: planilha como foi enviada × o que o sistema leu */
+export interface ValidationFile {
+  id: number; file_name: string; dataset_type: string; created_at: string | null; uploaded_by: string | null;
+  total_rows: number; valid_rows: number; warning_rows: number; error_rows: number; cost_centers: string[]; older_versions: number;
+}
+export interface ValidationOverview {
+  id: number; file_name: string; dataset_type: string | null; status: string; created_at: string | null;
+  total_rows: number; valid_rows: number; warning_rows: number; error_rows: number;
+  sheets: { name: string; rows: number; cols: number; records: number; warnings: number; errors: number; missing_formulas: number }[];
+}
+export interface ValidationMark {
+  records: { record_type: string; status: string; data: Record<string, any> }[];
+  issues: { severity: string; code: string; message: string; column: string | null }[];
+}
+export interface ValidationSheet {
+  name: string; cols: number; rows: { n: number; cells: (string | number | boolean | null)[] }[]; truncated: boolean;
+  missing: [number, number][]; marks: Record<string, ValidationMark>;
 }

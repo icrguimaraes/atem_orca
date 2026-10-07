@@ -32,6 +32,8 @@ from app.models import (
     Department,
     Employee,
     FindingReview,
+    ImportBatch,
+    ImportRow,
     LookupValue,
     PersonnelMovement,
     User,
@@ -187,8 +189,87 @@ def collect(
     if structure and cc_ids is None:
         items += employees_without_cost_center(db)
     items = [i for i in items if i["key"] not in kept]
+    attach_sources(db, items)
     items.sort(key=lambda i: (SEVERITY_ORDER[i["severity"]], i["cost_center"], i["module"], i["kind"], i["subject"]))
     return items
+
+
+def _src(attrs: dict | None, row: int | None = None) -> dict | None:
+    attrs = attrs or {}
+    row = row if row is not None else attrs.get("row")
+    if not attrs.get("import_batch") or not attrs.get("sheet") or not row:
+        return None
+    return {"batch_id": attrs["import_batch"], "sheet": attrs["sheet"], "row": row}
+
+
+def attach_sources(db: Session, items: list[dict]) -> None:
+    """Origem de cada apontamento na planilha importada (arquivo, aba, linha), para "Ver no Excel" (Validação).
+    OPEX e viagens guardam a linha no lançamento; CAPEX, as linhas da solicitação; Pessoal, pela matrícula na
+    última importação concluída do quadro."""
+    employee_rows: dict[int, dict | None] = {}
+
+    def employee_source(emp_id: int | None) -> dict | None:
+        if not emp_id:
+            return None
+        if emp_id not in employee_rows:
+            emp = db.get(Employee, emp_id)
+            hit = None
+            if emp is not None and emp.registration:
+                hit = db.execute(
+                    select(ImportRow.batch_id, ImportRow.sheet, ImportRow.row_number)
+                    .join(ImportBatch, ImportBatch.id == ImportRow.batch_id)
+                    .where(
+                        ImportBatch.status == "COMPLETED",
+                        ImportRow.record_type == "EMPLOYEE",
+                        ImportRow.data["registration"].astext == emp.registration,
+                    )
+                    .order_by(ImportBatch.id.desc())
+                    .limit(1)
+                ).first()
+            employee_rows[emp_id] = {"batch_id": hit[0], "sheet": hit[1], "row": hit[2]} if hit else None
+        return employee_rows[emp_id]
+
+    for i in items:
+        entity, ident = i.get("entity"), i.get("entity_id")
+        source = None
+        try:
+            if entity == "OPEX_ACCOUNT":
+                for line in db.scalars(
+                    select(BudgetLine)
+                    .where(BudgetLine.submission_id == i["submission_id"], BudgetLine.account_id == int(ident))
+                    .order_by(BudgetLine.id)
+                ):
+                    source = _src(line.attributes)
+                    if source:
+                        break
+            elif entity == "TRAVEL":
+                line = db.scalar(
+                    select(BudgetLine)
+                    .where(BudgetLine.submission_id == i["submission_id"], BudgetLine.group_ref == ident)
+                    .order_by(BudgetLine.id)
+                    .limit(1)
+                )
+                source = _src(line.attributes) if line else None
+            elif entity == "CAPEX_PROJECT":
+                project = db.get(CapexProject, int(ident))
+                rows = ((project.attributes or {}).get("rows") or [None]) if project else [None]
+                source = _src(project.attributes, rows[0]) if project else None
+            elif entity == "CAPEX_ITEM":
+                item = db.get(CapexItem, int(ident))
+                project = db.get(CapexProject, item.project_id) if item else None
+                if project is not None:
+                    rows = (project.attributes or {}).get("rows") or []
+                    ids = sorted(x.id for x in project.items)
+                    idx = ids.index(item.id) if item.id in ids else 0
+                    source = _src(project.attributes, rows[idx] if idx < len(rows) else (rows[0] if rows else None))
+            elif entity == "PERSONNEL_MOVEMENT":
+                mv = db.get(PersonnelMovement, int(ident))
+                source = employee_source(mv.employee_id) if mv else None
+            elif entity == "EMPLOYEE":
+                source = employee_source(int(ident))
+        except (TypeError, ValueError):
+            source = None
+        i["source"] = source
 
 
 def employees_without_cost_center(db: Session) -> list[dict]:

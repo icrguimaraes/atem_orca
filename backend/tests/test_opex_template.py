@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from tests import builders
 from tests.test_imports import import_and_load, status, upload
+from tests.test_opex import _user
 
 
 def test_findings_fix_travel_fare_and_account_justification(client, admin, run_worker):
@@ -254,3 +255,28 @@ def test_move_line_to_other_cost_center(client, admin, run_worker):
     assert line["id"] in {x["id"] for x in there}
     reviews = client.get("/api/v1/findings", headers=admin).json()["reviews"]
     assert any(r["kind"] == "OPEX_MOVED_CC" and r["action"] == "CORRECTED" for r in reviews)
+
+
+def test_validation_shows_sheet_and_findings_point_to_rows(client, admin, run_worker):
+    """Validação: a planilha como foi enviada com o que o sistema leu em cada linha; o apontamento traz a origem
+    (arquivo, aba, linha) para "Ver no Excel"."""
+    final = import_and_load(client, admin, run_worker, builders.opex_template_filled(), "t-valid.xlsx")
+    batch_id = final["id"]
+    files = client.get("/api/v1/validation/files", headers=admin).json()
+    assert any(f["id"] == batch_id and "1050101011" in f["cost_centers"] for f in files)
+    overview = client.get(f"/api/v1/validation/{batch_id}", headers=admin).json()
+    read = [s for s in overview["sheets"] if s["records"] > 0]
+    assert read and any(s["name"] == "I - Viagens" for s in read)
+
+    fare = next(
+        i for i in client.get("/api/v1/findings", headers=admin).json()["items"] if i["kind"] == "TRAVEL_NO_FARE"
+    )
+    src = fare["source"]
+    assert src["batch_id"] == batch_id and src["sheet"] == "I - Viagens" and src["row"] > 0
+    sheet = client.get(f"/api/v1/validation/{batch_id}/sheet", headers=admin, params={"name": src["sheet"]}).json()
+    assert sheet["cols"] > 0 and any(r["n"] == src["row"] for r in sheet["rows"])
+    mark = sheet["marks"][str(src["row"])]
+    assert mark["records"][0]["record_type"] == "TRAVEL"
+    assert client.get(f"/api/v1/validation/{batch_id}/sheet", headers=admin, params={"name": "x"}).status_code == 404
+    _, mgr = _user(client, admin, "gestor.valid@t.com", ["MANAGER"])
+    assert client.get("/api/v1/validation/files", headers=mgr).status_code == 403

@@ -12,6 +12,7 @@ import CapexCostCenter from "./pages/CapexCostCenter";
 import Consolidation from "./pages/Consolidation";
 import CyclePage from "./pages/CyclePage";
 import Findings from "./pages/Findings";
+import Validation from "./pages/Validation";
 import ImportDetail from "./pages/ImportDetail";
 import Imports from "./pages/Imports";
 import Login from "./pages/Login";
@@ -57,6 +58,8 @@ export default function App() {
             <Route path="pessoal/:ccId" element={<PersonnelCostCenter />} />
             <Route path="consolidacao" element={<Consolidation />} />
             <Route path="apontamentos" element={<Findings />} />
+            <Route path="validacao" element={<Protected roles={["CONTROLLER"]}><Validation /></Protected>} />
+            <Route path="validacao/:id" element={<Protected roles={["CONTROLLER"]}><Validation /></Protected>} />
             <Route path="cadastros" element={<MasterData />} />
             <Route path="estrutura" element={<Protected roles={["CONTROLLER"]}><Structure /></Protected>} />
             <Route path="ciclo" element={<CyclePage />} />
