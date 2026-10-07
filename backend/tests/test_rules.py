@@ -55,6 +55,20 @@ def test_capex_classification_against_catalog_and_software():
     assert capex.check_classification("X", None) == []
 
 
+def test_sector_for_position():
+    from app.domain.rules.personnel import sector_for_position
+
+    sectors = {1: "Contabilidade", 2: "Controladoria", 3: "Custos", 4: "Fiscal", 5: "CSC", 6: "Diretoria"}
+    assert sector_for_position("ANALISTA CONTABIL JR", sectors) == 1
+    assert sector_for_position("Assistente Contábil Sr", sectors) == 1
+    assert sector_for_position("ESPECIALISTA DE CONTROLADORIA", sectors) == 2
+    assert sector_for_position("ANALISTA DE CUSTOS PL", sectors) == 3
+    assert sector_for_position("ANALISTA FISCAL SR", sectors) == 4
+    assert sector_for_position("ANALISTA DE CSC SR", sectors) == 5
+    assert sector_for_position("ANALISTA", sectors) is None  # sem pista de setor
+    assert sector_for_position(None, sectors) is None
+
+
 def test_event_meal_by_type_and_month():
     total_value, months = opex.calculate_event(opex.EventInput(6, 50, D("120"), structure=D("1000"), gifts=D("500")))
     assert total_value == D("7500.00")

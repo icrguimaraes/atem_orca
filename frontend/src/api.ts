@@ -448,7 +448,7 @@ export interface AttentionPoint {
   cost_center_id: number | null; cost_center: string | null; message: string; link: string | null;
 }
 export interface FindingFix {
-  type: "schedule" | "account" | "text" | "project_type" | "ticket";
+  type: "schedule" | "account" | "text" | "project_type" | "ticket" | "money" | "confirm";
   total?: string; values?: Record<string, string>; account_id?: number; account?: string; label?: string; route?: string;
 }
 export interface Finding {

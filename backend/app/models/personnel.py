@@ -48,6 +48,8 @@ class Employee(TimestampMixin, Base):
     is_csc: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     dataset_version_id: Mapped[int | None] = mapped_column(ForeignKey("dataset_versions.id"))
+    # pendências da importação (ex.: "pending_cc": CC vazio na planilha, definido pelo cargo — confirmar)
+    attributes: Mapped[dict | None] = mapped_column(JSONB)
 
 
 class BenefitType(Base):

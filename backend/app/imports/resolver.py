@@ -9,8 +9,19 @@ from sqlalchemy.orm import Session
 
 from app.domain.rules import capex as capex_rules
 from app.domain.rules.opex import TRAVEL_TICKET_ACCOUNT, missing_fare_warning
+from app.domain.rules.personnel import sector_for_position
 from app.imports.base import ParseResult, Record
-from app.models import Account, AssetClass, Branch, BudgetPackage, Company, ContractType, CostCenter, LookupValue
+from app.models import (
+    Account,
+    Area,
+    AssetClass,
+    Branch,
+    BudgetPackage,
+    Company,
+    ContractType,
+    CostCenter,
+    LookupValue,
+)
 
 
 class Dimensions:
@@ -28,6 +39,7 @@ class Dimensions:
         self.packages = {p.name.upper(): p.id for p in db.scalars(select(BudgetPackage))}
         self.package_names = {p.id: p.name.upper() for p in db.scalars(select(BudgetPackage))}
         self.contracts = {c.code for c in db.scalars(select(ContractType))}
+        self.sectors = {a.id: a.name for a in db.scalars(select(Area))}  # setores (página Áreas e setores)
         self.capex_types = {
             lv.code.upper(): lv.code
             for lv in db.scalars(select(LookupValue).where(LookupValue.domain == "CAPEX_PROJECT_TYPE"))
@@ -216,10 +228,38 @@ def validate_employees(result: ParseResult, dims: Dimensions, options: dict) -> 
             d["cost_center_id"] = cc.id if cc else None
             d["cost_center"] = options["cost_center_code"]
         else:
-            rec.warn("NO_COST_CENTER", "Colaborador sem centro de custo", "Centro de Custo")
+            inferred = _cc_from_position(dims, company_id, d.get("position"))
+            if inferred is not None:
+                cc, sector = inferred
+                d["cost_center"], d["cost_center_id"], d["cc_from_position"] = cc.code, cc.id, sector
+                rec.warn(
+                    "CC_FROM_POSITION",
+                    f"Centro de custo vazio: usado {cc.code} · {cc.name} pelo cargo (setor {sector}); "
+                    "fica pendente para confirmar em Apontamentos",
+                    "Centro de Custo",
+                    d.get("position"),
+                )
+            else:
+                rec.warn(
+                    "NO_COST_CENTER",
+                    "Colaborador sem centro de custo: não entra no orçamento de nenhum CC (preencha na planilha ou "
+                    "ligue o cargo a um setor com centro de custo em Áreas e setores)",
+                    "Centro de Custo",
+                )
         if rec.natural_key:
             rec.natural_key = f"{d['company']}|{d['registration']}"
     _mark_duplicates(result.records)
+
+
+def _cc_from_position(dims: Dimensions, company_id: int, position: str | None) -> tuple[CostCenter, str] | None:
+    """CC do setor indicado pelo cargo, quando o setor tem um único CC ativo na empresa."""
+    sector_id = sector_for_position(position, dims.sectors)
+    if sector_id is None:
+        return None
+    ccs = [
+        c for (cid, _), c in dims.cost_centers.items() if cid == company_id and c.area_id == sector_id and c.is_active
+    ]
+    return (ccs[0], dims.sectors[sector_id]) if len(ccs) == 1 else None
 
 
 def _subset(result: ParseResult, *types: str) -> ParseResult:

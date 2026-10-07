@@ -86,6 +86,7 @@ class FixIn(BaseModel):
     values: dict[int, Decimal | None] | None = None
     ticket_amount: Decimal | None = None
     project_type_code: str | None = None
+    amount: Decimal | None = None  # novo salário (promoção pendente)
 
 
 @router.post("/fix", summary="Corrige o apontamento na própria página (cronograma, conta, justificativa, passagem)")

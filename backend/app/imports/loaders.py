@@ -405,6 +405,7 @@ def load_employees(db: Session, batch: ImportBatch, user_id: int | None) -> dict
     companies = sorted({r.data["company"] for r in rows})
     version = new_version(db, batch, "EMPLOYEES", "EMPLOYEES:" + ",".join(companies), user_id, "EXCEL")
     positions = {p.name.upper(): p.id for p in db.scalars(select(JobPosition))}
+    pending_ccs: set[int] = set()
     for row in rows:
         d = row.data
         pos_name = d.get("position")
@@ -421,6 +422,11 @@ def load_employees(db: Session, batch: ImportBatch, user_id: int | None) -> dict
         emp = db.scalar(
             select(Employee).where(Employee.company_id == d["company_id"], Employee.registration == d["registration"])
         )
+        attrs = dict((emp.attributes if emp is not None else None) or {})
+        attrs.pop("pending_cc", None)
+        if d.get("cc_from_position"):  # CC vazio na planilha, definido pelo cargo: confirmar em Apontamentos
+            attrs["pending_cc"] = {"sector": d["cc_from_position"], "position": pos_name, "import_batch": batch.id}
+            pending_ccs.add(d["cost_center_id"])
         fields = {
             "name": d["name"],
             "branch_id": d.get("branch_id"),
@@ -434,6 +440,7 @@ def load_employees(db: Session, batch: ImportBatch, user_id: int | None) -> dict
             "termination_date": date.fromisoformat(d["termination"]) if d.get("termination") else None,
             "dataset_version_id": version.id,
             "is_active": True,
+            "attributes": attrs or None,
         }
         if emp is None:
             emp = Employee(company_id=d["company_id"], registration=d["registration"], **fields)
@@ -478,8 +485,27 @@ def load_employees(db: Session, batch: ImportBatch, user_id: int | None) -> dict
         stats["employees_deactivated"] = result.rowcount
     db.flush()
     stats["movements"] = load_personnel_actions(db, batch, user_id)
+    if pending_ccs:
+        stats["cost_center_from_position"] = sum(1 for r in rows if r.data.get("cc_from_position"))
+        _open_personnel_budgets(db, pending_ccs, user_id)
     version.row_count = len(rows)
     return dict(stats)
+
+
+def _open_personnel_budgets(db: Session, cc_ids: set[int], user_id: int | None) -> None:
+    """Orçamentos de pessoal dos CCs com colaborador pendente passam a "em preenchimento" (aparecem em Apontamentos)."""
+    from app.services import opex as opex_svc
+
+    try:
+        ctx = opex_svc.context(db)
+    except opex_svc.OpexError:
+        return
+    if ctx.frozen:
+        return
+    for cc_id in cc_ids:
+        sub = opex_svc.get_submission(db, ctx, cc_id, module="PERSONNEL")
+        opex_svc.mark_in_progress(db, sub, ctx, user_id)
+    db.flush()
 
 
 def load_personnel_actions(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
@@ -551,6 +577,7 @@ def load_personnel_actions(db: Session, batch: ImportBatch, user_id: int | None)
                             "new_salary": d.get("new_salary"),
                             "new_position": d.get("new_position"),
                             "source": "TEMPLATE",
+                            "pending_ok": True,  # promoção sem novo salário entra pendente (Apontamentos)
                         },
                         user_id,
                     )

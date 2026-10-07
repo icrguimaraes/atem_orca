@@ -29,7 +29,7 @@ export function FixModal({ finding, projectTypes, onClose, onDone }: {
     fix.type === "schedule" ? diff === 0 && total > 0
       : fix.type === "text" ? text.trim().length > 0
         : fix.type === "project_type" ? projectType !== ""
-          : fix.type === "ticket" ? ticketValue > 0
+          : fix.type === "ticket" || fix.type === "money" ? ticketValue > 0
             : true;
 
   const allIn = () => setValues(MONTHS.map((_, i) => (i + 1 === Number(oneMonth) ? total : 0)));
@@ -52,6 +52,7 @@ export function FixModal({ finding, projectTypes, onClose, onDone }: {
     if (fix.type === "text") body.text = text;
     if (fix.type === "project_type") body.project_type_code = projectType;
     if (fix.type === "ticket") body.ticket_amount = ticketValue;
+    if (fix.type === "money") body.amount = ticketValue;
     try {
       const r = await api<{ note: string }>("/findings/fix", { method: "POST", body: JSON.stringify(body) });
       onDone(r.note);
@@ -70,7 +71,7 @@ export function FixModal({ finding, projectTypes, onClose, onDone }: {
         <>
           <button type="button" className="btn" onClick={onClose}>Cancelar</button>
           <button type="button" className="btn btn-primary" disabled={!ready || busy} onClick={save}>
-            {busy ? "Salvando…" : fix.type === "account" ? "Usar conta do catálogo" : "Salvar correção"}
+            {busy ? "Salvando…" : fix.type === "account" ? "Usar conta do catálogo" : fix.type === "confirm" ? (fix.label ?? "Confirmar") : "Salvar correção"}
           </button>
         </>
       }
@@ -136,6 +137,16 @@ export function FixModal({ finding, projectTypes, onClose, onDone }: {
             {projectTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </label>
+      )}
+
+      {fix.type === "money" && (
+        <label>{fix.label}
+          <input value={ticket} onChange={(e) => setTicket(e.target.value)} inputMode="decimal" placeholder="0,00" autoFocus />
+        </label>
+      )}
+
+      {fix.type === "confirm" && (
+        <p>Confirma que o item está certo como o sistema definiu? A pendência sai da lista e fica no registro da análise.</p>
       )}
 
       {fix.type === "ticket" && (

@@ -506,9 +506,12 @@ def set_employee_movement(
     target = None
     severance = None
     if kind in ("PROMOTION", "SALARY_ADJUSTMENT"):
-        new_salary = _money(data.get("new_salary"), "o novo salário", required=True)
-        if new_salary == Decimal(employee.base_salary or 0):
-            raise PersonnelError("O novo salário é igual ao atual")
+        if data.get("pending_ok") and data.get("new_salary") in (None, ""):
+            new_salary = None  # importação: promoção sem novo salário fica pendente (sem aumento até informar)
+        else:
+            new_salary = _money(data.get("new_salary"), "o novo salário", required=True)
+            if new_salary == Decimal(employee.base_salary or 0):
+                raise PersonnelError("O novo salário é igual ao atual")
     elif kind == "TERMINATION":
         severance = _money(data.get("severance_cost"), "a verba rescisória")
     elif kind == "TRANSFER":
@@ -547,9 +550,11 @@ def set_employee_movement(
     mv.reason = (data.get("reason") or "").strip() or None
     mv.quantity = 1
     mv.updated_by = user_id
-    mv.attributes = (mv.attributes or {}) | {
-        "source": (data.get("source") or (mv.attributes or {}).get("source") or "SYSTEM")
-    }
+    attrs = (mv.attributes or {}) | {"source": (data.get("source") or (mv.attributes or {}).get("source") or "SYSTEM")}
+    attrs.pop("pending", None)
+    if kind in ("PROMOTION", "SALARY_ADJUSTMENT") and new_salary is None:
+        attrs["pending"] = ["new_salary"]
+    mv.attributes = attrs
     if current is None:
         db.add(mv)
     db.flush()
@@ -590,11 +595,48 @@ def save_hire(
 
 def blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[str]:
     """Contratações e desligamentos precisam de justificativa para o envio (análise da Controladoria/RH)."""
+    out = []
     missing = [label for _, label in missing_reasons(db, sub)]
     if missing:
         extra = f" e mais {len(missing) - 5}" if len(missing) > 5 else ""
-        return [f"justificativa obrigatória: {', '.join(missing[:5])}{extra}"]
-    return []
+        out.append(f"justificativa obrigatória: {', '.join(missing[:5])}{extra}")
+    salaries = [label for _, label in pending_salaries(db, sub)]
+    if salaries:
+        extra = f" e mais {len(salaries) - 5}" if len(salaries) > 5 else ""
+        out.append(f"novo salário pendente: {', '.join(salaries[:5])}{extra}")
+    return out
+
+
+def pending_salaries(db: Session, sub: BudgetSubmission) -> list[tuple[PersonnelMovement, str]]:
+    """Promoções e reajustes sem novo salário (vieram assim da planilha): ficam sem aumento até informar."""
+    out = []
+    for mv in db.scalars(
+        select(PersonnelMovement).where(
+            PersonnelMovement.submission_id == sub.id,
+            PersonnelMovement.movement_type.in_(("PROMOTION", "SALARY_ADJUSTMENT")),
+            PersonnelMovement.new_salary.is_(None),
+        )
+    ):
+        emp = db.get(Employee, mv.employee_id) if mv.employee_id else None
+        if emp is None or emp.cost_center_id != sub.cost_center_id:
+            continue
+        out.append((mv, f"{MOVE_LABELS[mv.movement_type].lower()} de {emp.name}"))
+    return out
+
+
+def pending_cost_centers(db: Session, sub: BudgetSubmission) -> list[Employee]:
+    """Colaboradores do CC cujo centro de custo veio vazio na planilha e foi definido pelo cargo (confirmar)."""
+    return list(
+        db.scalars(
+            select(Employee)
+            .where(
+                Employee.cost_center_id == sub.cost_center_id,
+                Employee.is_active,
+                Employee.attributes.has_key("pending_cc"),
+            )
+            .order_by(Employee.name)
+        )
+    )
 
 
 def missing_reasons(db: Session, sub: BudgetSubmission) -> list[tuple[PersonnelMovement, str]]:

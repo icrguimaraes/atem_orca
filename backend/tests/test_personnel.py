@@ -176,6 +176,68 @@ def test_quadro_without_cost_center_uses_default(client, admin, run_worker):
     assert b["summary"]["comparison"]["movements"][0]["actions"] == 2
 
 
+def test_quadro_pending_cost_center_and_salary(client, admin, run_worker):
+    """Planilha com CC vazio e promoção sem novo salário entra com pendências: CC pelo cargo (setor) e salário
+    a informar em Apontamentos; quem não tem setor com CC fica sem CC (aviso)."""
+    import_and_load(client, admin, run_worker, builders.opex_template_bd(), "bd.xlsx", dataset_type="MASTER_DATA")
+    ccs = {c["code"]: c for c in client.get("/api/v1/cost-centers", headers=admin).json()}
+    contab = next(a for a in client.get("/api/v1/areas", headers=admin).json() if a["name"] == "Contabilidade")
+    client.patch(
+        f"/api/v1/cost-centers/{ccs[CC1]['id']}",
+        headers=admin,
+        json={"area_id": contab["id"], "department_id": contab["department_id"]},
+    )
+    rows = [
+        (
+            "400",
+            "DIANA",
+            "ANALISTA CONTABIL JR",
+            None,
+            None,
+            None,
+            7000,
+            "PROMOVER",
+            5,
+            "ANALISTA CONTABIL PL",
+            None,
+            "CLT",
+            None,
+            None,
+        ),
+        ("500", "EDU", "ANALISTA CONTABIL SR", None, None, None, 9000, "MANTER", None, None, None, "CLT", None, None),
+        ("600", "FABIO", "ANALISTA DE CSC SR", None, None, None, 8000, "MANTER", None, None, None, "CLT", None, None),
+    ]
+    batch_id = upload(client, admin, builders.quadro_funcionarios(rows), "q.xlsx")
+    run_worker()
+    errors = client.get(f"/api/v1/imports/{batch_id}/errors", headers=admin).json()
+    codes = {e["code"] for e in (errors["items"] if isinstance(errors, dict) else errors)}
+    assert {"CC_FROM_POSITION", "PROMOTION_NO_SALARY", "NO_COST_CENTER"} <= codes
+    assert status(client, admin, batch_id)["error_rows"] == 0
+    assert client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin).status_code == 200
+    run_worker()
+    assert status(client, admin, batch_id)["status"] == "COMPLETED"
+
+    found = [i for i in client.get("/api/v1/findings", headers=admin).json()["items"] if i["module"] == "PERSONNEL"]
+    salary = [i for i in found if i["kind"] == "PERSONNEL_NO_SALARY"]
+    guessed = [i for i in found if i["kind"] == "PERSONNEL_CC_GUESSED"]
+    assert [i["subject"] for i in salary] == ["Promoção de DIANA"] and salary[0]["severity"] == "CRITICAL"
+    assert sorted(i["subject"] for i in guessed) == ["DIANA · ANALISTA CONTABIL JR", "EDU · ANALISTA CONTABIL SR"]
+    assert all(i["cost_center_id"] == ccs[CC1]["id"] for i in salary + guessed)
+    # a projeção funciona com a promoção pendente (sem aumento) e o envio fica bloqueado até informar o salário
+    head = client.get(f"/api/v1/personnel/cost-centers/{ccs[CC1]['id']}", headers=admin).json()
+    assert client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).status_code == 200
+    sent = client.post(f"/api/v1/personnel/submissions/{head['submission_id']}/actions/submit", headers=admin, json={})
+    assert sent.status_code == 409 and "novo salário pendente" in sent.json()["detail"]
+
+    fixed = client.post("/api/v1/findings/fix", headers=admin, json={"key": salary[0]["key"], "amount": 7800})
+    assert fixed.status_code == 200 and fixed.json()["note"] == "Novo salário: R$ 7.800,00"
+    edu = next(i for i in guessed if i["subject"].startswith("EDU"))
+    confirmed = client.post("/api/v1/findings/fix", headers=admin, json={"key": edu["key"]})
+    assert confirmed.status_code == 200 and confirmed.json()["note"].startswith(f"Centro de custo confirmado: {CC1}")
+    left = {i["key"] for i in client.get("/api/v1/findings", headers=admin).json()["items"]}
+    assert salary[0]["key"] not in left and edu["key"] not in left
+
+
 def test_inactive_contract_type_still_computes(client, admin, run_worker):
     ccs, mgr, _ = _setup(client, admin, run_worker)
     r = client.patch("/api/v1/contract-types/PJ", headers=admin, json={"is_active": False})

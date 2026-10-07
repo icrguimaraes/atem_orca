@@ -142,7 +142,11 @@ def parse_employees(sheets: list[Sheet], options: dict) -> ParseResult:
             if action in ("PROMOTION", "TERMINATION", "HIRE", "VACANCY") and action_month is None:
                 rec.error("REQUIRED", "Mês da ação obrigatório para a ação informada", "Mês da Ação")
             if action == "PROMOTION" and new_salary is None:
-                rec.error("REQUIRED", "Novo salário obrigatório para promoção", "Novo Salário")
+                rec.warn(
+                    "PROMOTION_NO_SALARY",
+                    "Promoção sem novo salário: entra pendente, sem aumento, até informar o valor em Apontamentos",
+                    "Novo Salário",
+                )
             if registration is None:
                 if (name or "").upper().startswith("VAGA") or action == "HIRE":
                     rec.record_type = "VACANCY"

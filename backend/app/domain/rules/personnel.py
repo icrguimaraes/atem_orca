@@ -16,6 +16,63 @@ from decimal import Decimal
 from app.domain.rules.common import MONTHS, money
 
 # Mapeamento das ações do template para os tipos de movimento do sistema
+# palavras do cargo que não indicam o setor (nível, função genérica)
+_POSITION_STOPWORDS = {
+    "ANALISTA",
+    "ASSISTENTE",
+    "AUXILIAR",
+    "ESPECIALISTA",
+    "COORDENADOR",
+    "COORDENADORA",
+    "GERENTE",
+    "SUPERVISOR",
+    "SUPERVISORA",
+    "ESTAGIARIO",
+    "ESTAGIARIA",
+    "TECNICO",
+    "TECNICA",
+    "JOVEM",
+    "APRENDIZ",
+    "JR",
+    "PL",
+    "SR",
+    "DE",
+    "DA",
+    "DO",
+    "DOS",
+    "DAS",
+    "E",
+    "EM",
+    "I",
+    "II",
+    "III",
+    "IV",
+}
+
+
+def _words(text: str) -> list[str]:
+    import unicodedata
+
+    plain = unicodedata.normalize("NFKD", text or "").encode("ascii", "ignore").decode().upper()
+    return [w for w in "".join(c if c.isalnum() else " " for c in plain).split() if w]
+
+
+def sector_for_position(position: str | None, sectors: dict[int, str]) -> int | None:
+    """Setor indicado pelo cargo ("ANALISTA CONTABIL JR" → Contabilidade; "ANALISTA FISCAL SR" → Fiscal).
+
+    Uma palavra do cargo (fora nível e função genérica) casa com uma palavra do nome do setor quando uma é
+    início da outra ("CONTABIL" × "CONTABILIDADE"). Só devolve o setor quando exatamente um casa."""
+    words = [w for w in _words(position or "") if w not in _POSITION_STOPWORDS and len(w) >= 3]
+    if not words:
+        return None
+    found = set()
+    for sector_id, name in sectors.items():
+        for sw in _words(name):
+            if len(sw) >= 3 and any(sw.startswith(w) or w.startswith(sw) for w in words):
+                found.add(sector_id)
+    return found.pop() if len(found) == 1 else None
+
+
 TEMPLATE_ACTIONS = {
     "MANTER": "KEEP",
     "PROMOVER": "PROMOTION",

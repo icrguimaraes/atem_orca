@@ -28,6 +28,7 @@ from app.models import (
     CapexItem,
     CapexProject,
     CostCenter,
+    Employee,
     FindingReview,
     LookupValue,
     PersonnelMovement,
@@ -56,6 +57,8 @@ KIND_LABELS = {
     "CAPEX_ACCOUNT_MISMATCH": "Conta diferente do catálogo",
     "CAPEX_SOFTWARE": "Software no CAPEX",
     "PERSONNEL_JUSTIFICATION": "Movimentação sem justificativa",
+    "PERSONNEL_NO_SALARY": "Promoção sem novo salário",
+    "PERSONNEL_CC_GUESSED": "Centro de custo pelo cargo",
 }
 FLAG_TEXT = {
     "NEW_ACCOUNT": "Conta nova, sem histórico",
@@ -114,6 +117,26 @@ def collect(
                     label[0].upper() + label[1:],
                     "Justificativa obrigatória para enviar (análise da Controladoria e do RH)",
                     fix={"type": "text", "label": "Justificativa da movimentação"},
+                )
+            for mv, label in personnel_svc.pending_salaries(db, sub):
+                add(
+                    "CRITICAL",
+                    "PERSONNEL_NO_SALARY",
+                    ("PERSONNEL_MOVEMENT", mv.id),
+                    label[0].upper() + label[1:],
+                    "Novo salário não veio na planilha: a promoção está sem aumento até você informar o valor",
+                    fix={"type": "money", "label": "Novo salário mensal (R$)"},
+                )
+            for emp in personnel_svc.pending_cost_centers(db, sub):
+                info = (emp.attributes or {}).get("pending_cc") or {}
+                add(
+                    "WARNING",
+                    "PERSONNEL_CC_GUESSED",
+                    ("EMPLOYEE", emp.id),
+                    f"{emp.name} · {info.get('position') or 'cargo não informado'}",
+                    f"Centro de custo vazio na planilha: definido pelo cargo (setor {info.get('sector')}). Confirme; "
+                    "se estiver errado, corrija o centro de custo na planilha e importe de novo",
+                    fix={"type": "confirm", "label": "Confirmar centro de custo"},
                 )
     items = [i for i in items if i["key"] not in kept]
     items.sort(key=lambda i: (SEVERITY_ORDER[i["severity"]], i["cost_center"], i["module"], i["kind"], i["subject"]))
@@ -307,6 +330,29 @@ def apply_fix(
         amount = money(raw) if raw not in (None, "") else ZERO
         opex_svc.set_trip_ticket(db, sub, ident, amount, user_id)
         return f"Passagem incluída: {brl(amount)}", None, {"ticket_amount": str(amount)}
+    if kind == "PERSONNEL_NO_SALARY":
+        mv = db.get(PersonnelMovement, int(ident))
+        raw = data.get("amount")
+        amount = money(raw) if raw not in (None, "") else ZERO
+        if amount <= 0:
+            raise FindingError("Informe o novo salário")
+        emp = db.get(Employee, mv.employee_id) if mv.employee_id else None
+        if emp is not None and amount == money(emp.base_salary):
+            raise FindingError("O novo salário é igual ao atual")
+        mv.new_salary, mv.updated_by = amount, user_id
+        attrs = dict(mv.attributes or {})
+        attrs.pop("pending", None)
+        mv.attributes = attrs
+        db.flush()
+        return f"Novo salário: {brl(amount)}", {"new_salary": None}, {"new_salary": str(amount)}
+    if kind == "PERSONNEL_CC_GUESSED":
+        emp = db.get(Employee, int(ident))
+        attrs = dict(emp.attributes or {})
+        info = attrs.pop("pending_cc", None)
+        emp.attributes = attrs or None
+        db.flush()
+        cc = db.get(CostCenter, emp.cost_center_id)
+        return f"Centro de custo confirmado: {cc.code} · {cc.name}", {"pending_cc": info}, None
     if kind == "PERSONNEL_JUSTIFICATION":
         mv = db.get(PersonnelMovement, int(ident))
         before = {"reason": mv.reason}
