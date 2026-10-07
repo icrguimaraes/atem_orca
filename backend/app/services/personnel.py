@@ -620,7 +620,8 @@ def pending_salaries(db: Session, sub: BudgetSubmission) -> list[tuple[Personnel
         emp = db.get(Employee, mv.employee_id) if mv.employee_id else None
         if emp is None or emp.cost_center_id != sub.cost_center_id:
             continue
-        out.append((mv, f"{MOVE_LABELS[mv.movement_type].lower()} de {emp.name}"))
+        noun = {"PROMOTION": "promoção", "SALARY_ADJUSTMENT": "reajuste individual"}[mv.movement_type]
+        out.append((mv, f"{noun} de {emp.name}"))
     return out
 
 
