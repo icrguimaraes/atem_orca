@@ -390,6 +390,14 @@ movimentação de pessoal sem justificativa) e **avisos** (para a análise: pass
 baixo, vida útil curta, conta diferente do catálogo de ativos, software no CAPEX). Filtros por módulo, gravidade,
 tipo e CC; cada linha leva ao orçamento do CC. Respeita o escopo do usuário (gestor vê só os seus CCs).
 
+**Tela** (fila de trabalho): à esquerda, os CCs com críticos/avisos e a barra de progresso (resolvidos ÷ apontados);
+à direita, os apontamentos do CC agrupados por tipo, com a explicação do tipo e a correção **na própria linha** (mês,
+setor, tipo de projeto, salário, passagem, justificativa, confirmar; o cronograma abre a janela de meses). Grupos com a
+mesma correção têm **lote** ("Aplicar a todos", `POST /findings/fix-many`) e a Controladoria mantém vários avisos com
+um só motivo (`POST /findings/keep-many`); cada item do lote é aplicado à parte (savepoint) e a resposta lista o que
+não foi aplicado. Abas: Pendentes, Corrigidos e mantidos, Templates corrigidos. Para a Controladoria entra também
+**CC sem área e setor** (`STRUCTURE_NO_SECTOR`, um por CC com orçamento aberto), corrigido escolhendo o setor.
+
 **Correção na própria página** (`POST /api/v1/findings/fix`, mesma regra de edição das telas do CC — orçamento em
 edição e versão não congelada): cronograma do CAPEX (fecha com o total), conta do item pela do catálogo de ativos,
 justificativa da solicitação, tipo de projeto, justificativa da conta OPEX, valor da passagem da viagem (cria a linha

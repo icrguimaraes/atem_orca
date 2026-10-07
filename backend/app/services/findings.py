@@ -23,11 +23,13 @@ from app.domain.rules.common import MONTH_LABELS, MONTHS, money
 from app.domain.workflow import STATUS_LABELS
 from app.models import (
     Account,
+    Area,
     BudgetLine,
     BudgetSubmission,
     CapexItem,
     CapexProject,
     CostCenter,
+    Department,
     Employee,
     FindingReview,
     LookupValue,
@@ -60,6 +62,7 @@ KIND_LABELS = {
     "PERSONNEL_NO_SALARY": "Sem novo salário",
     "PERSONNEL_NO_MONTH": "Ação sem mês",
     "PERSONNEL_CC_GUESSED": "Centro de custo pelo cargo",
+    "STRUCTURE_NO_SECTOR": "CC sem área e setor",
 }
 FLAG_TEXT = {
     "NEW_ACCOUNT": "Conta nova, sem histórico",
@@ -89,9 +92,16 @@ def _pct(value: str | None) -> str:
 
 
 def collect(
-    db: Session, ctx: opex_svc.Context, cc_ids: set[int] | None, kept: set[str] | frozenset = frozenset()
+    db: Session,
+    ctx: opex_svc.Context,
+    cc_ids: set[int] | None,
+    kept: set[str] | frozenset = frozenset(),
+    *,
+    structure: bool = False,
 ) -> list[dict]:
-    """Apontamentos da versão em elaboração nos CCs visíveis (`cc_ids` None = todos), sem os avisos mantidos."""
+    """Apontamentos da versão em elaboração nos CCs visíveis (`cc_ids` None = todos), sem os avisos mantidos.
+
+    `structure` (Controladoria): inclui os CCs sem área e setor, que caem em "Sem setor" no Painel."""
     stmt = select(BudgetSubmission).where(
         BudgetSubmission.version_id == ctx.version.id, BudgetSubmission.status.in_(OPEN)
     )
@@ -149,9 +159,42 @@ def collect(
                     "se estiver errado, corrija o centro de custo na planilha e importe de novo",
                     fix={"type": "confirm", "label": "Confirmar centro de custo"},
                 )
+    if structure:  # um por CC (no primeiro orçamento aberto dele), corrigido escolhendo o setor
+        seen: set[int] = set()
+        for sub in sorted(subs, key=lambda s: (s.cost_center_id, ("OPEX", "CAPEX", "PERSONNEL").index(s.module))):
+            cc = ccs[sub.cost_center_id]
+            if cc.id in seen or cc.area_id is not None:
+                continue
+            seen.add(cc.id)
+            _add(
+                items,
+                sub,
+                cc,
+                "WARNING",
+                "STRUCTURE_NO_SECTOR",
+                ("COST_CENTER", cc.id),
+                f"{cc.code} · {cc.name}",
+                'Centro de custo sem área e setor: no Painel ele aparece em "Sem setor". Escolha o setor (a área vem '
+                "junto)",
+                fix={"type": "sector", "label": "Setor do centro de custo"},
+            )
+            items[-1]["can_keep"] = False
+    sectors = {o["id"]: o["label"] for o in sector_options(db)}
+    for i in items:
+        i["sector"] = sectors.get(ccs[i["cost_center_id"]].area_id)
     items = [i for i in items if i["key"] not in kept]
     items.sort(key=lambda i: (SEVERITY_ORDER[i["severity"]], i["cost_center"], i["module"], i["kind"], i["subject"]))
     return items
+
+
+def sector_options(db: Session) -> list[dict]:
+    """Setores (com a área) para corrigir CC sem estrutura direto no apontamento."""
+    departments = {d.id: d.name for d in db.scalars(select(Department))}
+    out = [
+        {"id": a.id, "label": f"{departments[a.department_id]} › {a.name}" if a.department_id else a.name}
+        for a in db.scalars(select(Area))
+    ]
+    return sorted(out, key=lambda o: o["label"])
 
 
 def _add(
@@ -374,6 +417,16 @@ def apply_fix(
         db.flush()
         cc = db.get(CostCenter, emp.cost_center_id)
         return f"Centro de custo confirmado: {cc.code} · {cc.name}", {"pending_cc": info}, None
+    if kind == "STRUCTURE_NO_SECTOR":
+        cc = db.get(CostCenter, int(ident))
+        area = db.get(Area, int(data.get("area_id") or 0)) if data.get("area_id") else None
+        if area is None:
+            raise FindingError("Escolha o setor")
+        before = {"department_id": cc.department_id, "area_id": cc.area_id}
+        cc.area_id, cc.department_id = area.id, area.department_id
+        db.flush()
+        label = next(o["label"] for o in sector_options(db) if o["id"] == area.id)
+        return f"Setor: {label}", before, {"department_id": cc.department_id, "area_id": cc.area_id}
     if kind == "PERSONNEL_JUSTIFICATION":
         mv = db.get(PersonnelMovement, int(ident))
         before = {"reason": mv.reason}

@@ -462,13 +462,13 @@ export interface AttentionPoint {
   cost_center_id: number | null; cost_center: string | null; message: string; link: string | null;
 }
 export interface FindingFix {
-  type: "schedule" | "account" | "text" | "project_type" | "ticket" | "money" | "month" | "confirm";
+  type: "schedule" | "account" | "text" | "project_type" | "ticket" | "money" | "month" | "sector" | "confirm";
   total?: string; values?: Record<string, string>; account_id?: number; account?: string; label?: string; route?: string;
 }
 export interface Finding {
   key: string; entity: string; entity_id: string; submission_id: number;
   severity: "CRITICAL" | "WARNING"; module: string; module_label: string; kind: string; kind_label: string;
-  cost_center_id: number; cost_center: string; status: string; subject: string; detail: string | null;
+  cost_center_id: number; cost_center: string; sector?: string | null; status: string; subject: string; detail: string | null;
   message: string; amount: string | null; link: string | null;
   fix: FindingFix | null; can_keep: boolean; editable: boolean;
 }
@@ -482,7 +482,7 @@ export interface Findings {
   counts: { critical: number; warning: number; cost_centers: number };
   reviews: FindingReviewItem[];
   cost_centers: { id: number; code: string; label: string; opex_submission_id: number | null; capex_submission_id: number | null }[];
-  can_review: boolean; project_types: { value: string; label: string }[];
+  can_review: boolean; project_types: { value: string; label: string }[]; sectors: { id: number; label: string }[];
 }
 export interface VersionCompare {
   from: { id: number; label: string; status: string; total: string };

@@ -325,3 +325,41 @@ def test_inactive_contract_type_still_computes(client, admin, run_worker):
         json={"type": "TRANSFER", "month": 7, "target_cost_center_id": ccs[CC2]["id"], "reason": "x"},
     )
     assert resp.status_code == 422 and "gerencia" in resp.json()["detail"]
+
+
+def test_findings_bulk_fix_keep_and_sector(client, admin, run_worker):
+    """Apontamentos em lote: o mesmo mês para vários desligamentos sem mês; crítico não pode ser mantido; CC sem
+    área e setor aparece para a Controladoria e é corrigido escolhendo o setor."""
+    ccs, mgr, _ = _setup(client, admin, run_worker)
+    rows = [
+        ("700", "GIL", "ANALISTA", "1001", "0001", CC1, 6000, "REMOVER", None, None, None, "CLT", None, None),
+        ("710", "IVO", "ANALISTA", "1001", "0001", CC1, 6100, "REMOVER", None, None, None, "CLT", None, None),
+    ]
+    import_and_load(client, admin, run_worker, builders.quadro_funcionarios(rows), "q-bulk.xlsx")
+    data = client.get("/api/v1/findings", headers=admin).json()
+    months = [i for i in data["items"] if i["kind"] == "PERSONNEL_NO_MONTH"]
+    assert len(months) == 2
+    structure = [i for i in data["items"] if i["kind"] == "STRUCTURE_NO_SECTOR"]
+    assert [i["cost_center_id"] for i in structure] == [ccs[CC1]["id"]]
+    assert structure[0]["editable"] is True and structure[0]["can_keep"] is False and data["sectors"]
+    # gestor não vê o apontamento de estrutura (é da Controladoria)
+    mine = client.get("/api/v1/findings", headers=mgr).json()
+    assert not any(i["kind"] == "STRUCTURE_NO_SECTOR" for i in mine["items"]) and mine["sectors"] == []
+
+    keys = [i["key"] for i in months]
+    kept = client.post("/api/v1/findings/keep-many", headers=admin, json={"keys": keys, "note": "ok"}).json()
+    assert kept["done"] == [] and len(kept["failed"]) == 2  # crítico: só corrigindo
+    fixed = client.post("/api/v1/findings/fix-many", headers=admin, json={"keys": keys + ["0:X:1:Y"], "month": 5})
+    assert fixed.status_code == 200, fixed.text
+    assert [d["note"] for d in fixed.json()["done"]] == ["Mês da ação: MAI", "Mês da ação: MAI"]
+    assert [f["key"] for f in fixed.json()["failed"]] == ["0:X:1:Y"]
+
+    sector = next(s for s in data["sectors"] if s["label"].endswith("› Contabilidade"))
+    bad = client.post("/api/v1/findings/fix", headers=admin, json={"key": structure[0]["key"]})
+    assert bad.status_code == 422
+    ok = client.post("/api/v1/findings/fix", headers=admin, json={"key": structure[0]["key"], "area_id": sector["id"]})
+    assert ok.status_code == 200 and ok.json()["note"] == f"Setor: {sector['label']}"
+    cc = next(c for c in client.get("/api/v1/cost-centers", headers=admin).json() if c["code"] == CC1)
+    assert cc["area_id"] == sector["id"] and cc["department_id"]
+    left = {i["kind"] for i in client.get("/api/v1/findings", headers=admin).json()["items"]}
+    assert "STRUCTURE_NO_SECTOR" not in left and "PERSONNEL_NO_MONTH" not in left
