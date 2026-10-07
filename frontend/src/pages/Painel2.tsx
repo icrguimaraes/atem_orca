@@ -32,6 +32,7 @@ const SECTIONS = [
   { key: "cumulative", label: "Total acumulado" },
   { key: "top", label: "Maiores centros de custo" },
   { key: "heatmap", label: "Mapa de calor" },
+  { key: "evolution", label: "Evolução do orçamento" },
 ];
 
 function Delta({ pct }: { pct: string | null }) {
@@ -525,6 +526,19 @@ export default function Painel2() {
                     }
                   }}
                 />
+              </Card>,
+            )}
+
+            {f.evolution && shell("evolution",
+              <Card title="Evolução do orçamento">
+                <p className="muted small evolution-note">
+                  De <strong>{f.evolution.meta?.first}</strong> a <strong>{f.evolution.meta?.last}</strong>, sempre nesses anos: os filtros de ano e mês não se aplicam; empresa, área, centro de custo, pacote, conta e tipo valem.
+                  {" "}Variação total:{" "}
+                  <strong className={f.evolution.meta?.total_diff?.startsWith("-") ? "down" : f.evolution.meta?.total_diff?.startsWith("+") ? "up" : ""}>
+                    {f.evolution.meta?.total_pct} ({f.evolution.meta?.total_diff})
+                  </strong>.
+                </p>
+                <PlotlyChart figure={f.evolution} height={400} ariaLabel="Evolução do orçamento" />
               </Card>,
             )}
           </div>

@@ -11,13 +11,17 @@ from decimal import Decimal
 
 import plotly.graph_objects as go
 
-from app.services.analytics import _fig, _layout, _money_axis, fmt_compact, fmt_money, fmt_pct, short
+from app.services.analytics import _br, _fig, _layout, _money_axis, fmt_compact, fmt_money, fmt_pct, short
 
 MONTHS = ("JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ")
 REALIZADO, ORCADO, ANTERIOR = "#4472c4", "#4fa894", "#8a6bbf"  # azul, verde-água (orçamento), roxo
 # rótulos no tom escuro de cada série (legíveis em 10–11 px); o frontend troca pelo token do tema escuro
 INK = {REALIZADO: "#3a64b4", ORCADO: "#2b7a68", ANTERIOR: "#6a4c9c"}
 TXT_UP, TXT_DOWN, TXT_FLAT = "#c13515", "#008a05", "#767676"  # percentual no texto, como no Painel
+# variação na cascata da "Evolução do orçamento": areia (âmbar dessaturado), fora das cores de série e sem laranja
+VARIACAO = "#c8ad5e"
+INK[VARIACAO] = "#7a6524"
+GUIDE = "rgba(128,128,128,0.6)"  # linhas tracejadas e seta do total (neutras nos dois temas)
 
 
 def _num(value) -> float:
@@ -365,12 +369,228 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
     return _fig(data, layout) | {"meta": {"tooltip": "point"}}
 
 
+def _unit(top: float) -> tuple[float, str, int]:
+    """Uma escala só para todos os rótulos da cascata (como no slide: tudo em R$ mi com 1 casa)."""
+    for div, unit in ((1e9, " bi"), (1e6, " mi"), (1e3, " mil")):
+        if top >= div:
+            return div, unit, 1
+    return 1.0, "", 0
+
+
+def fig_evolution(milestones: list[dict]) -> dict | None:
+    """Evolução do orçamento (cascata, no modelo do slide da diretoria): colunas cheias para os marcos (azul =
+    realizado, verde-água = orçado/orçamento) e, entre cada par, uma barra flutuante de variação (areia) com o valor
+    (redução entre parênteses) e o % num balão acima; linhas tracejadas ligam o topo de cada barra à seguinte e uma
+    seta por cima leva do primeiro ao último marco com a variação total. Eixo x numérico (marcos nas posições pares,
+    variações nas ímpares), para a variação não ocupar uma coluna inteira no celular.
+    customdata = [título do tooltip, valor por extenso, linhas do tooltip]."""
+    if len(milestones) < 2:
+        return None
+    values = [_num(m["value"]) for m in milestones]
+    labels = [m["label"] for m in milestones]
+    div, unit, decimals = _unit(max(values))
+
+    def amount(v: float) -> str:
+        return f"{_br(abs(v) / div, decimals)}{unit}"
+
+    xs = [2 * i for i in range(len(milestones))]
+    tips = []
+    for i, (m, v) in enumerate(zip(milestones, values, strict=True)):
+        color = REALIZADO if m["kind"] == "actual" else ORCADO
+        lines = [[f"{m['label']}: {fmt_money(v)}", color]]
+        if m.get("ytd"):
+            lines.append([f"Realizado até {m['closed_month']}: {fmt_money(_num(m['ytd']))} (× 12/{m['closed']})", ""])
+        if _num(m.get("unscheduled")):
+            lines.append([f"inclui {fmt_money(_num(m['unscheduled']))} de CAPEX sem cronograma mensal", ""])
+        if i:
+            prev = values[i - 1]
+            lines.append([f"vs {labels[i - 1]}: {fmt_pct((v - prev) / prev)} ({_signed_money(v - prev)})", ""])
+        tips.append(lines)
+
+    data = []
+    for kind, name, color in (("actual", "Realizado", REALIZADO), ("budget", "Orçado", ORCADO)):
+        idx = [i for i, m in enumerate(milestones) if m["kind"] == kind]
+        if not idx:
+            continue
+        data.append(
+            go.Bar(
+                x=[xs[i] for i in idx],
+                y=[values[i] for i in idx],
+                name=name,
+                width=0.8,
+                marker={"color": color, "cornerradius": 4},
+                text=[f"R$ {amount(values[i])}" for i in idx],
+                textposition="outside",
+                cliponaxis=False,
+                textfont={"size": 12, "color": INK[color]},
+                customdata=[[labels[i], fmt_money(values[i]), tips[i]] for i in idx],
+                hovertemplate="%{customdata[0]}: <b>%{customdata[1]}</b><extra></extra>",
+            )
+        )
+
+    # altura útil aproximada do gráfico (400 px menos legenda e rótulos do eixo), para folgas em pixels no eixo y
+    top = max(values)
+    plot_px = 300.0
+    y_max = top * plot_px / (plot_px - 100)
+    px = y_max / plot_px
+    shapes: list[dict] = []
+    annotations: list[dict] = []
+    var_x, var_y, var_base, var_text, var_cd = [], [], [], [], []
+    for i in range(1, len(milestones)):
+        a, b = values[i - 1], values[i]
+        diff, x = b - a, xs[i] - 1
+        pct = diff / a if a else None
+        var_x.append(x)
+        var_y.append(abs(diff))
+        var_base.append(min(a, b))
+        var_text.append(f"+{amount(diff)}" if diff > 0 else f"({amount(diff)})" if diff < 0 else amount(0))
+        var_cd.append(
+            [
+                f"{labels[i - 1]} → {labels[i]}",
+                _signed_money(diff),
+                [
+                    [f"Variação: {fmt_pct(pct)} ({_signed_money(diff)})", VARIACAO],
+                    [f"De {fmt_money(a)} para {fmt_money(b)}", ""],
+                ],
+            ]
+        )
+        # balão com o % acima da barra de variação (acima do rótulo do valor)
+        annotations.append(
+            {
+                "x": x,
+                "y": max(a, b),
+                "xref": "x",
+                "yref": "y",
+                "yanchor": "bottom",
+                "yshift": 22,
+                "text": fmt_pct(pct),
+                "showarrow": False,
+                "font": {"size": 11, "color": TXT_UP if diff > 0 else TXT_DOWN if diff < 0 else TXT_FLAT},
+                "bordercolor": VARIACAO,
+                "borderwidth": 1,
+                "borderpad": 3,
+            }
+        )
+        # tracejado: topo do marco → início da variação → topo do marco seguinte
+        for y, x0, x1 in ((a, xs[i - 1] + 0.4, x - 0.3), (b, x + 0.3, xs[i] - 0.4)):
+            shapes.append(
+                {
+                    "type": "line",
+                    "xref": "x",
+                    "yref": "y",
+                    "x0": x0,
+                    "x1": x1,
+                    "y0": y,
+                    "y1": y,
+                    "line": {"color": GUIDE, "width": 1, "dash": "dash"},
+                }
+            )
+    data.append(
+        go.Bar(
+            x=var_x,
+            y=var_y,
+            base=var_base,
+            name="Aumento / Redução",
+            width=0.6,
+            marker={"color": VARIACAO, "cornerradius": 3},
+            text=var_text,
+            textposition="outside",
+            cliponaxis=False,
+            textfont={"size": 12, "color": INK[VARIACAO]},
+            customdata=var_cd,
+            hovertemplate="%{customdata[0]}: <b>%{customdata[1]}</b><extra></extra>",
+        )
+    )
+
+    # seta do primeiro ao último marco, por cima de tudo, com a variação total
+    first, last = values[0], values[-1]
+    total = last - first
+    total_pct = total / first if first else None
+    line_y = top + 74 * px
+    shapes.append(
+        {
+            "type": "path",
+            "xref": "x",
+            "yref": "y",
+            "path": f"M {xs[0]},{first + 30 * px} L {xs[0]},{line_y} L {xs[-1]},{line_y}",
+            "line": {"color": GUIDE, "width": 1.5},
+        }
+    )
+    sign = "-" if total < 0 else "+" if total > 0 else ""
+    annotations += [
+        {
+            "x": xs[-1],
+            "y": last + 30 * px,
+            "ax": xs[-1],
+            "ay": line_y,
+            "xref": "x",
+            "yref": "y",
+            "axref": "x",
+            "ayref": "y",
+            "text": "",
+            "showarrow": True,
+            "arrowhead": 2,
+            "arrowsize": 1.2,
+            "arrowwidth": 1.5,
+            "arrowcolor": GUIDE,
+        },
+        {
+            "x": (xs[0] + xs[-1]) / 2,
+            "y": line_y,
+            "xref": "x",
+            "yref": "y",
+            "yanchor": "bottom",
+            "yshift": 2,
+            "showarrow": False,
+            "text": f"Variação total: <b>{sign}R$ {amount(total)} ({fmt_pct(total_pct)})</b>",
+            "font": {"size": 12, "color": TXT_UP if total > 0 else TXT_DOWN if total < 0 else TXT_FLAT},
+        },
+    ]
+    ticks = [f"{m['word']}<br>{m['year']}" + (f"<br>({m['note']})" if m.get("note") else "") for m in milestones]
+    layout = _layout(
+        barmode="overlay",
+        shapes=shapes,
+        annotations=annotations,
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "x": 0,
+            "font": {"size": 12},
+            "itemclick": False,
+            "itemdoubleclick": False,
+        },
+        xaxis={
+            "tickmode": "array",
+            "tickvals": xs,
+            "ticktext": ticks,
+            "range": [-0.7, xs[-1] + 0.7],
+            "showgrid": False,
+            "zeroline": False,
+            "fixedrange": True,
+            "automargin": True,
+        },
+        yaxis={"visible": False, "range": [0, y_max], "fixedrange": True},
+        margin={"l": 8, "r": 8, "t": 36, "b": 8},
+    )
+    meta = {
+        "tooltip": "point",
+        "tooltip_title": "customdata",
+        "first": labels[0],
+        "last": labels[-1],
+        "total_pct": fmt_pct(total_pct),
+        "total_diff": _signed_money(total),
+    }
+    return _fig(data, layout) | {"meta": meta}
+
+
 def build(
     o: dict,
     monthly: list[dict] | None = None,
     top_cost_centers: list[dict] | None = None,
     top_accounts: list[dict] | None = None,
     selected: dict | None = None,
+    evolution: list[dict] | None = None,
 ) -> dict:
     """Todas as figuras do Painel 2 a partir da resposta de `/dashboard/overview`. `monthly`, `top_cost_centers` e
     `top_accounts` podem vir sem o filtro do próprio visual (mês, CC, conta): aí o visual mostra todos os itens e
@@ -409,4 +629,7 @@ def build(
             selected.get("account_id"),
         ),
     }
+    evolution_fig = fig_evolution(evolution or [])
+    if evolution_fig:
+        figures["evolution"] = evolution_fig
     return figures

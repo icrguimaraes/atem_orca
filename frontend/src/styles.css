@@ -406,7 +406,8 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
   .filter-sheet-actions .btn-primary { flex: 1; }
   .filter-sheet { bottom: 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
   /* cards de indicador: 2 por linha; o último, se sobrar sozinho, ocupa a linha inteira (sem "órfão") */
-  .stats, .stats-compact { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stats, .stats-compact { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .stats .stat { min-width: 0; overflow-wrap: anywhere; }
   .stats > .stat:last-child:nth-child(odd) { grid-column: 1 / -1; }
   .stat { padding: 14px 14px; }
   .stat-value { font-size: 24px; line-height: 30px; }

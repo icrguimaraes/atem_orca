@@ -272,6 +272,74 @@ def test_painel2_figures(client, admin, run_worker):
     assert real_jan["y"][1] == 210.0 and real_jan["marker"]["opacity"][:2] == [1.0, 0.3]
 
 
+def _kpi_milestones(client, admin, query: str = "") -> list[float]:
+    """Os marcos da evolução, lidos dos cards do Painel em cada ano (mesmos filtros): realizado 2025, orçado 2026,
+    realizado 2026 anualizado e orçamento 2027 (zerados ficam de fora, como no gráfico)."""
+
+    def kpis(years: str) -> dict:
+        return client.get(f"/api/v1/dashboard/overview?years={years}{query}", headers=admin).json()["kpis"]
+
+    k25, k26, k27 = kpis("2025"), kpis("2026"), kpis("2027")
+    values = [k25["actual_total"], k26["budget_total"], k26["ref_annualized"], k27["ref_ytd"]]
+    return [float(v) for v in values if Decimal(v)]
+
+
+def test_painel_evolution_matches_kpis(client, admin, run_worker):
+    """Evolução do orçamento (cascata): marcos 2025 → 2027 iguais aos cards do Painel, com os filtros de empresa,
+    área, tipo etc., e sem os de ano e mês."""
+    from tests.test_analytics import REF_BUDGET_2026
+    from tests.test_consolidation import _setup as consolidation_setup
+    from tests.test_opex import CC, HIST_2025
+
+    consolidation_setup(client, admin, run_worker)  # realizado 2026 até AGO + orçamento 2027 (OPEX, CAPEX, Pessoal)
+    import_and_load(client, admin, run_worker, builders.realizado_wide(HIST_2025, year=2025, months=12), "r25.xlsx")
+    orc = builders.realizado_wide(REF_BUDGET_2026, months=12)
+    import_and_load(client, admin, run_worker, orc, "orc26.xlsx", dataset_type="REFERENCE_BUDGET")
+
+    data = client.get("/api/v1/dashboard/overview?figures=true", headers=admin).json()
+    evo = data["evolution"]
+    assert [m["label"] for m in evo] == [
+        "Realizado 2025",
+        "Orçado 2026",
+        "Realizado 2026 (anualizado)",
+        "Orçamento 2027 (proposto)",
+    ]
+    # 2025: 2 × 10.800; orçado 2026: 4.800 + 3.000; 2026: 12.000 até AGO × 12/8; 2027: total da consolidação
+    assert [m["value"] for m in evo] == ["21600.00", "7800.00", "18000.00", "524750.00"]
+    assert [float(m["value"]) for m in evo] == _kpi_milestones(client, admin)
+    assert (evo[2]["ytd"], evo[2]["closed_month"]) == ("12000.00", "AGO")
+
+    fig = data["figures"]["evolution"]
+    traces = {t["name"]: t for t in fig["data"]}
+    assert set(traces) == {"Realizado", "Orçado", "Aumento / Redução"}
+    assert traces["Realizado"]["y"] == [21600.0, 18000.0] and traces["Realizado"]["marker"]["color"] == "#4472c4"
+    assert traces["Orçado"]["y"] == [7800.0, 524750.0] and traces["Orçado"]["marker"]["color"] == "#4fa894"
+    var = traces["Aumento / Redução"]
+    assert var["x"] == [1, 3, 5] and var["base"] == [7800.0, 7800.0, 18000.0]
+    assert var["y"] == [13800.0, 10200.0, 506750.0]
+    assert var["text"] == ["(13,8 mil)", "+10,2 mil", "+506,8 mil"]  # redução entre parênteses, uma escala só
+    assert var["customdata"][0][2][0] == ["Variação: -63,9% (-R$ 13.800,00)", "#c8ad5e"]
+    annualized = traces["Realizado"]["customdata"][1]
+    assert annualized[0] == "Realizado 2026 (anualizado)"
+    assert ["Realizado até AGO: R$ 12.000,00 (× 12/8)", ""] in annualized[2]
+    assert fig["meta"]["tooltip"] == "point" and fig["meta"]["total_diff"] == "+R$ 503.150,00"
+    assert fig["layout"]["xaxis"]["ticktext"][2] == "Realizado<br>2026<br>(anualizado)"
+
+    # ano e mês escolhidos não mudam a evolução; tipo, área e CC filtram (e continuam batendo com os cards)
+    other = client.get("/api/v1/dashboard/overview?years=2025&months=1,2&figures=true", headers=admin).json()
+    assert other["evolution"] == evo
+    opex = client.get("/api/v1/dashboard/overview?modules=OPEX&figures=true", headers=admin).json()["evolution"]
+    assert [float(m["value"]) for m in opex] == _kpi_milestones(client, admin, "&modules=OPEX")
+    assert opex[-1]["value"] == "5400.00"
+    cc = next(c for c in client.get("/api/v1/cost-centers", headers=admin).json() if c["code"] == CC)
+    dept = next(d for d in client.get("/api/v1/departments", headers=admin).json() if d["name"] == "Tributos")
+    client.patch(f"/api/v1/cost-centers/{cc['id']}", headers=admin, json={"department_id": dept["id"]})
+    q = f"&department_id={dept['id']}"
+    by_area = client.get(f"/api/v1/dashboard/overview?figures=true{q}", headers=admin).json()["evolution"]
+    assert [float(m["value"]) for m in by_area] == _kpi_milestones(client, admin, q)
+    assert by_area[1]["value"] == "4800.00"  # orçado 2026 só do CC da área
+
+
 def test_breakdown_by_area_and_sector(client, admin, run_worker):
     """Tabela do painel: área → setor → pacote → conta, pelo cadastro do centro de custo."""
     _setup(client, admin, run_worker)

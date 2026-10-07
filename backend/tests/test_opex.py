@@ -208,6 +208,8 @@ def test_chart_data(client, admin, run_worker):
     assert deltas["6010301001"] == "800.00"  # 8×1000 (2026) − 8×900 (2025 até ago)
     progress = data["budget_progress"]
     assert progress["started_cost_centers"] == 1 and progress["status_counts"]["IN_PROGRESS"] == 1
+    # CC sem OPEX (nenhum lançamento) não entra como "não iniciado"
+    assert progress["total_cost_centers"] == 1 and "DRAFT" not in progress["status_counts"]
     dti = next(p for p in progress["by_package"] if p["package"] == "DTI")
     assert dti == {"package_id": pkg["DTI"]["id"], "package": "DTI", "proposed": "7200.00", "ref_annualized": "6000.00"}
     assert client.get("/api/v1/opex/summary", headers=mgr).json()["progress"]["proposed_total"] == "7200.00"

@@ -600,14 +600,79 @@ def overview(
             db, user, company_id, None, package_id, all_months, account_id=account_id, department_id=department_id
         )
         data["heatmap_all"] = _heatmap(db, f_heat, main_model, P.years)
+        # evolução do orçamento: sem o filtro de meses (f_months), com todos os demais filtros
+        data["evolution"] = _evolution(db, f_months, P)
         data["figures"] = painel_figures.build(
             data,
             monthly=_monthly(f_months, all_months),
             top_cost_centers=_ranking(db, f_ccs, P, "cost_center_id", CostCenter),
             top_accounts=_ranking(db, f_accounts, P, "account_id", Account),
             selected={"months": sorted(P.months or []), "cost_center_id": cost_center_id, "account_id": account_id},
+            evolution=data["evolution"],
         )
     return data
+
+
+def _evolution(db: Session, f: Facts, P: Period) -> list[dict]:
+    """Marcos da "Evolução do orçamento", sempre do ano retrasado ao ano do ciclo (2025 → 2027), sem depender dos
+    anos e meses escolhidos (`f` vem sem o filtro de meses); empresa, área, CC, pacote, conta e tipo valem.
+
+    Realizado {ciclo-2} (ano cheio) → Orçado {ciclo-1} (orçamento de referência, se carregado) → Realizado {ciclo-1}
+    anualizado até o último mês fechado (mesma conta do card "anualizado") → Orçamento {ciclo} proposto (consolidação,
+    com o CAPEX sem cronograma, como o card do total). Marco zerado fica de fora."""
+    target = P.target_year or (max(P.actual_years) + 1 if P.actual_years else None)
+    if target is None:
+        return []
+    out: list[dict] = []
+
+    def add(key: str, kind: str, word: str, year: int, value: Decimal, note: str | None = None, **extra) -> None:
+        if value:
+            label = f"{word} {year}" + (f" ({note})" if note else "")
+            milestone = {"key": key, "kind": kind, "word": word, "year": year, "note": note, "label": label}
+            out.append(milestone | {"value": _money(value)} | extra)
+
+    before, ref = target - 2, target - 1
+    if before in P.actual_years:
+        closed = _last_closed(db, before)
+        partial = bool(closed and closed < 12)
+        add(
+            "actual_before",
+            "actual",
+            "Realizado",
+            before,
+            f.total(ActualEntry, [before]),
+            f"até {MONTH_ABBR[closed - 1]}" if partial else None,
+        )
+    if ref in P.budget_years:
+        add("budget_ref", "budget", "Orçado", ref, f.total(ReferenceBudgetEntry, [ref]))
+    if ref in P.actual_years:
+        closed = _last_closed(db, ref)
+        ytd = f.total(ActualEntry, [ref])
+        if closed and closed < 12:
+            add(
+                "actual_ref",
+                "actual",
+                "Realizado",
+                ref,
+                ytd * 12 / closed,
+                "anualizado",
+                ytd=_money(ytd),
+                closed=closed,
+                closed_month=MONTH_ABBR[closed - 1],
+            )
+        else:
+            add("actual_ref", "actual", "Realizado", ref, ytd)
+    if P.target_year == target:
+        add(
+            "target",
+            "budget",
+            "Orçamento",
+            target,
+            f.total(ReferenceBudgetEntry, [target]),
+            "proposto",
+            unscheduled=_money(f.unscheduled_total()),
+        )
+    return out
 
 
 def _by_module(f: Facts, P: Period) -> list[dict]:
@@ -1075,10 +1140,6 @@ def budget_progress(
             )
         ).all()
     )
-    counts: dict[str, int] = defaultdict(int)
-    for cc in cc_ids:
-        counts[statuses.get(cc, "DRAFT")] += 1
-
     line_stmt = (
         select(BudgetLine.package_id, BudgetLine.cost_center_id, func.sum(BudgetLine.total_amount))
         .join(BudgetSubmission, BudgetSubmission.id == BudgetLine.submission_id)
@@ -1097,6 +1158,13 @@ def budget_progress(
         proposed[pkg_id] += amount or ZERO
         if amount:
             started.add(cc_id)
+    # só os CCs que têm OPEX (lançamento ou orçamento já enviado): CC sem despesa (ex.: só CAPEX) ou zerado depois
+    # de uma correção não aparece como "não iniciado" (decisão de 07/10/2026)
+    sent = {"SUBMITTED", "UNDER_REVIEW", "ADJUSTMENT_REQUESTED", "APPROVED", "CONSOLIDATED"}
+    counted = {cc for cc in cc_ids if cc in started or statuses.get(cc) in sent}
+    counts: dict[str, int] = defaultdict(int)
+    for cc in counted:
+        counts[statuses.get(cc, "DRAFT")] += 1
 
     # 2026 anualizado só dos CCs que já lançaram 2027 (comparação justa durante o preenchimento)
     ref = cycle.actual_reference_year
@@ -1144,7 +1212,7 @@ def budget_progress(
         "ref_year": ref,
         "cycle_status": cycle.status,
         "deadline": cycle.opex_deadline.isoformat() if cycle.opex_deadline else None,
-        "total_cost_centers": len(cc_ids),
+        "total_cost_centers": len(counted),
         "started_cost_centers": len(started),
         "status_counts": dict(counts),
         "proposed_total": _money(sum(proposed.values(), ZERO)),

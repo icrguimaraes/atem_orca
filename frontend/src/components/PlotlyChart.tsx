@@ -30,7 +30,9 @@ type Trace = Record<string, unknown> & { type?: string; orientation?: string; x?
 
 /** O backend escreve os rótulos com o tom escuro de cada série (tema claro); aqui eles viram o token do tema
  *  atual, para continuarem legíveis no escuro. */
-const INK_TOKENS: Record<string, string> = { "#3a64b4": "--series-1-ink", "#2b7a68": "--series-3-ink", "#6a4c9c": "--series-past-ink" };
+const INK_TOKENS: Record<string, string> = {
+  "#3a64b4": "--series-1-ink", "#2b7a68": "--series-3-ink", "#6a4c9c": "--series-past-ink", "#7a6524": "--series-var-ink",
+};
 
 function themeInks(data: Data[]): Data[] {
   const css = getComputedStyle(document.documentElement);
@@ -167,6 +169,8 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
     setTipPos({ left, top: Math.max(-4, tip.top - h / 2) });
   }, [tip]);
   const mode = figure.meta?.tooltip as "unified" | "point" | undefined;
+  // eixo numérico (ex.: cascata da evolução): o título do tooltip vem no primeiro item do customdata
+  const titleFromData = figure.meta?.tooltip_title === "customdata";
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -220,7 +224,8 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
       }
       const left = (ev.event?.clientX ?? box.left + box.width / 2) - box.left;
       const top = (ev.event?.clientY ?? box.top + 24) - box.top;
-      setTip({ left, top, title: String(barsH ? first.y : first.x), lines });
+      const title = titleFromData && Array.isArray(first.customdata) ? String(first.customdata[0]) : String(barsH ? first.y : first.x);
+      setTip({ left, top, title, lines });
     };
     const onUnhover = () => setTip(null);
     if (mode) {
@@ -243,7 +248,7 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
       }
       setTip(null);
     };
-  }, [figure, height, onClick, mode]);
+  }, [figure, height, onClick, mode, titleFromData]);
   useEffect(() => () => { if (ref.current) Plotly.purge(ref.current); }, []);
   return (
     <div className="plotly-wrap" ref={wrap} onMouseLeave={() => setTip(null)}>
