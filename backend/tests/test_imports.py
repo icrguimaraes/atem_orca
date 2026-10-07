@@ -471,7 +471,7 @@ def test_employees_and_vacancy(client, admin, run_worker, db):
             "CLT",
             None,
             None,
-        ),  # promoção sem mês/novo salário → erro
+        ),  # promoção sem mês/novo salário → entra com pendências (aviso), não erro
         (
             "100101458",
             "COLABORADOR D",
@@ -493,11 +493,11 @@ def test_employees_and_vacancy(client, admin, run_worker, db):
     run_worker()
     b = status(client, admin, batch_id)
     assert b["dataset_type"] == "EMPLOYEES"
-    assert (b["total_rows"], b["valid_rows"], b["error_rows"]) == (5, 3, 2)
+    assert (b["total_rows"], b["valid_rows"], b["error_rows"]) == (5, 4, 1)
     client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin)
     run_worker()
     final = status(client, admin, batch_id)
-    assert final["summary"]["load"]["employees_created"] == 2
+    assert final["summary"]["load"]["employees_created"] == 3
     movements = final["summary"]["load"]["movements"]
     assert movements.get("hires", 0) + movements.get("without_cost_center", 0) == 1  # vaga vira contratação
     pj = db.scalar(select(Employee).where(Employee.registration == "100101456"))

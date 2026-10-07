@@ -130,7 +130,7 @@ class BranchOut(BranchIn, ORM):
 
 class CostCenterIn(BaseModel):
     company_id: int
-    code: str = Field(pattern=r"^\d{1,20}$")
+    code: str = Field(pattern=r"^[0-9A-Za-z]{1,20}$")  # SAP: ATEM numérico, REAM alfanumérico (RFM6003000)
     name: str
     manager_user_id: int | None = None
     manager_name: str | None = None
