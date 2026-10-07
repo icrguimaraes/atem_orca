@@ -14,6 +14,8 @@ const ACTIONS: Record<string, string> = {
   LOAD: "Carga",
   SET_ROLES: "Perfis alterados",
   SET_SCOPES: "Escopo alterado",
+  ADD_SCOPE: "Acesso concedido",
+  REMOVE_SCOPE: "Acesso removido",
   SET_PARAMETER: "Parâmetro alterado",
   CYCLE_OPEN: "Ciclo aberto",
   CYCLE_CLOSE: "Ciclo fechado",

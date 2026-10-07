@@ -6,7 +6,7 @@ import { Alert, Modal } from "./ui";
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Correção direta do apontamento: cronograma, conta do catálogo, justificativa, tipo de projeto ou passagem. */
+/** Correção direta do apontamento: cronograma, conta do catálogo, justificativa, tipo de projeto, passagem, salário ou mês. */
 export function FixModal({ finding, projectTypes, onClose, onDone }: {
   finding: Finding; projectTypes: { value: string; label: string }[]; onClose: () => void; onDone: (note: string) => void;
 }) {
@@ -19,6 +19,7 @@ export function FixModal({ finding, projectTypes, onClose, onDone }: {
   const [text, setText] = useState("");
   const [projectType, setProjectType] = useState("");
   const [ticket, setTicket] = useState("");
+  const [month, setMonth] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -30,7 +31,8 @@ export function FixModal({ finding, projectTypes, onClose, onDone }: {
       : fix.type === "text" ? text.trim().length > 0
         : fix.type === "project_type" ? projectType !== ""
           : fix.type === "ticket" || fix.type === "money" ? ticketValue > 0
-            : true;
+            : fix.type === "month" ? month !== ""
+              : true;
 
   const allIn = () => setValues(MONTHS.map((_, i) => (i + 1 === Number(oneMonth) ? total : 0)));
   function spread() {
@@ -53,6 +55,7 @@ export function FixModal({ finding, projectTypes, onClose, onDone }: {
     if (fix.type === "project_type") body.project_type_code = projectType;
     if (fix.type === "ticket") body.ticket_amount = ticketValue;
     if (fix.type === "money") body.amount = ticketValue;
+    if (fix.type === "month") body.month = Number(month);
     try {
       const r = await api<{ note: string }>("/findings/fix", { method: "POST", body: JSON.stringify(body) });
       onDone(r.note);
@@ -142,6 +145,15 @@ export function FixModal({ finding, projectTypes, onClose, onDone }: {
       {fix.type === "money" && (
         <label>{fix.label}
           <input value={ticket} onChange={(e) => setTicket(e.target.value)} inputMode="decimal" placeholder="0,00" autoFocus />
+        </label>
+      )}
+
+      {fix.type === "month" && (
+        <label>{fix.label}
+          <select value={month} onChange={(e) => setMonth(e.target.value)} autoFocus>
+            <option value="">Selecione…</option>
+            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
         </label>
       )}
 

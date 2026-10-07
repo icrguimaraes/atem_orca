@@ -87,9 +87,12 @@ class FixIn(BaseModel):
     ticket_amount: Decimal | None = None
     project_type_code: str | None = None
     amount: Decimal | None = None  # novo salário (promoção pendente)
+    month: int | None = None  # mês da ação (importada sem mês)
 
 
-@router.post("/fix", summary="Corrige o apontamento na própria página (cronograma, conta, justificativa, passagem)")
+@router.post(
+    "/fix", summary="Corrige o apontamento na própria página (cronograma, conta, justificativa, passagem, salário, mês)"
+)
 def fix(payload: FixIn, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     ctx = _ctx(db)
     sub, finding = _find(db, ctx, user, payload.key)

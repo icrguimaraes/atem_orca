@@ -79,6 +79,18 @@ TEMPLATE_ACTIONS = {
     "INCLUIR": "HIRE",
     "REMOVER": "TERMINATION",
 }
+# Ações escritas fora da lista do template (erro comum de preenchimento): lidas com aviso na importação
+TEMPLATE_ACTION_ALIASES = {
+    "MERITO": "SALARY_ADJUSTMENT",
+    "REAJUSTE": "SALARY_ADJUSTMENT",
+    "REAJUSTE INDIVIDUAL": "SALARY_ADJUSTMENT",
+    "PROMOCAO": "PROMOTION",
+    "DESLIGAR": "TERMINATION",
+    "DESLIGAMENTO": "TERMINATION",
+}
+# ações do colaborador que podem entrar sem mês (pendência em Apontamentos, sem efeito no custo até informar)
+MONTH_PENDING_ACTIONS = ("PROMOTION", "SALARY_ADJUSTMENT", "TERMINATION")
+ACTION_NOUNS = {"PROMOTION": "promoção", "SALARY_ADJUSTMENT": "reajuste individual", "TERMINATION": "desligamento"}
 
 
 @dataclass(frozen=True)

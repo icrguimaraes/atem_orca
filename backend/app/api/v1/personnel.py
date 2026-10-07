@@ -193,7 +193,12 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
             if p.kind == "HIRE":
                 hires_by_month[p.plan.effective_month - 1] += p.plan.quantity
                 by_position[p.extra.get("position") or "Sem cargo"] += p.plan.quantity
-            elif p.kind == "EMPLOYEE" and mv is not None and mv.movement_type == "TERMINATION":
+            elif (
+                p.kind == "EMPLOYEE"
+                and mv is not None
+                and mv.movement_type == "TERMINATION"
+                and not svc.month_pending(mv)
+            ):
                 terminations_by_month[mv.effective_month - 1] += 1
         sub = subs.get(cc.id)
         status = sub.status if sub else "DRAFT"

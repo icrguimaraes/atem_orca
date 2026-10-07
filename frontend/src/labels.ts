@@ -212,6 +212,15 @@ export const ERROR_LABELS: Record<string, string> = {
   NO_MONTHS: "Cronograma mensal não encontrado",
   NO_BUDGET_VALUES: "Template sem valores de orçamento",
   NO_CYCLE: "Sem ciclo orçamentário",
+  LEGACY_LAYOUT: "Template sem coluna CHAVE (REAM/antigo)",
+  TRAVEL_NO_FARE: "Viagem sem passagem",
+  CAPEX_ACCOUNT_MISMATCH: "Conta diferente do catálogo",
+  CAPEX_SOFTWARE: "Software no CAPEX",
+  CC_FROM_POSITION: "Centro de custo pelo cargo",
+  PROMOTION_NO_SALARY: "Promoção sem novo salário",
+  ADJUSTMENT_NO_SALARY: "Reajuste sem novo salário",
+  ACTION_NO_MONTH: "Ação sem mês (pendente)",
+  ACTION_ALIAS: "Ação fora da lista do template",
 };
 
 export const SUBMISSION_STATUS: Record<string, { label: string; tone: Tone }> = {

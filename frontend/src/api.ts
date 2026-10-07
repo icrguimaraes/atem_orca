@@ -82,6 +82,20 @@ export interface User {
   last_login_at: string | null;
 }
 
+// acesso a centros de custo (Usuários → Acessos; GET /users traz o resumo, /users/{id}/access o detalhe)
+/** Resumo da lista: perfil global (todos os CCs) ou CCs distintos como gestor + escopos. */
+export interface AccessSummary { is_global: boolean; cost_centers: number; managed: number; scopes: number }
+export interface UserListItem extends User { access: AccessSummary }
+export interface AccessCostCenter { id: number; code: string; name: string; company: string; is_active: boolean }
+/** Escopo atribuído: um CC ou a empresa inteira (`cost_centers` = quantos CCs a linha libera). */
+export interface UserScope {
+  id: number; kind: "COST_CENTER" | "COMPANY" | "EMPTY"; cost_center_id: number | null; company_id: number | null;
+  code: string | null; name: string; company: string | null; is_active: boolean; cost_centers: number;
+}
+export interface UserAccess {
+  user_id: number; is_global: boolean; cost_centers: number; managed: AccessCostCenter[]; scopes: UserScope[];
+}
+
 export interface Company { id: number; code: string; name: string; short_name: string | null; is_active: boolean }
 export interface Branch { id: number; company_id: number; code: string; name: string; uf: string | null; is_active: boolean }
 export interface CostCenter {
@@ -367,7 +381,7 @@ export interface PersonnelTotals {
   hires: number; terminations: number; transfers_out: number; transfers_in: number; promotions: number;
 }
 export interface PersonnelMovementInfo {
-  id: number; type: string; label: string; month: number; new_salary: string | null; new_position: string | null;
+  id: number; type: string; label: string; month: number | null; pending?: string[]; new_salary: string | null; new_position: string | null;
   target_cost_center_id: number | null; target_cost_center: string | null; severance_cost: string | null;
   contract_type_code: string | null; quantity: number; reason: string | null; source: "TEMPLATE" | "SYSTEM";
 }
@@ -448,7 +462,7 @@ export interface AttentionPoint {
   cost_center_id: number | null; cost_center: string | null; message: string; link: string | null;
 }
 export interface FindingFix {
-  type: "schedule" | "account" | "text" | "project_type" | "ticket" | "money" | "confirm";
+  type: "schedule" | "account" | "text" | "project_type" | "ticket" | "money" | "month" | "confirm";
   total?: string; values?: Record<string, string>; account_id?: number; account?: string; label?: string; route?: string;
 }
 export interface Finding {

@@ -267,7 +267,36 @@ def _subset(result: ParseResult, *types: str) -> ParseResult:
     return ParseResult(result.dataset_type, result.layout, [r for r in result.records if r.record_type in types])
 
 
+def _keyless_companies(result: ParseResult, dims: Dimensions, options: dict) -> None:
+    """Modelo sem CHAVE (REAM): a linha não traz a empresa. Vale, nesta ordem: o CC já cadastrado em uma só empresa,
+    a filial já cadastrada em uma só empresa, a divisão igual ao código de uma empresa (REAM: divisão 2001 = empresa
+    2001) e a opção company_code. Filial e CC criados a partir das linhas ficam na empresa das linhas."""
+    code_of = {cid: code for code, cid in dims.companies.items()}
+    found: dict[tuple[str, str | None], str] = {}
+    for rec in result.records:
+        d = rec.data
+        if rec.record_type != "BUDGET_LINE" or d.get("company"):
+            continue
+        owners = {cid for cid, code in dims.cost_centers if code == d.get("cost_center")}
+        if len(owners) != 1 and d.get("branch"):
+            owners = {cid for cid, code in dims.branches if code == d["branch"]}
+        if len(owners) == 1:
+            company = code_of.get(owners.pop())
+        elif d.get("branch") in dims.companies:
+            company = d["branch"]
+        else:
+            company = options.get("company_code")
+        d["company"] = company
+        if company:
+            found.setdefault(("COST_CENTER", d.get("cost_center")), company)
+            found.setdefault(("BRANCH", d.get("branch")), company)
+    for rec in result.records:
+        if rec.record_type in ("COST_CENTER", "BRANCH") and rec.data.get("from_lines") and not rec.data.get("company"):
+            rec.data["company"] = found.get((rec.record_type, rec.data["code"]))
+
+
 def validate_opex_template(result: ParseResult, dims: Dimensions, options: dict) -> None:
+    _keyless_companies(result, dims, options)
     validate_master(_subset(result, "BRANCH", "COST_CENTER", "ACCOUNT"), dims, options)
     # o próprio arquivo traz nomes de CC e conta: o que faltar no cadastro é criado
     facts = _subset(result, "FACT")
@@ -283,6 +312,12 @@ def validate_opex_template(result: ParseResult, dims: Dimensions, options: dict)
         " ".join((r.data.get("name") or "").upper().split()): r.data["code"]
         for r in result.records
         if r.record_type == "COST_CENTER" and r.status != "ERROR"
+    }
+    # filiais criadas a partir das próprias linhas (modelo sem CHAVE): não avisar "filial não cadastrada"
+    line_branches = {
+        r.data["code"]
+        for r in result.records
+        if r.record_type == "BRANCH" and r.data.get("from_lines") and r.status != "ERROR"
     }
     for rec in result.records:
         if rec.record_type == "TRAVEL":
@@ -343,7 +378,7 @@ def validate_opex_template(result: ParseResult, dims: Dimensions, options: dict)
                 "Conta",
                 d["account"],
             )
-        if d.get("branch") and dims.branch_id(company_id, d["branch"]) is None:
+        if d.get("branch") and dims.branch_id(company_id, d["branch"]) is None and d["branch"] not in line_branches:
             rec.warn(
                 "UNKNOWN_BRANCH", f"Filial {d['branch']} não cadastrada (linha fica sem filial)", "Filial", d["branch"]
             )

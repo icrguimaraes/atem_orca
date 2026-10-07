@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from tests import builders
 from tests.test_imports import import_and_load, status, upload
 
@@ -36,6 +38,31 @@ def test_findings_fix_travel_fare_and_account_justification(client, admin, run_w
     assert account["key"] not in {i["key"] for i in client.get("/api/v1/findings", headers=admin).json()["items"]}
     template = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/template.xlsx", headers=admin)
     assert template.status_code == 200  # template corrigido para devolver à área
+
+
+def test_ream_template_without_key_column(client, admin, run_worker):
+    """Template da REAM (layout antigo, sem CHAVE): empresa pela divisão (2001), CC alfanumérico e filial criados a
+    partir das linhas; a aba BD (tabelas empilhadas) não vira cadastro nem gera erros."""
+    batch_id = upload(client, admin, builders.opex_template_ream(), "Template_OPEX 2027 - REFMAN - Custos.xlsx")
+    run_worker()
+    b = status(client, admin, batch_id)
+    assert b["dataset_type"] == "OPEX_TEMPLATE", b
+    assert b["error_rows"] == 0
+    assert b["summary"]["meta"]["parts"] == {"master": 2, "actual": 0, "budget_lines": 3}
+    budget = b["summary"]["comparison"]["budget"]
+    assert [(x["company"], x["cost_center"], x["lines"], x["total"]) for x in budget] == [
+        ("2001", "RFM6003000", 3, "20400")
+    ]
+    assert client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin).status_code == 200
+    run_worker()
+    assert status(client, admin, batch_id)["status"] == "COMPLETED"
+    cc = next(c for c in client.get("/api/v1/cost-centers", headers=admin).json() if c["code"] == "RFM6003000")
+    assert cc["name"] == "Custos"
+    head = client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=admin).json()
+    lines = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()
+    assert len(lines) == 3
+    assert sum(Decimal(v) for line in lines for v in line["values"].values()) == Decimal("20400")
+    assert all(line["branch_id"] for line in lines)  # filial 2001 criada junto
 
 
 def test_filled_opex_template_loads_everything(client, admin, run_worker):

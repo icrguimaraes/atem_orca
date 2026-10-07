@@ -260,6 +260,52 @@ def test_quadro_in_two_files_for_same_cost_center(client, admin, run_worker):
     assert moved.get("BRUNO") == "PROMOTION" and moved.get("GIL") == "PROMOTION"
 
 
+def test_quadro_action_without_month_and_merit(client, admin, run_worker):
+    """REMOVER sem mês e ação "MÉRITO" (fora da lista) entram com pendência em vez de ficar fora do quadro: o
+    desligamento não mexe no custo até informar o mês; o mérito vira reajuste individual sem novo salário."""
+    ccs, _, _ = _setup(client, admin, run_worker)
+    rows = [
+        ("700", "GIL", "ANALISTA", "1001", "0001", CC1, 6000, "REMOVER", None, None, None, "CLT", None, None),
+        ("800", "HELO", "ANALISTA", "1001", "0001", CC1, 6500, "MÉRITO", 6, None, None, "CLT", None, None),
+    ]
+    batch_id = upload(client, admin, builders.quadro_funcionarios(rows), "q3.xlsx")
+    run_worker()
+    errors = client.get(f"/api/v1/imports/{batch_id}/errors", headers=admin).json()
+    codes = {e["code"] for e in (errors["items"] if isinstance(errors, dict) else errors)}
+    assert {"ACTION_NO_MONTH", "ACTION_ALIAS", "ADJUSTMENT_NO_SALARY"} <= codes
+    assert status(client, admin, batch_id)["error_rows"] == 0
+    assert client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin).status_code == 200
+    run_worker()
+    assert status(client, admin, batch_id)["status"] == "COMPLETED"
+
+    head = client.get(f"/api/v1/personnel/cost-centers/{ccs[CC1]['id']}", headers=admin).json()
+    view_url = f"/api/v1/personnel/submissions/{head['submission_id']}/view"
+    people = _by_name(client.get(view_url, headers=admin).json())
+    gil = people["GIL"]
+    assert gil["movement"]["type"] == "TERMINATION" and gil["movement"]["month"] is None
+    assert gil["movement"]["pending"] == ["month"] and gil["headcount"] == [1] * 12  # sem mês: segue o ano todo
+    helo = people["HELO"]["movement"]
+    assert helo["type"] == "SALARY_ADJUSTMENT" and helo["month"] == 6 and helo["pending"] == ["new_salary"]
+
+    found = [i for i in client.get("/api/v1/findings", headers=admin).json()["items"] if i["module"] == "PERSONNEL"]
+    month = next(i for i in found if i["kind"] == "PERSONNEL_NO_MONTH")
+    assert month["subject"] == "Desligamento de GIL" and month["severity"] == "CRITICAL"
+    assert month["fix"] == {"type": "month", "label": "Mês da ação"}
+    assert any(i["kind"] == "PERSONNEL_NO_SALARY" and i["subject"] == "Reajuste individual de HELO" for i in found)
+    sent = client.post(f"/api/v1/personnel/submissions/{head['submission_id']}/actions/submit", headers=admin, json={})
+    assert sent.status_code == 409 and "mês da ação pendente: desligamento de GIL" in sent.json()["detail"]
+
+    bad = client.post("/api/v1/findings/fix", headers=admin, json={"key": month["key"], "month": 13})
+    assert bad.status_code == 422
+    fixed = client.post("/api/v1/findings/fix", headers=admin, json={"key": month["key"], "month": 4})
+    assert fixed.status_code == 200 and fixed.json()["note"] == "Mês da ação: ABR"
+    gil = _by_name(client.get(view_url, headers=admin).json())["GIL"]
+    assert gil["movement"]["month"] == 4 and gil["movement"]["pending"] == []
+    assert gil["headcount"] == [1, 1, 1] + [0] * 9
+    left = {i["key"] for i in client.get("/api/v1/findings", headers=admin).json()["items"]}
+    assert month["key"] not in left
+
+
 def test_inactive_contract_type_still_computes(client, admin, run_worker):
     ccs, mgr, _ = _setup(client, admin, run_worker)
     r = client.patch("/api/v1/contract-types/PJ", headers=admin, json={"is_active": False})

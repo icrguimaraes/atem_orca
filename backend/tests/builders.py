@@ -526,3 +526,49 @@ def ksb1_export_xlsx(rows: list[dict], subtotals: dict[str, float] | None = None
     if total is not None:
         ws.append([None] * 17 + [total] + [None] * 6)
     return _bytes(wb)
+
+
+def opex_template_ream() -> bytes:
+    """Template OPEX da REAM (layout antigo): abas de pacote sem a coluna CHAVE, CC alfanumérico, empresa só pela
+    divisão (2001) e aba BD com várias tabelas empilhadas (não é o BD-Novo da ATEM)."""
+    wb = Workbook()
+    wb.active.title = "Instruções"
+    bd = wb.create_sheet("BD")
+    for col, value in {"M": "Divisão", "N": "Nome Divisão", "Q": "Cod.Centro", "R": "FILIAL"}.items():
+        bd[f"{col}10"] = value
+    bd["M11"], bd["N11"], bd["Q11"] = "2001", "Manaus", "C201"
+    bd["M40"], bd["N40"] = "Fulano de Tal", "Fulano de Tal"  # outra tabela embaixo, na mesma coluna
+    months = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"]
+    header = [
+        "FORNECEDOR",
+        "OBSERVAÇÕES",
+        "FILIAL",
+        "DIVISÃO",
+        "DENOMINAÇÃO DO CENTRO DE CUSTO",
+        "TIPO DE CENTRO DE CUSTO ",
+        "CENTRO DE CUSTO",
+        "DESCRIÇÃO DA CONTA CONTÁBIL",
+        "CONTA CONTÁBIL",
+        *months,
+        2027,
+    ]
+    ident = ["Manaus", "2001", "Custos", "W", "RFM6003000"]
+    viagens = wb.create_sheet("I - Viagens")
+    viagens["B9"], viagens["AF9"], viagens["AH9"] = "AM", "Internacional", 1000  # só premissas
+    servicos = wb.create_sheet("II - Serviços de Terceiros")
+    servicos.append([])
+    for _ in range(12):
+        servicos.append([])
+    servicos.append([None, "CONTRATO", *header])  # linha 14, sem valores
+    consumo = wb.create_sheet("VII - Consumo e Expediente")
+    for _ in range(13):
+        consumo.append([])
+    consumo.append([None, "MATERIAL", *header])
+    consumo.append([None, None, None, None, *ident, "W-Alimentação", "6010301008", *[600] * 12, 7200])
+    consumo.append([None, None, None, None, *ident, "W-Material de Consumo", "6010301006", *[200] * 12, 2400])
+    logistica = wb.create_sheet("IX - Logística e Transporte")
+    for _ in range(15):
+        logistica.append([])
+    logistica.append([None, None, "MATERIAL", *header])  # uma coluna a mais à esquerda
+    logistica.append([None, None, None, None, None, *ident, "W-Conduções e Táxis", "6010301025", *[900] * 12, 10800])
+    return _bytes(wb)

@@ -7,11 +7,13 @@ from app.core.security import hash_password
 from app.db import get_db
 from app.models import RoleDef, User, UserRole, UserScope
 from app.models.base import Role
-from app.schemas.common import ScopeIn, UserCreate, UserOut, UserUpdate
+from app.schemas.common import ScopeIn, UserAccessOut, UserCreate, UserListOut, UserOut, UserUpdate
 from app.services import audit
+from app.services import user_access as access_svc
 
 router = APIRouter(prefix="/users", tags=["usuários"])
 admin_only = require_roles(Role.ADMIN)
+controller = require_roles(Role.CONTROLLER)  # Controladoria (e Administrador) atribui acesso a CCs
 
 
 def _check_roles(db: Session, roles: list[str]) -> None:
@@ -21,9 +23,11 @@ def _check_roles(db: Session, roles: list[str]) -> None:
         raise HTTPException(422, f"Perfis inválidos: {', '.join(sorted(unknown))}")
 
 
-@router.get("", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), _: User = Depends(require_roles(Role.CONTROLLER))) -> list[UserOut]:
-    return [UserOut.build(u) for u in db.scalars(select(User).order_by(User.name))]
+@router.get("", response_model=list[UserListOut])
+def list_users(db: Session = Depends(get_db), _: User = Depends(controller)) -> list[UserListOut]:
+    users = list(db.scalars(select(User).order_by(User.name)))
+    access = access_svc.summaries(db, users)
+    return [UserListOut(**UserOut.build(u).model_dump(), access=access[u.id]) for u in users]
 
 
 @router.post("", response_model=UserOut, status_code=201)
@@ -108,8 +112,9 @@ def set_scopes(
     scopes: list[ScopeIn],
     request: Request,
     db: Session = Depends(get_db),
-    actor: User = Depends(admin_only),
+    actor: User = Depends(controller),
 ) -> list[ScopeIn]:
+    """Substitui todos os escopos (uso em lote); a tela usa os endpoints de adicionar/remover abaixo."""
     user = db.get(User, user_id) or _not_found()
     before = [{"company_id": s.company_id, "cost_center_id": s.cost_center_id} for s in user.scopes]
     user.scopes = [UserScope(company_id=s.company_id, cost_center_id=s.cost_center_id) for s in scopes]
@@ -125,6 +130,73 @@ def set_scopes(
     )
     db.commit()
     return scopes
+
+
+@router.get("/{user_id}/access", response_model=UserAccessOut)
+def get_access(user_id: int, db: Session = Depends(get_db), _: User = Depends(controller)) -> dict:
+    """CCs que o usuário acessa: como gestor (cadastro do CC) e por escopo atribuído (CC ou empresa inteira)."""
+    user = db.get(User, user_id) or _not_found()
+    return access_svc.detail(db, user)
+
+
+@router.post("/{user_id}/scopes", response_model=UserAccessOut, status_code=201)
+def add_scope(
+    user_id: int,
+    payload: ScopeIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    actor: User = Depends(controller),
+) -> dict:
+    """Libera um centro de custo (`cost_center_id`) ou uma empresa inteira (`company_id`) para o usuário."""
+    user = db.get(User, user_id) or _not_found()
+    before = access_svc.snapshot(db, user)
+    try:
+        scope = access_svc.add_scope(db, user, cost_center_id=payload.cost_center_id, company_id=payload.company_id)
+    except access_svc.AccessError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    audit.record(
+        db,
+        user_id=actor.id,
+        action="ADD_SCOPE",
+        entity_type="user",
+        entity_id=user.id,
+        before={"scopes": before},
+        after={"scopes": access_svc.snapshot(db, user), "added": scope.id},
+        ip=client_ip(request),
+    )
+    out = access_svc.detail(db, user)
+    db.commit()
+    return out
+
+
+@router.delete("/{user_id}/scopes/{scope_id}", response_model=UserAccessOut)
+def remove_scope(
+    user_id: int,
+    scope_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    actor: User = Depends(controller),
+) -> dict:
+    """Retira um escopo atribuído. CCs em que o usuário é gestor saem só trocando o gestor no cadastro do CC."""
+    user = db.get(User, user_id) or _not_found()
+    before = access_svc.snapshot(db, user)
+    try:
+        access_svc.remove_scope(db, user, scope_id)
+    except access_svc.AccessError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    audit.record(
+        db,
+        user_id=actor.id,
+        action="REMOVE_SCOPE",
+        entity_type="user",
+        entity_id=user.id,
+        before={"scopes": before},
+        after={"scopes": access_svc.snapshot(db, user), "removed": scope_id},
+        ip=client_ip(request),
+    )
+    out = access_svc.detail(db, user)
+    db.commit()
+    return out
 
 
 def _not_found():

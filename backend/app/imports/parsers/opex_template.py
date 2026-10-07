@@ -29,7 +29,7 @@ from app.imports.parsers.financial import parse_wide
 from app.imports.parsers.master import parse_master
 
 PACKAGE_SHEET = re.compile(r"^\s*([IVX]+)\s*-\s*(.+)$")
-KEY = re.compile(r"^(\d{3,10})-(\d*)-(\d{3,20})-(\d{4,20})$")
+KEY = re.compile(r"^(\d{3,10})-(\d*)-([0-9A-Za-z]{3,20})-(\d{4,20})$")  # CC da REAM tem letras (RFM6003000)
 DESCRIPTION_HEADERS = ("detalhamento", "objetivo da viagem", "objetivo do evento")
 SUPPLIER_HEADERS = ("fornecedor",)
 NOTE_HEADERS = ("justificativa", "observacoes", "finalidade")
@@ -49,15 +49,23 @@ def _header(sheet: Sheet) -> tuple[int, dict[int, int], int, dict[str, int], boo
     """Linha de cabeçalho com CHAVE e JAN..DEZ.
 
     Devolve (linha, {mês: coluna}, coluna da CHAVE, demais colunas, é_consolidador). Na aba de Viagens
-    há duas colunas CHAVE; a usada é a mais próxima dos meses (o consolidador)."""
+    há duas colunas CHAVE; a usada é a mais próxima dos meses (o consolidador).
+
+    Modelo sem CHAVE (template da REAM, layout antigo): vale o cabeçalho com JAN..DEZ, CENTRO DE CUSTO e CONTA
+    CONTÁBIL; a coluna da CHAVE volta None e a linha é identificada pelas colunas de código."""
+    fallback = None
     for idx, row in sheet.iter_rows(1):
         if idx > 80:
-            return None
+            break
         texts = [norm(v).upper() for v in row]
         months = {}
         for col, text in enumerate(texts, start=1):
             if text in MONTH_LABELS and MONTH_LABELS.index(text) + 1 not in months:
                 months[MONTH_LABELS.index(text) + 1] = col
+        if len(months) == 12 and "CHAVE" not in texts and fallback is None:
+            before = {norm(v): col for col, v in enumerate(row, start=1) if col < months[1] and norm(v)}
+            if "centro de custo" in before and "conta contabil" in before:
+                fallback = (idx, months, None, before, False)
         if len(months) == 12 and "CHAVE" in texts:
             first_month = months[1]
             key_cols = [c for c, t in enumerate(texts, start=1) if t == "CHAVE" and c < first_month]
@@ -70,7 +78,7 @@ def _header(sheet: Sheet) -> tuple[int, dict[int, int], int, dict[str, int], boo
                 if col < first_month and text and text not in others:
                     others[text] = col
             return idx, months, key_col, others, len(key_cols) > 1
-    return None
+    return fallback
 
 
 def _find(others: dict[str, int], prefixes: tuple[str, ...], before: int) -> int | None:
@@ -234,6 +242,12 @@ def _code(value, width: int | None = None) -> str | None:
     return code if code and code.isdigit() and code.strip("0") else None
 
 
+def _sap_code(value) -> str | None:
+    """Código SAP com letras (CC da REAM, "RFM6003000"): só letras e números, com pelo menos um dígito."""
+    code = clean_code(value)
+    return code if code and code.isalnum() and any(c.isdigit() for c in code) and code.strip("0") else None
+
+
 def parse_package_sheet(sheet: Sheet, result: ParseResult) -> int:
     """Lê a aba linha a linha. A CHAVE da linha é a fonte preferida; se a fórmula não resolveu
     (CC ou conta não encontrados no BD), usa as colunas de código e, por fim, os nomes. Linha com valor
@@ -244,6 +258,8 @@ def parse_package_sheet(sheet: Sheet, result: ParseResult) -> int:
     header_row, months, key_col, others, consolidator = head
     if consolidator:
         return parse_travel_rows(sheet, result)  # Viagens: o consolidador só confere os totais
+    if key_col is None:
+        result.meta.setdefault("keyless_sheets", []).append(sheet.name)
     first_month = months[1]
     cols = _line_columns(sheet, header_row, first_month)
     desc_col = _find(others, DESCRIPTION_HEADERS, first_month)
@@ -278,9 +294,12 @@ def parse_package_sheet(sheet: Sheet, result: ParseResult) -> int:
         if any(Decimal(v) < 0 for v in values.values()):
             rec.error("NEGATIVE_VALUE", "Valores do orçamento não podem ser negativos")
         m = KEY.match(clean_str(get(row, key_col)) or "")
-        company, branch, cc, account = m.groups() if m else ("1001", None, None, None)
+        # sem CHAVE no modelo, a empresa não vem na linha: o resolver identifica (CC, filial ou divisão)
+        company, branch, cc, account = m.groups() if m else ("1001" if key_col else None, None, None, None)
         branch = _code(branch, 4) or _code(get(row, cols.get("branch")), 4)
-        cc = _code(cc) or _code(get(row, cols.get("cost_center")))
+        cc = _code(cc) or _code(get(row, cols.get("cost_center"))) or _sap_code(cc)
+        if cc is None and key_col is None:
+            cc = _sap_code(get(row, cols.get("cost_center")))  # CC da REAM é alfanumérico (RFM6003000)
         account = _code(account) or _code(get(row, cols.get("account")))
         rec.data = {
             "company": company,
@@ -302,6 +321,45 @@ def parse_package_sheet(sheet: Sheet, result: ParseResult) -> int:
         result.records.append(rec)
         count += 1
     return count
+
+
+def _master_from_lines(records: list[Record]) -> list[Record]:
+    """Cadastro mínimo (filial e CC) tirado das linhas do modelo sem CHAVE; a empresa é definida no resolver."""
+    out: dict[tuple[str, str], Record] = {}
+    for rec in records:
+        d = rec.data
+        if rec.record_type != "BUDGET_LINE" or d.get("company"):
+            continue
+        if d.get("cost_center") and ("COST_CENTER", d["cost_center"]) not in out:
+            out[("COST_CENTER", d["cost_center"])] = Record(
+                "COST_CENTER",
+                rec.sheet,
+                rec.row_number,
+                {
+                    "code": d["cost_center"],
+                    "name": d.get("cost_center_name") or d["cost_center"],
+                    "manager": None,
+                    "manager_email": None,
+                    "company": None,
+                    "department": None,
+                    "area": None,
+                    "from_lines": True,
+                },
+            )
+        if d.get("branch") and ("BRANCH", d["branch"]) not in out:
+            out[("BRANCH", d["branch"])] = Record(
+                "BRANCH",
+                rec.sheet,
+                rec.row_number,
+                {
+                    "code": d["branch"],
+                    "name": d.get("branch_name") or d["branch"],
+                    "company": None,
+                    "uf": None,
+                    "from_lines": True,
+                },
+            )
+    return list(out.values())
 
 
 def check_travel_consolidator(sheet: Sheet, result: ParseResult) -> None:
@@ -350,9 +408,6 @@ def parse_opex_template(sheets: list[Sheet], options: dict) -> ParseResult:
     result = ParseResult("OPEX_TEMPLATE", "TEMPLATE_OPEX")
     if not is_opex_template(sheets):
         return result
-    master = parse_master(sheets, options)
-    result.records.extend(master.records)
-
     realized = [s for s in sheets if norm(s.name).startswith("realizado")]
     actual = parse_wide(realized, options, "ACTUAL") if realized else ParseResult("ACTUAL", "WIDE_MONTHLY")
     result.records.extend(actual.records)
@@ -365,6 +420,22 @@ def parse_opex_template(sheets: list[Sheet], options: dict) -> ParseResult:
     for sheet in sheets:
         if PACKAGE_SHEET.match(sheet.name):
             check_travel_consolidator(sheet, result)
+    if result.meta.get("keyless_sheets"):
+        # modelo sem CHAVE (REAM): a aba BD é outra (várias tabelas empilhadas) e não serve de cadastro; filial e
+        # CC vêm das próprias linhas e são criados se faltarem
+        master = ParseResult("MASTER_DATA", "TEMPLATE_BD")
+        master.records = _master_from_lines(result.records)
+        result.structural.append(
+            Issue(
+                "LEGACY_LAYOUT",
+                "Template sem a coluna CHAVE (modelo da REAM ou versão antiga): empresa, filial e centro de custo "
+                "lidos das colunas de cada linha; aba BD não usada como cadastro",
+                severity="WARNING",
+            )
+        )
+    else:
+        master = parse_master(sheets, options)
+    result.records[:0] = master.records
     result.meta = result.meta | {
         "parts": {
             "master": len(master.records),

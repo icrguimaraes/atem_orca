@@ -60,6 +60,48 @@ class ScopeIn(BaseModel):
     cost_center_id: int | None = None
 
 
+# acesso a centros de custo (Usuários → Acessos; services/user_access.py)
+
+
+class AccessSummary(BaseModel):
+    is_global: bool  # Administrador/Controladoria: todos os CCs
+    cost_centers: int  # CCs distintos que acessa como gestor ou por escopo
+    managed: int
+    scopes: int
+
+
+class UserListOut(UserOut):
+    access: AccessSummary
+
+
+class AccessCostCenterOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    company: str
+    is_active: bool
+
+
+class UserScopeOut(BaseModel):
+    id: int
+    kind: str  # COST_CENTER | COMPANY | EMPTY
+    cost_center_id: int | None
+    company_id: int | None
+    code: str | None
+    name: str
+    company: str | None
+    is_active: bool
+    cost_centers: int  # quantos CCs a linha libera (empresa inteira = todos os CCs dela)
+
+
+class UserAccessOut(BaseModel):
+    user_id: int
+    is_global: bool
+    cost_centers: int
+    managed: list[AccessCostCenterOut]
+    scopes: list[UserScopeOut]
+
+
 # ---------------------------------------------------------------- cadastros
 
 

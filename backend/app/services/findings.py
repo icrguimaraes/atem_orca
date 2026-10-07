@@ -57,7 +57,8 @@ KIND_LABELS = {
     "CAPEX_ACCOUNT_MISMATCH": "Conta diferente do catálogo",
     "CAPEX_SOFTWARE": "Software no CAPEX",
     "PERSONNEL_JUSTIFICATION": "Movimentação sem justificativa",
-    "PERSONNEL_NO_SALARY": "Promoção sem novo salário",
+    "PERSONNEL_NO_SALARY": "Sem novo salário",
+    "PERSONNEL_NO_MONTH": "Ação sem mês",
     "PERSONNEL_CC_GUESSED": "Centro de custo pelo cargo",
 }
 FLAG_TEXT = {
@@ -124,8 +125,18 @@ def collect(
                     "PERSONNEL_NO_SALARY",
                     ("PERSONNEL_MOVEMENT", mv.id),
                     label[0].upper() + label[1:],
-                    "Novo salário não veio na planilha: a promoção está sem aumento até você informar o valor",
+                    "Novo salário não veio na planilha: fica sem aumento até você informar o valor",
                     fix={"type": "money", "label": "Novo salário mensal (R$)"},
+                )
+            for mv, label in personnel_svc.pending_months(db, sub):
+                add(
+                    "CRITICAL",
+                    "PERSONNEL_NO_MONTH",
+                    ("PERSONNEL_MOVEMENT", mv.id),
+                    label[0].upper() + label[1:],
+                    "Mês não veio na planilha: a ação ainda não entra no custo (salário atual o ano todo) até você "
+                    "informar o mês",
+                    fix={"type": "month", "label": "Mês da ação"},
                 )
             for emp in personnel_svc.pending_cost_centers(db, sub):
                 info = (emp.attributes or {}).get("pending_cc") or {}
@@ -340,11 +351,21 @@ def apply_fix(
         if emp is not None and amount == money(emp.base_salary):
             raise FindingError("O novo salário é igual ao atual")
         mv.new_salary, mv.updated_by = amount, user_id
-        attrs = dict(mv.attributes or {})
-        attrs.pop("pending", None)
-        mv.attributes = attrs
+        _clear_pending(mv, "new_salary")
         db.flush()
         return f"Novo salário: {brl(amount)}", {"new_salary": None}, {"new_salary": str(amount)}
+    if kind == "PERSONNEL_NO_MONTH":
+        mv = db.get(PersonnelMovement, int(ident))
+        try:
+            month = int(data.get("month"))
+        except (TypeError, ValueError):
+            raise FindingError("Informe o mês da ação") from None
+        if month not in MONTHS:
+            raise FindingError("Mês da ação deve estar entre JAN e DEZ")
+        mv.effective_month, mv.updated_by = month, user_id
+        _clear_pending(mv, "month")
+        db.flush()
+        return f"Mês da ação: {MONTH_LABELS[month - 1]}", {"month": None}, {"month": month}
     if kind == "PERSONNEL_CC_GUESSED":
         emp = db.get(Employee, int(ident))
         attrs = dict(emp.attributes or {})
@@ -360,6 +381,14 @@ def apply_fix(
         db.flush()
         return f"Justificativa: {text}", before, {"reason": text}
     raise FindingError("Este apontamento não tem correção direta: abra o orçamento do centro de custo")
+
+
+def _clear_pending(mv: PersonnelMovement, item: str) -> None:
+    attrs = dict(mv.attributes or {})
+    pending = [p for p in attrs.pop("pending", None) or [] if p != item]
+    if pending:
+        attrs["pending"] = pending
+    mv.attributes = attrs
 
 
 def log(db: Session, sub: BudgetSubmission, finding: dict, action: str, note: str, user_id: int | None) -> None:

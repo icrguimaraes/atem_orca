@@ -55,6 +55,11 @@ class PersonnelError(OpexError):
     """Erro de regra de negócio do módulo Pessoal."""
 
 
+def month_pending(mv: PersonnelMovement | None) -> bool:
+    """Ação importada sem mês (pendência em Apontamentos): não mexe no custo até o mês ser informado."""
+    return mv is not None and "month" in ((mv.attributes or {}).get("pending") or [])
+
+
 # ------------------------------------------------------------------ cenários
 
 
@@ -192,6 +197,8 @@ def build_positions(db: Session, ctx: Context, cc_ids: set[int] | None = None) -
                         extra=extra | {"from_cost_center_id": emp.cost_center_id},
                     )
                 )
+        elif month_pending(mv):  # mês pendente: segue como está (salário atual o ano todo)
+            plan = pr.PositionPlan(f"E{emp.id}", base, mv.contract_type_code or emp.contract_type_code)
         else:
             plan = pr.PositionPlan(
                 f"E{emp.id}",
@@ -360,7 +367,8 @@ def position_out(pos: Position, scenario: ScenarioInfo, cc_names: dict[int, str]
             "id": mv.id,
             "type": mv.movement_type,
             "label": MOVE_LABELS.get(mv.movement_type, mv.movement_type),
-            "month": mv.effective_month,
+            "month": None if month_pending(mv) else mv.effective_month,
+            "pending": attrs.get("pending") or [],
             "new_salary": None if mv.new_salary is None else str(mv.new_salary),
             "new_position": pos.extra.get("new_position"),
             "target_cost_center_id": mv.target_cost_center_id,
@@ -501,7 +509,9 @@ def set_employee_movement(
         return None
     if kind not in EMPLOYEE_MOVES:
         raise PersonnelError("Ação inválida")
-    month = _month(data.get("month"))
+    # importação: ação sem mês fica pendente (Apontamentos); o mês gravado é só marcador, o cálculo ignora a ação
+    no_month = bool(data.get("pending_ok")) and data.get("month") in (None, "") and kind in pr.MONTH_PENDING_ACTIONS
+    month = 12 if no_month else _month(data.get("month"))
     new_salary = None
     target = None
     severance = None
@@ -552,8 +562,11 @@ def set_employee_movement(
     mv.updated_by = user_id
     attrs = (mv.attributes or {}) | {"source": (data.get("source") or (mv.attributes or {}).get("source") or "SYSTEM")}
     attrs.pop("pending", None)
-    if kind in ("PROMOTION", "SALARY_ADJUSTMENT") and new_salary is None:
-        attrs["pending"] = ["new_salary"]
+    pending = ["new_salary"] if kind in ("PROMOTION", "SALARY_ADJUSTMENT") and new_salary is None else []
+    if no_month:
+        pending.append("month")
+    if pending:
+        attrs["pending"] = pending
     mv.attributes = attrs
     if current is None:
         db.add(mv)
@@ -604,6 +617,27 @@ def blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[str]:
     if salaries:
         extra = f" e mais {len(salaries) - 5}" if len(salaries) > 5 else ""
         out.append(f"novo salário pendente: {', '.join(salaries[:5])}{extra}")
+    months = [label for _, label in pending_months(db, sub)]
+    if months:
+        extra = f" e mais {len(months) - 5}" if len(months) > 5 else ""
+        out.append(f"mês da ação pendente: {', '.join(months[:5])}{extra}")
+    return out
+
+
+def pending_months(db: Session, sub: BudgetSubmission) -> list[tuple[PersonnelMovement, str]]:
+    """Ações que vieram da planilha sem mês (ex.: REMOVER sem mês): sem efeito no custo até informar."""
+    out = []
+    for mv in db.scalars(
+        select(PersonnelMovement)
+        .where(PersonnelMovement.submission_id == sub.id, PersonnelMovement.employee_id.is_not(None))
+        .order_by(PersonnelMovement.id)
+    ):
+        if not month_pending(mv):
+            continue
+        emp = db.get(Employee, mv.employee_id)
+        if emp is None or emp.cost_center_id != sub.cost_center_id:
+            continue
+        out.append((mv, f"{pr.ACTION_NOUNS.get(mv.movement_type, mv.movement_type.lower())} de {emp.name}"))
     return out
 
 

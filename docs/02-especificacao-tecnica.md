@@ -58,6 +58,13 @@ Deploy: `Dockerfile` multi-stage (build do front → imagem Python), `alembic up
 
 Um usuário pode ter vários perfis. A autorização é sempre **perfil + escopo** (CC/empresa/pacote).
 
+**Acesso por centro de custo** (Usuários → botão "Acessos"; `services/user_access.py`): quem não é global enxerga os CCs
+em que é gestor (`cost_centers.manager_user_id`, só leitura na tela — troca-se no cadastro do CC) mais os escopos de
+`user_scopes`, um CC ou uma empresa inteira (inclui os CCs criados depois). Controladoria e Administrador adicionam por
+busca (código ou nome) e removem; cada alteração grava `ADD_SCOPE`/`REMOVE_SCOPE` na auditoria (escopos antes/depois). A
+lista de usuários mostra quantos CCs cada um acessa ("Todos" para perfis globais; "Nenhum" em alerta para Gestor de CC
+ou Consulta sem CC).
+
 ## 4. Modelo de dados
 
 ### 4.1 Diagrama (núcleo)
@@ -226,7 +233,7 @@ Edição só em DRAFT/IN_PROGRESS/ADJUSTMENT_REQUESTED. **Congelamento:** ao con
 | Módulo | Endpoints principais | Fase |
 |---|---|---|
 | Auth | `POST /auth/login`, `GET /auth/me` | 1 |
-| Usuários | `GET/POST/PATCH /users`, `PUT /users/{id}/roles`, `PUT /users/{id}/scopes` | 1 |
+| Usuários | `GET/POST/PATCH /users`, `PUT /users/{id}/roles`, `PUT /users/{id}/scopes`, `GET /users/{id}/access`, `POST /users/{id}/scopes`, `DELETE /users/{id}/scopes/{scope_id}` | 1 |
 | Cadastros | `/companies`, `/branches`, `/cost-centers`, `/accounts`, `/packages`, `/package-managers`, `/lookups/{domain}`, `/contract-types` | 1 |
 | Ciclos | `/cycles`, `/cycles/{id}/parameters`, `/cycles/{id}/open|close`, `/versions` | 1 |
 | Importação | `POST /imports` (upload), `GET /imports/{id}` (status + resumo), `GET /imports/{id}/preview`, `GET /imports/{id}/errors.xlsx`, `POST /imports/{id}/confirm`, `POST /imports/{id}/reject`, `GET /dataset-versions` | 1 |
@@ -333,6 +340,11 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 - Todas as abas de pacote são lidas **linha a linha**. Identificação: CHAVE da linha → colunas DIVISÃO / CENTRO DE CUSTO / CONTA CONTÁBIL → nomes (denominação do CC, descrição da conta, filial). Linha com valor sem CC ou conta identificável vira erro `UNRESOLVED_LINE` (nunca é descartada em silêncio).
 - Aba I - Viagens: cada linha é uma viagem (objetivo, cargo, ida/volta, dias, origem/destino, tipo) e gera passagem, diária e hospedagem no mês de ida, aparecendo no painel de Viagens. Usa os valores calculados pela planilha; sem eles, recalcula pelas tarifas do ciclo (aviso `TRAVEL_RECALCULATED`).
 - O **Consolidador** da aba Viagens serve só de conferência: diferença entre a soma das linhas e o consolidador gera aviso `CONSOLIDATOR_MISMATCH`.
+- **Modelo sem CHAVE** (template da REAM, layout antigo — ex.: `Template_OPEX 2027 - REFMAN - Custos.xlsm`): a aba vale
+  pelo cabeçalho com `JAN..DEZ`, `CENTRO DE CUSTO` e `CONTA CONTÁBIL`; CC pode ser alfanumérico (`RFM6003000`). A empresa
+  sai do CC já cadastrado (em uma só empresa), da filial já cadastrada, da DIVISÃO igual ao código de uma empresa (REAM:
+  2001) ou da opção "empresa padrão", nessa ordem. A aba `BD` desse modelo (tabelas empilhadas) não é lida como cadastro:
+  filial e CC são criados a partir das próprias linhas. Aviso estrutural `LEGACY_LAYOUT` na prévia.
 
 ## 14. Regras implementadas na Fase 4 (Pessoal)
 
@@ -344,6 +356,12 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 - **Cenários**: o cenário **base** do ciclo (seed: reajuste 5% em JAN, CLT 1,8) calcula todos os orçamentos. A simulação (what-if) compara base × multiplicadores/reajuste/data-base alternativos, por CC e por contrato, sem gravar; cenários podem ser salvos e um deles definido como base (Controladoria/RH).
 - **Perfis**: RH e Controladoria veem todos os CCs; gestor vê os seus; gestor do pacote Pessoas valida.
 - **Importação do quadro**: AÇÃO (PROMOVER/REMOVER/INCLUIR) vira movimentação no orçamento do CC; linhas sem matrícula (vagas) viram contratações. Substitui só o que veio de importação anterior. Opção "CC padrão" para arquivos sem a coluna CENTRO DE CUSTO. CC enviado/aprovado não recebe as ações (aviso na prévia).
+- **Pendências do quadro** (o arquivo entra como veio; o erro aparece em Apontamentos): CC vazio → CC do setor pelo
+  cargo (`CC_FROM_POSITION`); promoção/reajuste sem novo salário → sem aumento até informar (`PROMOTION_NO_SALARY`,
+  `ADJUSTMENT_NO_SALARY`); promover, reajustar ou remover **sem mês** → a ação fica registrada mas não mexe no custo
+  (salário atual o ano todo) até informar o mês (`ACTION_NO_MONTH`; `attributes.pending = ["month"]`); ação escrita
+  fora da lista (MÉRITO/REAJUSTE → reajuste individual; PROMOÇÃO; DESLIGAR/DESLIGAMENTO) é lida com aviso
+  `ACTION_ALIAS`. Salário e mês pendentes bloqueiam o envio.
 - **Benefícios** do líder ficam informativos (já estão no multiplicador — decisão 11.1).
 - Migração `0003`: `personnel_movements.attributes`, `target_cost_center_id`, `created_by`, `updated_by`.
 
@@ -375,7 +393,8 @@ tipo e CC; cada linha leva ao orçamento do CC. Respeita o escopo do usuário (g
 **Correção na própria página** (`POST /api/v1/findings/fix`, mesma regra de edição das telas do CC — orçamento em
 edição e versão não congelada): cronograma do CAPEX (fecha com o total), conta do item pela do catálogo de ativos,
 justificativa da solicitação, tipo de projeto, justificativa da conta OPEX, valor da passagem da viagem (cria a linha
-de passagem no mês de ida e tira o alerta) e justificativa da movimentação de pessoal. **Avisos** podem ser
+de passagem no mês de ida e tira o alerta), justificativa da movimentação de pessoal, novo salário pendente, mês da
+ação pendente (`PERSONNEL_NO_MONTH`) e confirmação do CC definido pelo cargo. **Avisos** podem ser
 **mantidos** pela Controladoria com o motivo (`POST /findings/keep`; "Reabrir" desfaz). Correções e avisos mantidos
 ficam em `finding_reviews` (migração `0005`) e na auditoria. **Arquivos:** relatório dos apontamentos
 (`GET /findings/export.xlsx`: resumo por CC, pendentes, corrigidos e mantidos com motivo, usuário e data) e o template

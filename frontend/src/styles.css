@@ -738,3 +738,11 @@ tr.saving { opacity: 0.6; }
 .stats-compact { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); margin-bottom: 12px; }
 .stats-compact .stat { padding: 10px 12px; }
 .stats-compact .stat-value { font-size: 20px; line-height: 26px; }
+
+/* ---------- Usuários → Acessos (modal de centros de custo por usuário) */
+.table-access td { vertical-align: middle; }
+.table-access tr:first-child td { border-top: 1px solid var(--border); }
+.access-sub { display: block; margin-top: 2px; }
+.access-company { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.access-company label { flex: 1 1 220px; }
+.access-company .btn { min-height: 48px; }

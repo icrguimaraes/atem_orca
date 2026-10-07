@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
-import { api, type User } from "../api";
+import { api, type UserListItem } from "../api";
 import { useAuth } from "../auth";
 import { Alert, Badge, Card, Loading, PageHeader, useLoad } from "../components/ui";
+import { AccessCell, UserAccessModal } from "../components/UserAccess";
 import { ROLE_LABELS, fmtDateTime } from "../labels";
 
 function NewUser({ onCreated }: { onCreated: () => void }) {
@@ -62,12 +63,13 @@ function NewUser({ onCreated }: { onCreated: () => void }) {
 
 export default function Users() {
   const { can } = useAuth();
-  const { data, error, reload } = useLoad(() => api<User[]>("/users"));
+  const { data, error, reload } = useLoad(() => api<UserListItem[]>("/users"));
+  const [editing, setEditing] = useState<UserListItem | null>(null);
   return (
     <>
       <PageHeader
         title="Usuários"
-        subtitle="O gestor enxerga os centros de custo em que está cadastrado como gestor (coluna Gestor do CC no cadastro)."
+        subtitle="Cada usuário enxerga os centros de custo em que é gestor (cadastro do CC) e os atribuídos em Acessos; Administrador e Controladoria veem todos."
       />
       {can() && (
         <Card title="Novo usuário">
@@ -86,8 +88,10 @@ export default function Users() {
                 <th>Nome</th>
                 <th>E-mail</th>
                 <th>Perfis</th>
+                <th>Centros de custo</th>
                 <th>Situação</th>
                 <th>Último acesso</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -96,14 +100,19 @@ export default function Users() {
                   <td>{u.name}</td>
                   <td>{u.email}</td>
                   <td>{u.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</td>
+                  <td className="nowrap"><AccessCell user={u} /></td>
                   <td>{u.is_active ? <Badge tone="good">Ativo</Badge> : <Badge tone="neutral">Inativo</Badge>}</td>
                   <td>{fmtDateTime(u.last_login_at)}</td>
+                  <td className="row-actions">
+                    <button className="btn btn-sm" onClick={() => setEditing(u)}>Acessos</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table></div>
         )}
       </Card>
+      {editing && <UserAccessModal user={editing} onClose={() => setEditing(null)} onChanged={reload} />}
     </>
   );
 }

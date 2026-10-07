@@ -1,7 +1,7 @@
 """Quadro de funcionários (template Pessoal) e premissas macroeconômicas."""
 
 from app.domain.rules.common import month_from_label
-from app.domain.rules.personnel import TEMPLATE_ACTIONS
+from app.domain.rules.personnel import ACTION_NOUNS, MONTH_PENDING_ACTIONS, TEMPLATE_ACTION_ALIASES, TEMPLATE_ACTIONS
 from app.imports.base import (
     ParseResult,
     Record,
@@ -82,7 +82,16 @@ def parse_employees(sheets: list[Sheet], options: dict) -> ParseResult:
                 salary = None
             action_raw = norm(table.value(row, "action")).upper() or None
             action = TEMPLATE_ACTIONS.get(action_raw) if action_raw else None
-            if action_raw and action is None:
+            if action_raw and action is None and action_raw in TEMPLATE_ACTION_ALIASES:
+                action = TEMPLATE_ACTION_ALIASES[action_raw]
+                rec.warn(
+                    "ACTION_ALIAS",
+                    f"Ação '{clean_str(table.value(row, 'action'))}' fora da lista (MANTER, PROMOVER, INCLUIR, "
+                    f"REMOVER): lida como {ACTION_NOUNS[action]}",
+                    "Ação",
+                    action_raw,
+                )
+            elif action_raw and action is None:
                 rec.error("INVALID_DOMAIN", "Ação deve ser MANTER, PROMOVER, INCLUIR ou REMOVER", "Ação", action_raw)
             action_month = month_from_label(table.value(row, "action_month"))
             try:
@@ -139,12 +148,27 @@ def parse_employees(sheets: list[Sheet], options: dict) -> ParseResult:
                 rec.error("REQUIRED", "Salário obrigatório", "Salário")
             elif salary is not None and salary < 0:
                 rec.error("INVALID_NUMBER", "Salário negativo", "Salário", raw_salary)
-            if action in ("PROMOTION", "TERMINATION", "HIRE", "VACANCY") and action_month is None:
+            if action in MONTH_PENDING_ACTIONS and action_month is None and registration is not None:
+                noun = ACTION_NOUNS[action]
+                rec.warn(
+                    "ACTION_NO_MONTH",
+                    f"{noun[0].upper() + noun[1:]} sem mês: entra pendente, sem efeito no custo, até informar o mês "
+                    "em Apontamentos",
+                    "Mês da Ação",
+                )
+            elif action is not None and action != "KEEP" and action_month is None:
                 rec.error("REQUIRED", "Mês da ação obrigatório para a ação informada", "Mês da Ação")
             if action == "PROMOTION" and new_salary is None:
                 rec.warn(
                     "PROMOTION_NO_SALARY",
                     "Promoção sem novo salário: entra pendente, sem aumento, até informar o valor em Apontamentos",
+                    "Novo Salário",
+                )
+            elif action == "SALARY_ADJUSTMENT" and new_salary is None:
+                rec.warn(
+                    "ADJUSTMENT_NO_SALARY",
+                    "Reajuste individual sem novo salário: entra pendente, sem aumento, até informar o valor em "
+                    "Apontamentos",
                     "Novo Salário",
                 )
             if registration is None:

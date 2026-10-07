@@ -16,7 +16,9 @@ function MovementCell({ p }: { p: PersonnelPosition }) {
   const meta = MOVEMENT_LABELS[mv.type];
   return (
     <div>
-      <Badge tone={meta?.tone ?? "neutral"}>{meta?.label ?? mv.type} · {MONTHS[mv.month - 1]}</Badge>
+      <Badge tone={meta?.tone ?? "neutral"}>{meta?.label ?? mv.type} · {mv.month ? MONTHS[mv.month - 1] : "mês pendente"}</Badge>
+      {!mv.month && <div className="error-text">sem mês: não entra no custo até informar (Apontamentos)</div>}
+      {mv.pending?.includes("new_salary") && <div className="error-text">novo salário pendente</div>}
       <div className="muted small">
         {mv.new_salary && mv.type !== "TERMINATION" && <>novo salário {fmtMoney(mv.new_salary)} </>}
         {mv.new_position && <>· {mv.new_position} </>}
