@@ -5,14 +5,13 @@ import Layout from "./components/Layout";
 import { Loading } from "./components/ui";
 // Plotly (~1 MB) só é baixado quando a Análise é aberta
 const Analytics = lazy(() => import("./pages/Analytics"));
-// Painel 2 (Painel em Plotly, para comparação): também só baixa o Plotly quando aberto
+// Painel (Plotly): só baixa o Plotly quando aberto
 const Painel2 = lazy(() => import("./pages/Painel2"));
 import Audit from "./pages/Audit";
 import CapexCostCenter from "./pages/CapexCostCenter";
 import Consolidation from "./pages/Consolidation";
 import CyclePage from "./pages/CyclePage";
 import Findings from "./pages/Findings";
-import Home from "./pages/Home";
 import ImportDetail from "./pages/ImportDetail";
 import Imports from "./pages/Imports";
 import Login from "./pages/Login";
@@ -44,9 +43,9 @@ export default function App() {
               </Protected>
             }
           >
-            <Route index element={<Home />} />
+            <Route index element={<Suspense fallback={<Loading />}><Painel2 /></Suspense>} />
             <Route path="analise" element={<Suspense fallback={<Loading />}><Analytics /></Suspense>} />
-            <Route path="painel-2" element={<Suspense fallback={<Loading />}><Painel2 /></Suspense>} />
+            <Route path="painel-2" element={<Navigate to="/" replace />} />
             <Route path="importacoes" element={<Protected roles={["CONTROLLER"]}><Imports /></Protected>} />
             <Route path="importacoes/:id" element={<Protected roles={["CONTROLLER"]}><ImportDetail /></Protected>} />
             <Route path="orcamento" element={<Navigate to="/?tipo=OPEX" replace />} />

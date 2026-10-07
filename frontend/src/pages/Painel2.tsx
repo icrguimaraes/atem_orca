@@ -2,6 +2,8 @@ import { useCallback, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, type Breakdown, type BreakdownRow, type Company, type CostCenter, type Cycle, type Overview, type Package } from "../api";
 import { useAuth } from "../auth";
+import { BudgetProgressCard } from "../components/BudgetProgressCard";
+import { ManagerTasks, PackageReviews, PainelBase } from "../components/PainelBlocks";
 import { FilterBar } from "../components/FilterBar";
 import { Heatmap } from "../components/charts";
 import { DrillTable } from "../components/DrillTable";
@@ -10,7 +12,7 @@ import { Alert, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from ".
 import { MONTHS, fmtCompact, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
 
 /**
- * Painel 2: o mesmo Painel (filtros, números, blocos e tabela), com os gráficos em Plotly montados no backend
+ * Painel (rota /): filtros, números, blocos e tabela, com os gráficos em Plotly montados no backend
  * (`services/painel_figures.py`, a partir de `/dashboard/overview?figures=true`). Existe para comparação com o
  * Painel em SVG; depois da escolha, uma das duas versões sai. Clique nos gráficos e na tabela filtra; "Limpar filtros" volta ao início.
  */
@@ -74,8 +76,9 @@ function pick(customdata: unknown, index: number): number | null {
 }
 
 export default function Painel2() {
-  const { can } = useAuth();
+  const { user, can } = useAuth();
   const isController = can("CONTROLLER");
+  const isPlanner = can("CONTROLLER", "HR");
   const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState({ company_id: "", cost_center_id: "", package_id: "" });
   const [years, setYears] = useState<number[]>([]);
@@ -213,11 +216,11 @@ export default function Painel2() {
   return (
     <>
       <PageHeader
-        title="Painel 2"
+        title="Painel"
         subtitle={
           o && hasData
-            ? `Versão em Plotly, para comparar com o Painel. ${mainLabel}${typesTxt}${hasBase ? ` comparado com ${baseLabel}` : ""}.`
-            : `Versão em Plotly, para comparar com o Painel. ${cycle ? cycle.name : ""}`
+            ? `Olá, ${user?.name.split(" ")[0]}. ${mainLabel}${typesTxt}${hasBase ? ` comparado com ${baseLabel}` : ""}.`
+            : `Olá, ${user?.name.split(" ")[0]}. ${cycle ? cycle.name : ""}`
         }
         actions={
           <>
@@ -226,10 +229,13 @@ export default function Painel2() {
                 Limpar filtros ({activeFilters})
               </button>
             )}
-            <Link to="/" className="btn btn-ghost">Abrir o Painel</Link>
+            {isPlanner && <Link to="/pessoal/simulacao" className="btn btn-ghost">Simular cenário de pessoal</Link>}
           </>
         }
       />
+
+      {!isController && <ManagerTasks warnWhenEmpty={Boolean(user?.roles.includes("MANAGER"))} />}
+      <PackageReviews />
 
       <FilterBar
         onApply={(v) => setFilters({ company_id: v.company_id, cost_center_id: v.cost_center_id, package_id: v.package_id })}
@@ -494,6 +500,8 @@ export default function Painel2() {
           </div>
         </div>
       )}
+      {o?.budget_progress && o.budget_progress.total_cost_centers > 0 && <BudgetProgressCard progress={o.budget_progress} />}
+      <PainelBase />
     </>
   );
 }

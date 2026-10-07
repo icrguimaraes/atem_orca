@@ -35,15 +35,17 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   `SERIES`; coral só em ações primárias. Toda tabela nova vai dentro de `.table-wrap`; conferir celular (390px) sem overflow.
 - Gráficos analíticos: figuras Plotly são montadas **no backend** (`services/analytics.py`, uma base filtrada por request,
   formatação pt-BR em rótulos/tooltips) e renderizadas por `components/PlotlyChart.tsx` (bundle `plotly.js-basic-dist-min`:
-  barras, linhas e pizza; carregado só na Análise e no Painel 2). Novos gráficos: nova função `fig_*` + chave em `dashboard()['figures']`.
-- Painel 2 (`pages/Painel2.tsx`, `/painel-2`): o Painel em Plotly para comparação — mesmos números de `/dashboard/overview`,
+  barras, linhas e pizza; carregado só na Análise e no Painel). Novos gráficos: nova função `fig_*` + chave em `dashboard()['figures']`.
+- Painel (`pages/Painel2.tsx`, rota `/`; `/painel-2` redireciona): gráficos em Plotly com os números de `/dashboard/overview`,
   figuras em `services/painel_figures.py` (`overview?figures=true`, filtro extra `account_id`); tooltip próprio via `meta.tooltip`
   + linhas no fim do `customdata`; clique nos visuais filtra (o visual clicado destaca em vez de se filtrar — séries sem o
-  próprio filtro e `heatmap_all`; novo clique desmarca) e "Limpar filtros" reseta. Depois da escolha, uma versão sai.
+  próprio filtro e `heatmap_all`; novo clique desmarca) e "Limpar filtros" reseta. O Painel antigo em SVG (`Home.tsx`) saiu em
+  07/10/2026; os blocos que não são gráfico (tarefas do gestor, validações GMD, base importada, qualidade, importações, versões)
+  estão em `components/PainelBlocks.tsx`.
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.
-- Painel (`pages/Home.tsx`) é o único painel: período = anos somados × meses × tipos de orçamento (`api/v1/dashboard._period` e `Facts`);
+- O Painel é único: período = anos somados × meses × tipos de orçamento (`api/v1/dashboard._period` e `Facts`);
   verde = orçado/orçamento (inclui o orçamento proposto do ano do ciclo, via consolidação), azul = realizado, roxo = ano anterior.
 - Filtros de página sempre via `components/FilterBar` (desktop: selects; celular: grade + folha "Aplicar"); opções podem depender do rascunho (`options: (draft) => …`).
 - Celular: navegação na barra de abas inferior (`Layout.MobileTabs`, lista `TABS`) + folha "Mais"; nova página entra em `NAV` e aparece em "Mais".

@@ -33,7 +33,6 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Orçamento",
     items: [
       { to: "/", label: "Painel", end: true, icon: ICON.painel },
-      { to: "/painel-2", label: "Painel 2 (Plotly)", icon: ICON.painel2 },
       { to: "/analise", label: "Análise orçamentária", icon: ICON.analise },
       { to: "/consolidacao", label: "Consolidação e exportação", icon: ICON.consolidacao },
       { to: "/apontamentos", label: "Apontamentos", icon: ICON.apontamentos },
