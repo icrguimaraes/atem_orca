@@ -568,6 +568,12 @@ tr.saving { opacity: 0.6; }
 .filter-chip button:hover { color: var(--text); }
 .row-filter { border: 0; background: transparent; padding: 0; font: inherit; color: inherit; cursor: pointer; text-align: left; }
 .row-filter:hover { text-decoration: underline; }
+/* Apontamentos: texto longo com largura mínima (a tabela rola dentro do card em telas estreitas) */
+.findings-table td { vertical-align: top; }
+.findings-table .col-cc { min-width: 170px; }
+.findings-table .col-item { min-width: 190px; }
+.findings-table .col-msg { min-width: 340px; }
+.findings-table .col-msg strong { display: block; margin-bottom: 2px; }
 /* tooltip próprio dos gráficos Plotly (mesmo desenho do tooltip dos gráficos em SVG) */
 .plotly-wrap { position: relative; }
 .plotly-wrap .tooltip { top: 0; left: 0; transform: none; }

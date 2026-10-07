@@ -6,6 +6,7 @@ const PAGES: [string, string][] = [
   ["/painel-2", "Painel 2"],
   ["/analise", "Análise orçamentária"],
   ["/consolidacao", "Consolidação e exportação"],
+  ["/apontamentos", "Apontamentos"],
   ["/importacoes", "Importação de dados"],
   ["/cadastros", "Cadastros"],
   ["/ciclo", "Orçamento"],  // h1 é o nome do ciclo

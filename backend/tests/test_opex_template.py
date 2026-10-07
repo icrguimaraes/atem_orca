@@ -49,6 +49,12 @@ def test_filled_opex_template_loads_everything(client, admin, run_worker):
     errors = client.get(f"/api/v1/imports/{batch_id}/errors", headers=admin).json()
     codes = {e["code"] for e in (errors["items"] if isinstance(errors, dict) else errors)}
     assert "TRAVEL_NO_FARE" in codes
+    found = client.get("/api/v1/findings", headers=admin).json()["items"]
+    fare = [i for i in found if i["kind"] == "TRAVEL_NO_FARE"]
+    assert [(i["severity"], i["subject"], i["amount"]) for i in fare] == [
+        ("WARNING", "Visita base Belém · AM → PA · MAR", "2400.00")
+    ]
+    assert fare[0]["link"] == f"/orcamento/{cc['id']}" and fare[0]["kind_label"] == "Passagem zerada"
     consult = next(line for line in lines if line["supplier"] == "KPMG")
     assert consult["description"] == "Consultoria tributária" and consult["justification"] == "Reajuste IPCA"
 

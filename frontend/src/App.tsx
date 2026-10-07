@@ -11,6 +11,7 @@ import Audit from "./pages/Audit";
 import CapexCostCenter from "./pages/CapexCostCenter";
 import Consolidation from "./pages/Consolidation";
 import CyclePage from "./pages/CyclePage";
+import Findings from "./pages/Findings";
 import Home from "./pages/Home";
 import ImportDetail from "./pages/ImportDetail";
 import Imports from "./pages/Imports";
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="pessoal/simulacao" element={<PersonnelSimulation />} />
             <Route path="pessoal/:ccId" element={<PersonnelCostCenter />} />
             <Route path="consolidacao" element={<Consolidation />} />
+            <Route path="apontamentos" element={<Findings />} />
             <Route path="cadastros" element={<MasterData />} />
             <Route path="ciclo" element={<CyclePage />} />
             <Route path="usuarios" element={<Protected roles={["CONTROLLER"]}><Users /></Protected>} />

@@ -12,6 +12,7 @@ const NAV = [
   { to: "/painel-2", label: "Painel 2 (Plotly)" },
   { to: "/analise", label: "Análise orçamentária" },
   { to: "/consolidacao", label: "Consolidação e exportação" },
+  { to: "/apontamentos", label: "Apontamentos" },
   { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"] },
   { to: "/cadastros", label: "Cadastros", roles: ["CONTROLLER"] },
   { to: "/ciclo", label: "Ciclo e parâmetros", roles: ["CONTROLLER"] },

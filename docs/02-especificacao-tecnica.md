@@ -357,6 +357,15 @@ Controladoria: painel de acompanhamento (CC × status × prazo), pontos de aten�
 - **Exportação Excel** (`/consolidation/export.xlsx`, filtros de versão/empresa/CC): Resumo (módulo × anos, mês × módulo), **Carga SAP** (chave × JAN..DEZ), Consolidado, Variações por conta (com alertas), OPEX (linhas), CAPEX (itens com pendências), Pessoal (quadro com ações e custo mensal) e Status por CC. Valores numéricos com formato contábil, filtros, painéis congelados e totais com `SUBTOTAL`.
 - Migração `0004`: tabela `budget_snapshot_lines`.
 
+### 15.0 Apontamentos (divergências item a item)
+
+Página **Apontamentos** (`/apontamentos`, `GET /api/v1/findings`, `services/findings.py`): reúne, nos orçamentos
+iniciados e ainda não aprovados da versão em elaboração, tudo o que as telas de CC apontam — **críticos** (bloqueiam o
+envio: conta com variação sem justificativa, cronograma do CAPEX diferente do total, projeto sem tipo/justificativa,
+movimentação de pessoal sem justificativa) e **avisos** (para a análise: passagem zerada, viagem sem tarifa, valor
+baixo, vida útil curta, conta diferente do catálogo de ativos, software no CAPEX). Filtros por módulo, gravidade,
+tipo e CC; cada linha leva ao orçamento do CC. Respeita o escopo do usuário (gestor vê só os seus CCs).
+
 ### 15.1 Exportação do template preenchido (ida e volta Excel)
 
 `services/template_export.py` gera, por centro de custo, uma planilha no layout que o importador reconhece:

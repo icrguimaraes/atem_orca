@@ -18,6 +18,7 @@ from app.api.v1 import (
     cycles,
     dashboard,
     datasets,
+    findings,
     imports,
     master,
     opex,
@@ -93,6 +94,7 @@ for module in (
     personnel,
     consolidation,
     analytics,
+    findings,
 ):
     api.include_router(module.router)
 app.include_router(api)

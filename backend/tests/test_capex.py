@@ -145,6 +145,15 @@ def test_capex_template_import(client, admin, run_worker):
     assert project["items"][0]["asset_item_id"] is not None
     assert view["totals"]["proposed"] == "34000.00"
     assert view["issues"]["critical"] == 1  # cadeira: cronograma 3.000 × total 4.000
+    # página Apontamentos: as pendências do CC aparecem item a item, críticas primeiro
+    found = client.get("/api/v1/findings", headers=admin).json()
+    mine = [i for i in found["items"] if i["cost_center_id"] == cc["id"] and i["module"] == "CAPEX"]
+    assert mine[0]["severity"] == "CRITICAL" and mine[0]["kind"] == "CAPEX_SCHEDULE_MISMATCH"
+    assert mine[0]["subject"].endswith("· CADEIRA") and mine[0]["link"] == f"/capex/{cc['id']}"
+    assert {"CAPEX_SOFTWARE", "CAPEX_BELOW_MIN_VALUE"} <= {i["kind"] for i in mine}
+    assert found["counts"]["critical"] >= 1 and found["counts"]["cost_centers"] >= 1
+    _, outsider = _user(client, admin, "sem-cc@t.com", ["MANAGER"])
+    assert client.get("/api/v1/findings", headers=outsider).json()["items"] == []  # gestor só vê os seus CCs
     licence = project["items"][1]
     assert [i["code"] for i in licence["issues"]] == ["CAPEX_SOFTWARE"]
     # notebook levado para a conta de software: diverge do catálogo (aviso, não bloqueia)

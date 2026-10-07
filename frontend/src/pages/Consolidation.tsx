@@ -234,7 +234,7 @@ export default function Consolidation() {
         </>
       )}
 
-      <Card title="Pontos de atenção" actions={points.data && <span className="muted small">{fmtInt(points.data.counts.high ?? 0)} alta · {fmtInt(points.data.counts.medium ?? 0)} média · {fmtInt(points.data.counts.low ?? 0)} baixa</span>}>
+      <Card title="Pontos de atenção" actions={points.data && <span className="muted small">{fmtInt(points.data.counts.high ?? 0)} alta · {fmtInt(points.data.counts.medium ?? 0)} média · {fmtInt(points.data.counts.low ?? 0)} baixa · <Link className="link" to="/apontamentos">ver apontamentos item a item</Link></span>}>
         {!points.data ? (
           <Loading />
         ) : points.data.points.length === 0 ? (

@@ -439,6 +439,12 @@ export interface AttentionPoint {
   severity: "high" | "medium" | "low" | "info"; module: string; module_label: string; kind: string;
   cost_center_id: number | null; cost_center: string | null; message: string; link: string | null;
 }
+export interface Finding {
+  severity: "CRITICAL" | "WARNING"; module: string; module_label: string; kind: string; kind_label: string;
+  cost_center_id: number; cost_center: string; status: string; subject: string; detail: string | null;
+  message: string; amount: string | null; link: string | null;
+}
+export interface Findings { version: string; items: Finding[]; counts: { critical: number; warning: number; cost_centers: number } }
 export interface VersionCompare {
   from: { id: number; label: string; status: string; total: string };
   to: { id: number; label: string; status: string; total: string };
