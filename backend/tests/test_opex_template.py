@@ -224,3 +224,15 @@ def test_broken_key_resolved_by_name_and_unresolved_is_reported(client, admin, r
     codes = {e["code"] for e in items}
     assert {"UNRESOLVED_LINE", "CONSOLIDATOR_MISMATCH"} <= codes
     assert b["summary"]["meta"]["consolidator_check"]["I - Viagens"]["ok"] is False
+
+
+def test_preview_opens_on_budget_records(client, admin, run_worker):
+    """Prévia: "MAIN" mostra só o que vira orçamento (sem catálogo e cadastros); sem filtro, mostra tudo."""
+    batch_id = upload(client, admin, builders.opex_template_filled(), "t-preview.xlsx")
+    run_worker()
+    main = client.get(f"/api/v1/imports/{batch_id}/preview?record_type=MAIN", headers=admin).json()["rows"]
+    assert main and {r["record_type"] for r in main} <= {"BUDGET_LINE", "TRAVEL"}
+    every = client.get(f"/api/v1/imports/{batch_id}/preview", headers=admin).json()["rows"]
+    assert {"BRANCH", "ACCOUNT"} <= {r["record_type"] for r in every}
+    accounts = client.get(f"/api/v1/imports/{batch_id}/preview?record_type=ACCOUNT", headers=admin).json()["rows"]
+    assert accounts and {r["record_type"] for r in accounts} == {"ACCOUNT"}

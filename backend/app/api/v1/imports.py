@@ -124,6 +124,11 @@ def get_batch(batch_id: int, db: Session = Depends(get_db), _: User = Depends(im
 def preview(
     batch_id: int,
     status: str | None = Query(None, description="VALID | WARNING | ERROR | DUPLICATE"),
+    record_type: str | None = Query(
+        None,
+        description="Tipos separados por vírgula; MAIN = o que vira orçamento/quadro (sem catálogo e cadastros), "
+        "ou tudo se o arquivo não tiver nada disso",
+    ),
     limit: int = Query(100, le=1000),
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -133,6 +138,15 @@ def preview(
     stmt = select(ImportRow).where(ImportRow.batch_id == batch_id)
     if status:
         stmt = stmt.where(ImportRow.status == status)
+    types = [t.strip() for t in (record_type or "").split(",") if t.strip()]
+    if types == ["MAIN"]:
+        main = ("BUDGET_LINE", "TRAVEL", "CAPEX_ITEM", "EMPLOYEE", "VACANCY")
+        has_main = db.scalar(
+            select(ImportRow.id).where(ImportRow.batch_id == batch_id, ImportRow.record_type.in_(main)).limit(1)
+        )
+        types = list(main) if has_main else []
+    if types:
+        stmt = stmt.where(ImportRow.record_type.in_(types))
     rows = db.scalars(stmt.order_by(ImportRow.row_number).limit(limit).offset(offset))
     return ImportPreview(
         batch=ImportBatchOut.model_validate(batch),

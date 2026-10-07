@@ -87,14 +87,15 @@ function renderValue(v: unknown): string {
 export default function ImportDetail() {
   const { id } = useParams();
   const [filter, setFilter] = useState("");
+  const [kind, setKind] = useState("MAIN"); // abre no que vira orçamento/quadro; catálogo e cadastros no seletor
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [force, setForce] = useState(false);
   const [errorsOpen, setErrorsOpen] = useState(false);
   const [errorCode, setErrorCode] = useState("");
   const { data, error, reload } = useLoad(
-    () => api<Preview>(`/imports/${id}/preview?limit=200${filter ? `&status=${filter}` : ""}`),
-    [id, filter],
+    () => api<Preview>(`/imports/${id}/preview?limit=500${filter ? `&status=${filter}` : ""}${kind ? `&record_type=${kind}` : ""}`),
+    [id, filter, kind],
   );
   const batch = data?.batch;
 
@@ -308,14 +309,25 @@ export default function ImportDetail() {
       <Card
         title="Prévia dos registros"
         actions={
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="">Todos</option>
-            {Object.entries(ROW_STATUS).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v.label}
-              </option>
-            ))}
-          </select>
+          <div className="filters">
+            <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Tipo de registro">
+              <option value="MAIN">O que entra no orçamento</option>
+              <option value="">Todos os tipos</option>
+              {Object.entries((summary.record_types ?? {}) as Record<string, number>).map(([k, n]) => (
+                <option key={k} value={k}>
+                  {k === "FACT" && batch.dataset_type?.endsWith("_TEMPLATE") ? "Realizado (só referência)" : RECORD_TYPES[k] ?? k} ({fmtInt(n)})
+                </option>
+              ))}
+            </select>
+            <select value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Situação">
+              <option value="">Todas as situações</option>
+              {Object.entries(ROW_STATUS).map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          </div>
         }
       >
         {data.rows.length === 0 ? (
