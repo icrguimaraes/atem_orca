@@ -20,6 +20,7 @@ from app.api.v1 import (
     datasets,
     findings,
     imports,
+    integrations,
     master,
     opex,
     personnel,
@@ -97,6 +98,7 @@ for module in (
     analytics,
     findings,
     validation,
+    integrations,
 ):
     api.include_router(module.router)
 app.include_router(api)

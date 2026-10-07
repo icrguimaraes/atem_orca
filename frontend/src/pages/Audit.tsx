@@ -8,6 +8,7 @@ const ACTIONS: Record<string, string> = {
   UPDATE: "Alteração",
   LOGIN: "Login",
   LOGIN_FAILED: "Login recusado",
+  INTEGRATION_READ: "Leitura pelo Movimentação de Pessoal",
   UPLOAD: "Upload",
   CONFIRM: "Confirmação",
   REJECT: "Descarte",

@@ -86,6 +86,7 @@ ruff check . && ruff format --check .
 | `SECRET_KEY` | valor aleatório com 32+ caracteres (`python -c "import secrets;print(secrets.token_urlsafe(48))"`) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | primeiro administrador (criado no primeiro start) |
 | `CORS_ORIGINS` | domínio do app (ou `*` enquanto só houver a API) |
+| `MOVPESSOAL_TOKEN` | chave da integração com o Movimentação de Pessoal (mesmo valor de `ORCAMENTO_TOKEN` lá); vazio = desligada |
 
 4. **Volume**: em *Settings → Volumes*, monte um volume em `/data` (arquivos enviados ficam em `/data/uploads`).
 5. *Settings → Networking → Generate Domain*. O start executa `alembic upgrade head`, o seed e sobe o Uvicorn; healthcheck em `/api/health`.

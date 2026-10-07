@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     admin_email: str = "admin@atem.com.br"
     admin_password: str | None = None
     admin_name: str = "Administrador"
+    # integração com o Movimentação de Pessoal (leitura do quadro); vazio = desligada
+    movpessoal_token: str | None = None
 
     @property
     def sqlalchemy_url(self) -> str:
