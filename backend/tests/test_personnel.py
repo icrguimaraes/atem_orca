@@ -238,6 +238,28 @@ def test_quadro_pending_cost_center_and_salary(client, admin, run_worker):
     assert salary[0]["key"] not in left and edu["key"] not in left
 
 
+def test_quadro_in_two_files_for_same_cost_center(client, admin, run_worker):
+    """O quadro de um CC chega em dois arquivos: o segundo não apaga as promoções do primeiro; reimportar um arquivo
+    substitui só as movimentações das pessoas dele."""
+    ccs, _, _ = _setup(client, admin, run_worker)  # CC1: promoção (BRUNO), desligamento (CARLA) e uma vaga
+    other = [
+        ("700", "GIL", "ANALISTA", "1001", "0001", CC1, 6000, "PROMOVER", 3, None, 6600, "CLT", None, None),
+        ("800", "HELO", "ANALISTA", "1001", "0001", CC1, 6500, "MANTER", None, None, None, "CLT", None, None),
+    ]
+    second = import_and_load(client, admin, run_worker, builders.quadro_funcionarios(other), "q2.xlsx")
+    assert second["summary"]["load"]["movements"].get("replaced", 0) == 0
+    head = client.get(f"/api/v1/personnel/cost-centers/{ccs[CC1]['id']}", headers=admin).json()
+    view = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).json()
+    moved = {p["name"]: (p.get("movement") or {}).get("type") for p in view["positions"] if p.get("movement")}
+    assert moved.get("BRUNO") == "PROMOTION" and moved.get("CARLA") == "TERMINATION" and moved.get("GIL") == "PROMOTION"
+    # reimportar o segundo arquivo substitui só a promoção do GIL (as do primeiro ficam)
+    again = import_and_load(client, admin, run_worker, builders.quadro_funcionarios(other), "q2b.xlsx", force=True)
+    assert again["summary"]["load"]["movements"]["replaced"] == 1
+    view = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).json()
+    moved = {p["name"]: (p.get("movement") or {}).get("type") for p in view["positions"] if p.get("movement")}
+    assert moved.get("BRUNO") == "PROMOTION" and moved.get("GIL") == "PROMOTION"
+
+
 def test_inactive_contract_type_still_computes(client, admin, run_worker):
     ccs, mgr, _ = _setup(client, admin, run_worker)
     r = client.patch("/api/v1/contract-types/PJ", headers=admin, json={"is_active": False})

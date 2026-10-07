@@ -510,15 +510,19 @@ def _open_personnel_budgets(db: Session, cc_ids: set[int], user_id: int | None) 
 
 def load_personnel_actions(db: Session, batch: ImportBatch, user_id: int | None) -> dict:
     """Ações do quadro (PROMOVER, REMOVER, INCLUIR) e vagas viram movimentações no orçamento de pessoal do CC.
-    Substituem as que vieram de importação anterior; as lançadas no sistema são preservadas."""
+
+    Substituem só as que vieram de importação anterior **para as pessoas deste arquivo** (e as vagas, nos CCs em que
+    o arquivo traz vagas): o quadro de um CC pode chegar em vários arquivos (ex.: Controladoria e Contabilidade), e um
+    não apaga as promoções do outro. As lançadas no sistema são preservadas."""
     from app.domain.workflow import EDITABLE
-    from app.models import PersonnelMovement
+    from app.models import BudgetSubmission, PersonnelMovement
     from app.services import opex as opex_svc
     from app.services import personnel as personnel_svc
 
-    rows = [r for r in _rows(db, batch.id, "EMPLOYEE") if r.data.get("action") not in (None, "KEEP")]
+    all_rows = _rows(db, batch.id, "EMPLOYEE")
+    rows = [r for r in all_rows if r.data.get("action") not in (None, "KEEP")]
     vacancies = _rows(db, batch.id, "VACANCY")
-    if not rows and not vacancies:
+    if not all_rows and not vacancies:
         return {}
     try:
         ctx = opex_svc.context(db)
@@ -527,6 +531,31 @@ def load_personnel_actions(db: Session, batch: ImportBatch, user_id: int | None)
     if ctx.frozen:
         return {"skipped": f"versão {ctx.version.label} congelada"}
     stats: dict = defaultdict(int)
+    # movimentações vindas de planilha das pessoas deste arquivo (inclusive quem agora "mantém"): substituídas
+    file_employee_ids = {
+        emp_id
+        for r in all_rows
+        if (
+            emp_id := db.scalar(
+                select(Employee.id).where(
+                    Employee.company_id == r.data["company_id"], Employee.registration == r.data["registration"]
+                )
+            )
+        )
+    }
+    if file_employee_ids:
+        for old, old_sub in db.execute(
+            select(PersonnelMovement, BudgetSubmission)
+            .join(BudgetSubmission, BudgetSubmission.id == PersonnelMovement.submission_id)
+            .where(
+                BudgetSubmission.version_id == ctx.version.id,
+                PersonnelMovement.employee_id.in_(file_employee_ids),
+            )
+        ).all():
+            if (old.attributes or {}).get("source") == "TEMPLATE" and old_sub.status in EDITABLE:
+                db.delete(old)
+                stats["replaced"] += 1
+        db.flush()
     by_cc: dict[int, list[ImportRow]] = defaultdict(list)
     for row in rows + vacancies:
         if row.data.get("cost_center_id"):
@@ -538,11 +567,16 @@ def load_personnel_actions(db: Session, batch: ImportBatch, user_id: int | None)
         if sub.status not in EDITABLE or ctx.frozen:
             stats["cost_centers_locked"] += 1
             continue
-        for old in db.scalars(select(PersonnelMovement).where(PersonnelMovement.submission_id == sub.id)):
-            if (old.attributes or {}).get("source") == "TEMPLATE":
-                db.delete(old)
-                stats["replaced"] += 1
-        db.flush()
+        if any(r.record_type == "VACANCY" for r in items):  # vagas do arquivo substituem as vagas de planilha do CC
+            for old in db.scalars(
+                select(PersonnelMovement).where(
+                    PersonnelMovement.submission_id == sub.id, PersonnelMovement.employee_id.is_(None)
+                )
+            ):
+                if (old.attributes or {}).get("source") == "TEMPLATE":
+                    db.delete(old)
+                    stats["replaced"] += 1
+            db.flush()
         for row in items:
             d = row.data
             try:
