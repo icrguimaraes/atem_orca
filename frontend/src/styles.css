@@ -855,3 +855,5 @@ tr.saving { opacity: 0.6; }
 .evolution-note { margin: 0 0 4px; }
 .evolution-note strong.up { color: var(--bad); }
 .evolution-note strong.down { color: var(--good); }
+.evolution-marks { margin: -4px 0 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.evolution-marks .month-chips button:disabled { cursor: not-allowed; opacity: 1; }

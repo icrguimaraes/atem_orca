@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
@@ -601,7 +601,10 @@ def overview(
         )
         data["heatmap_all"] = _heatmap(db, f_heat, main_model, P.years)
         # evolução do orçamento: sem o filtro de meses (f_months), com todos os demais filtros
-        data["evolution"] = _evolution(db, f_months, P)
+        data["evolution"], options = _evolution(db, f_months, P)
+        data["evolution_options"] = [
+            {"key": x["key"], "label": x["label"], "kind": x["kind"], "value": x["value"]} for x in options
+        ]
         data["figures"] = painel_figures.build(
             data,
             monthly=_monthly(f_months, all_months),
@@ -613,16 +616,13 @@ def overview(
     return data
 
 
-def _evolution(db: Session, f: Facts, P: Period) -> list[dict]:
-    """Marcos da "Evolução do orçamento", sempre do ano retrasado ao ano do ciclo (2025 → 2027), sem depender dos
-    anos e meses escolhidos (`f` vem sem o filtro de meses); empresa, área, CC, pacote, conta e tipo valem.
-
-    Realizado {ciclo-2} (ano cheio) → Orçado {ciclo-1} (orçamento de referência, se carregado) → Realizado {ciclo-1}
-    anualizado até o último mês fechado (mesma conta do card "anualizado") → Orçamento {ciclo} proposto (consolidação,
-    com o CAPEX sem cronograma, como o card do total). Marco zerado fica de fora."""
+def _evolution_options(db: Session, f: Facts, P: Period) -> list[dict]:
+    """Todos os marcos possíveis da "Evolução do orçamento", em ordem cronológica (no mesmo ano, o orçado antes do
+    realizado, como no slide da diretoria): Realizado de cada ano carregado (ano cheio ou "até MÊS"; o ano em curso
+    também anualizado), Orçado de cada ano com orçamento de referência e o Orçamento do ciclo (proposto). Os filtros de
+    ano e mês não se aplicam (`f` vem sem meses); empresa, área, CC, pacote, conta e tipo valem. Marco zerado fica de
+    fora. Chave: "actual:2025", "actual_ann:2026", "budget:2026", "target:2027"."""
     target = P.target_year or (max(P.actual_years) + 1 if P.actual_years else None)
-    if target is None:
-        return []
     out: list[dict] = []
 
     def add(key: str, kind: str, word: str, year: int, value: Decimal, note: str | None = None, **extra) -> None:
@@ -631,40 +631,31 @@ def _evolution(db: Session, f: Facts, P: Period) -> list[dict]:
             milestone = {"key": key, "kind": kind, "word": word, "year": year, "note": note, "label": label}
             out.append(milestone | {"value": _money(value)} | extra)
 
-    before, ref = target - 2, target - 1
-    if before in P.actual_years:
-        closed = _last_closed(db, before)
-        partial = bool(closed and closed < 12)
+    budget_years = {y for y in P.budget_years if y != target}
+    for year in sorted(set(P.actual_years) | budget_years):
+        if year in budget_years:
+            add(f"budget:{year}", "budget", "Orçado", year, f.total(ReferenceBudgetEntry, [year]))
+        if year in P.actual_years:
+            closed = _last_closed(db, year)
+            ytd = f.total(ActualEntry, [year])
+            if closed and closed < 12:
+                add(f"actual:{year}", "actual", "Realizado", year, ytd, f"até {MONTH_ABBR[closed - 1]}")
+                add(
+                    f"actual_ann:{year}",
+                    "actual",
+                    "Realizado",
+                    year,
+                    ytd * 12 / closed,
+                    "anualizado",
+                    ytd=_money(ytd),
+                    closed=closed,
+                    closed_month=MONTH_ABBR[closed - 1],
+                )
+            else:
+                add(f"actual:{year}", "actual", "Realizado", year, ytd)
+    if target is not None and P.target_year == target:
         add(
-            "actual_before",
-            "actual",
-            "Realizado",
-            before,
-            f.total(ActualEntry, [before]),
-            f"até {MONTH_ABBR[closed - 1]}" if partial else None,
-        )
-    if ref in P.budget_years:
-        add("budget_ref", "budget", "Orçado", ref, f.total(ReferenceBudgetEntry, [ref]))
-    if ref in P.actual_years:
-        closed = _last_closed(db, ref)
-        ytd = f.total(ActualEntry, [ref])
-        if closed and closed < 12:
-            add(
-                "actual_ref",
-                "actual",
-                "Realizado",
-                ref,
-                ytd * 12 / closed,
-                "anualizado",
-                ytd=_money(ytd),
-                closed=closed,
-                closed_month=MONTH_ABBR[closed - 1],
-            )
-        else:
-            add("actual_ref", "actual", "Realizado", ref, ytd)
-    if P.target_year == target:
-        add(
-            "target",
+            f"target:{target}",
             "budget",
             "Orçamento",
             target,
@@ -673,6 +664,51 @@ def _evolution(db: Session, f: Facts, P: Period) -> list[dict]:
             unscheduled=_money(f.unscheduled_total()),
         )
     return out
+
+
+def _evolution_default(options: list[dict], target: int | None) -> list[str]:
+    """Marcos padrão: Realizado do ano retrasado → Orçado do ano anterior → Realizado do ano anterior (anualizado,
+    se o ano não fechou) → Orçamento do ciclo."""
+    if target is None:
+        return []
+    keys = {o["key"] for o in options}
+    before, ref = target - 2, target - 1
+    wanted = [f"actual:{before}", f"budget:{ref}"]
+    wanted.append(f"actual_ann:{ref}" if f"actual_ann:{ref}" in keys else f"actual:{ref}")
+    wanted.append(f"target:{target}")
+    return [k for k in wanted if k in keys]
+
+
+def _evolution(db: Session, f: Facts, P: Period, marks: list[str] | None = None) -> tuple[list[dict], list[dict]]:
+    """(marcos escolhidos, todas as opções). Sem escolha (ou escolha inválida), os marcos padrão."""
+    options = _evolution_options(db, f, P)
+    target = P.target_year or (max(P.actual_years) + 1 if P.actual_years else None)
+    valid = [k for k in (marks or []) if any(o["key"] == k for o in options)]
+    chosen = set(valid if len(valid) >= 2 else _evolution_default(options, target))
+    return [o for o in options if o["key"] in chosen], options
+
+
+@router.get("/evolution", summary="Evolução do orçamento (cascata) com os marcos escolhidos no próprio visual")
+def evolution(
+    marks: str | None = Query(None, description='Marcos, ex.: "actual:2024,actual:2025,target:2027"'),
+    company_id: int | None = None,
+    cost_center_id: int | None = None,
+    package_id: int | None = None,
+    account_id: int | None = None,
+    department_id: int | None = None,
+    modules: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    P = _period(db, None, None, modules, True, True)
+    f = Facts(db, user, company_id, cost_center_id, package_id, P, account_id=account_id, department_id=department_id)
+    selected, options = _evolution(db, f, P, [k.strip() for k in (marks or "").split(",") if k.strip()])
+    return {
+        "options": [{"key": o["key"], "label": o["label"], "kind": o["kind"], "value": o["value"]} for o in options],
+        "selected": [o["key"] for o in selected],
+        "milestones": selected,
+        "figure": painel_figures.fig_evolution(selected),
+    }
 
 
 def _by_module(f: Facts, P: Period) -> list[dict]:

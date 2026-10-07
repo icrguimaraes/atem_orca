@@ -339,6 +339,22 @@ def test_painel_evolution_matches_kpis(client, admin, run_worker):
     assert [float(m["value"]) for m in by_area] == _kpi_milestones(client, admin, q)
     assert by_area[1]["value"] == "4800.00"  # orçado 2026 só do CC da área
 
+    # marcos escolhidos no próprio visual (endpoint leve): opções em ordem cronológica, escolha livre (mín. 2)
+    full = client.get("/api/v1/dashboard/evolution", headers=admin).json()
+    keys = [o["key"] for o in full["options"]]
+    assert keys == ["actual:2025", "budget:2026", "actual:2026", "actual_ann:2026", "target:2027"]
+    assert full["selected"] == ["actual:2025", "budget:2026", "actual_ann:2026", "target:2027"]
+    pick = client.get("/api/v1/dashboard/evolution?marks=actual:2025,actual:2026,target:2027", headers=admin).json()
+    assert pick["selected"] == ["actual:2025", "actual:2026", "target:2027"]
+    assert [m["label"] for m in pick["milestones"]] == [
+        "Realizado 2025",
+        "Realizado 2026 (até AGO)",
+        "Orçamento 2027 (proposto)",
+    ]
+    assert pick["figure"]["data"]
+    one = client.get("/api/v1/dashboard/evolution?marks=target:2027", headers=admin).json()
+    assert one["selected"] == full["selected"]  # menos de 2 marcos: volta ao padrão
+
 
 def test_breakdown_by_area_and_sector(client, admin, run_worker):
     """Tabela do painel: área → setor → pacote → conta, pelo cadastro do centro de custo."""
