@@ -67,6 +67,7 @@ KIND_LABELS = {
     "STRUCTURE_NO_SECTOR": "CC sem área e setor",
     "PERSONNEL_NO_CC": "Colaborador sem centro de custo",
     "OPEX_MOVED_CC": "Lançamento em CC de outra área",
+    "PERSONNEL_CC_MOVED": "Colaborador movido de centro de custo",
 }
 FLAG_TEXT = {
     "NEW_ACCOUNT": "Conta nova, sem histórico",

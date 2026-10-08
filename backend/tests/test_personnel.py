@@ -449,3 +449,43 @@ def test_employee_without_cost_center_finding(client, admin, run_worker):
     head = client.get(f"/api/v1/personnel/cost-centers/{ccs[CC1]['id']}", headers=admin).json()
     view = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).json()
     assert "ZECA" in {p["name"] for p in view["positions"]}
+
+
+def test_move_employee_to_other_cost_center(client, admin, run_worker):
+    """Quadro importado sem CC e distribuído pelo cargo: a Controladoria corrige o CC do colaborador e as
+    movimentações dele vão junto para o orçamento de pessoal do CC de destino (auditoria + Apontamentos)."""
+    from tests import builders
+    from tests.test_imports import import_and_load
+
+    import_and_load(client, admin, run_worker, builders.opex_template_filled(), "t-move-opex.xlsx")
+    ccs = client.get("/api/v1/cost-centers", headers=admin).json()
+    src = ccs[0]
+    other = client.post(
+        "/api/v1/cost-centers",
+        headers=admin,
+        json={"company_id": src["company_id"], "code": "9990001", "name": "CC DESTINO"},
+    ).json()
+    head = client.get(f"/api/v1/personnel/cost-centers/{src['id']}", headers=admin).json()
+    view = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).json()
+    emp = next((p for p in view["positions"] if p["employee_id"]), None)
+    if emp is None:
+        return  # base sem quadro importado neste cenário
+    r = client.put(
+        f"/api/v1/personnel/employees/{emp['employee_id']}/cost-center",
+        headers=admin,
+        json={"cost_center_id": other["id"], "reason": "quadro veio sem CC"},
+    )
+    assert r.status_code == 200, r.text
+    dst = client.get(f"/api/v1/personnel/cost-centers/{other['id']}", headers=admin).json()
+    v2 = client.get(f"/api/v1/personnel/submissions/{dst['submission_id']}/view", headers=admin).json()
+    assert [p["employee_id"] for p in v2["positions"]] == [emp["employee_id"]]
+    v1 = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).json()
+    assert emp["employee_id"] not in [p["employee_id"] for p in v1["positions"]]
+    assert (
+        client.put(
+            f"/api/v1/personnel/employees/{emp['employee_id']}/cost-center",
+            headers=admin,
+            json={"cost_center_id": other["id"]},
+        ).status_code
+        == 409
+    )

@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.models.base import Role
 from app.services import audit
+from app.services import findings as findings_svc
 from app.services import opex as opex_svc
 from app.services import personnel as svc
 
@@ -593,6 +594,84 @@ def events(submission_id: int, db: Session = Depends(get_db), user: User = Depen
         }
         for e, name in rows
     ]
+
+
+class MoveEmployeeIn(BaseModel):
+    cost_center_id: int
+    reason: str | None = Field(default=None, max_length=500)
+
+
+@router.put(
+    "/employees/{employee_id}/cost-center",
+    summary="Troca o centro de custo do colaborador na base (Controladoria): as movimentações dele vão junto",
+)
+def move_employee(
+    employee_id: int,
+    body: MoveEmployeeIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(Role.CONTROLLER)),
+):
+    """Correção de cadastro (ex.: quadro importado sem CC e distribuído pelo cargo). O colaborador e as movimentações
+    dele no ciclo passam para o orçamento de pessoal do CC de destino; fica em auditoria e em Apontamentos."""
+    ctx = _ctx(db)
+    emp = db.get(Employee, employee_id)
+    if emp is None:
+        raise HTTPException(404, "Colaborador não encontrado")
+    cc = db.get(CostCenter, body.cost_center_id)
+    if cc is None or not cc.is_active:
+        raise HTTPException(422, "Centro de custo inválido")
+    if cc.company_id != emp.company_id:
+        raise HTTPException(422, "O centro de custo precisa ser da empresa do colaborador")
+    if emp.cost_center_id == cc.id:
+        raise HTTPException(409, "O colaborador já está neste centro de custo")
+    old = db.get(CostCenter, emp.cost_center_id) if emp.cost_center_id else None
+    before = {"cost_center_id": emp.cost_center_id, "cost_center": old.code if old else None}
+    target = opex_svc.get_submission(db, ctx, cc.id, module="PERSONNEL")
+    moved = []
+    for mv in db.scalars(
+        select(PersonnelMovement)
+        .join(BudgetSubmission, BudgetSubmission.id == PersonnelMovement.submission_id)
+        .where(PersonnelMovement.employee_id == emp.id, BudgetSubmission.version_id == ctx.version.id)
+    ):
+        mv.submission_id, mv.cost_center_id = target.id, cc.id
+        mv.department_id, mv.area_id = cc.department_id, cc.area_id
+        moved.append(mv.id)
+    emp.cost_center_id, emp.department_id, emp.area_id = cc.id, cc.department_id, cc.area_id
+    attrs = dict(emp.attributes or {})
+    attrs.pop("pending_cc", None)
+    emp.attributes = attrs or None
+    db.flush()
+    note = f"{emp.name}: de {old.code if old else 'sem CC'} para {cc.code} · {cc.name}" + (
+        f" — {body.reason}" if body.reason else ""
+    )
+    findings_svc.log(
+        db,
+        target,
+        {
+            "key": f"{target.id}:EMPLOYEE:{emp.id}:PERSONNEL_CC_MOVED",
+            "kind": "PERSONNEL_CC_MOVED",
+            "severity": "INFO",
+            "subject": emp.name,
+            "message": "Centro de custo do colaborador corrigido pela Controladoria",
+        },
+        "CORRECTED",
+        note,
+        actor.id,
+    )
+    audit.record(
+        db,
+        user_id=actor.id,
+        action="MOVE",
+        entity_type="employee",
+        entity_id=emp.id,
+        before=before,
+        after={"cost_center_id": cc.id, "cost_center": cc.code, "movements": moved},
+        reason=note,
+        ip=client_ip(request),
+    )
+    db.commit()
+    return {"employee_id": emp.id, "cost_center": f"{cc.code} · {cc.name}", "movements_moved": len(moved)}
 
 
 @router.get("/options", summary="Contratos, cargos, centros de custo (transferência) e cenário base")
