@@ -142,6 +142,11 @@ class Filters:
     package_id: int | None = None
     prev: str | None = None  # série "Realizado": actual:ANO | actual_ann:ANO | none (padrão: realizado do ano anterior)
     ref: str | None = None  # série "Referência": budget:ANO | actual:ANO | actual_ann:ANO | none (padrão: orçado ref.)
+    # filtros no modelo do Painel (08/10/2026): ano principal, meses, comparar com o ano anterior e mesmo período
+    year: int | None = None
+    months: str | None = None
+    compare: bool = True
+    same_period: bool = True
 
     def key(self) -> str:
         return json.dumps(self.__dict__, sort_keys=True, default=str)
@@ -206,6 +211,27 @@ def _last_closed(db: Session, year: int) -> int | None:
             DatasetVersion.scope_key.like(f"ACTUAL:{year}:%"),
         )
     )
+
+
+def _years_loaded(db: Session, dataset_type: str) -> set[int]:
+    return {
+        int(k.split(":")[1])
+        for k in db.scalars(
+            select(DatasetVersion.scope_key).where(
+                DatasetVersion.dataset_type == dataset_type, DatasetVersion.is_current
+            )
+        )
+        if k and k.count(":") >= 2 and k.split(":")[1].isdigit()
+    }
+
+
+def years_available(db: Session, ctx: Context) -> list[dict]:
+    """Anos do cabeçalho da Análise (igual ao Painel): realizado carregado + ano do ciclo."""
+    out = []
+    for y in sorted(_years_loaded(db, "ACTUAL") | {ctx.target_year}):
+        closed = None if y == ctx.target_year else _last_closed(db, y)
+        out.append({"year": y, "kind": "target" if y == ctx.target_year else "actual", "closed": closed})
+    return out
 
 
 def series_options(db: Session, ctx: Context) -> list[dict]:
@@ -314,7 +340,14 @@ def build(db: Session, ctx: Context, version: BudgetVersion, visible: set[int] |
             )
         return c
 
-    def facts(model, year: int, attr: str, factor: Decimal = Decimal(1)) -> None:
+    def facts(
+        model,
+        year: int,
+        attr: str,
+        factor: Decimal = Decimal(1),
+        months: set[int] | None = None,
+        cap: int | None = None,
+    ) -> None:
         stmt = (
             select(model.cost_center_id, Account.code, Account.nature, model.period, func.sum(model.amount))
             .join(DatasetVersion, DatasetVersion.id == model.dataset_version_id)
@@ -326,29 +359,65 @@ def build(db: Session, ctx: Context, version: BudgetVersion, visible: set[int] |
             module = cons.module_of_nature(nature)
             if not account_ok(code, module) or not 1 <= int(period) <= 12:
                 continue
+            if (months is not None and int(period) not in months) or (cap is not None and int(period) > cap):
+                continue
             c = cell(cc_id, code, int(period), module)
             setattr(c, attr, getattr(c, attr) + (amount or ZERO) * factor)
 
-    labels = {"target": f"Orçamento {ctx.target_year}"}
-    prev_s = resolve_series(db, ctx, f.prev, f"actual:{ctx.prev_year}")
-    ref_s = resolve_series(db, ctx, f.ref, f"budget:{ctx.ref_year}")
-    if prev_s:
-        facts(prev_s[0], prev_s[1], "prev", prev_s[2])
-        labels["prev"] = prev_s[3]
+    months = {int(m) for m in (f.months or "").split(",") if m.strip().isdigit() and 1 <= int(m) <= 12} or None
+    labels: dict[str, str] = {}
+    if f.year is not None:
+        # modelo do Painel: ano principal (orçamento do ciclo ou realizado), ano anterior como base e mesmo período
+        principal = f.year
+        is_target = principal == ctx.target_year
+        closed_p = None if is_target else _last_closed(db, principal)
+        suffix = f" (até {MONTH_NAMES[closed_p - 1]})" if closed_p and closed_p < 12 and not months else ""
+        labels["target"] = f"Orçamento {principal}" if is_target else f"Realizado {principal}{suffix}"
+        cap = closed_p if (f.same_period and closed_p and closed_p < 12 and not months) else None
+        if not is_target:
+            facts(ActualEntry, principal, "target", months=months)
+        budget_years = _years_loaded(db, "REFERENCE_BUDGET")
+        ref_year = principal if principal in budget_years else (ctx.ref_year if is_target else None)
+        if ref_year is not None and ref_year in budget_years:
+            facts(ReferenceBudgetEntry, ref_year, "ref", months=months, cap=cap)
+            labels["ref"] = f"Orçado {ref_year}" + (f" (até {MONTH_NAMES[cap - 1]})" if cap else "")
+        else:
+            labels["ref"] = ""
+        prev_year = principal - 1
+        if f.compare and prev_year in _years_loaded(db, "ACTUAL"):
+            closed_prev = _last_closed(db, prev_year)
+            if is_target and closed_prev and closed_prev < 12 and not months:
+                facts(ActualEntry, prev_year, "prev", Decimal(12) / Decimal(closed_prev))
+                labels["prev"] = f"Realizado {prev_year} anualizado"
+            else:
+                facts(ActualEntry, prev_year, "prev", months=months, cap=cap)
+                note = f" (até {MONTH_NAMES[cap - 1]})" if cap else ""
+                labels["prev"] = f"Realizado {prev_year}{note}"
+        else:
+            labels["prev"] = ""
     else:
-        labels["prev"] = ""
-    if ref_s:
-        facts(ref_s[0], ref_s[1], "ref", ref_s[2])
-        labels["ref"] = ref_s[3]
-    else:
-        labels["ref"] = ""
-    for row in cons.rows_for(db, ctx, version, scope):
-        if row.cost_center_id is None or not account_ok(row.account_code, row.module):
-            continue
-        for i, amount in enumerate(row.values, start=1):
-            if amount:
-                c = cell(row.cost_center_id, row.account_code, i, row.module, row.account_name)
-                c.target += amount
+        is_target = True
+        labels["target"] = f"Orçamento {ctx.target_year}"
+        prev_s = resolve_series(db, ctx, f.prev, f"actual:{ctx.prev_year}")
+        ref_s = resolve_series(db, ctx, f.ref, f"budget:{ctx.ref_year}")
+        if prev_s:
+            facts(prev_s[0], prev_s[1], "prev", prev_s[2], months=months)
+            labels["prev"] = prev_s[3]
+        else:
+            labels["prev"] = ""
+        if ref_s:
+            facts(ref_s[0], ref_s[1], "ref", ref_s[2], months=months)
+            labels["ref"] = ref_s[3]
+        else:
+            labels["ref"] = ""
+    if is_target:
+        for row in cons.rows_for(db, ctx, version, scope):
+            if row.cost_center_id is None or not account_ok(row.account_code, row.module):
+                continue
+            for i, amount in enumerate(row.values, start=1):
+                if amount and (months is None or i in months):
+                    c = cell(row.cost_center_id, row.account_code, i, row.module, row.account_name)
+                    c.target += amount
 
     subs: dict[int, dict[str, str]] = defaultdict(dict)
     for s in db.scalars(
@@ -489,14 +558,13 @@ def _extreme_labels(values: list[float]) -> tuple[list[str], list[str]]:
 
 
 def fig_monthly(base: Base) -> dict:
-    y = base.ctx
     rows = {r["id"]: r for r in group(base, "month")}
     series = [
         s
         for s in (
             ("prev", base.labels["prev"], COLOR_PAST, "dot"),
             ("ref", base.labels["ref"], COLOR_REF, "dash"),
-            ("target", f"Orçamento {y.target_year}", COLOR_TARGET, "solid"),
+            ("target", base.labels["target"], COLOR_TARGET, "solid"),
         )
         if s[1]
     ]
@@ -532,7 +600,6 @@ def fig_monthly(base: Base) -> dict:
 
 
 def fig_annual(base: Base, dim: str, limit: int = 12) -> dict:
-    y = base.ctx
     rows = group(base, dim)
     if dim == "month":
         rows = sorted(rows, key=lambda r: r["id"])  # ordem do calendário, todos os meses
@@ -546,7 +613,7 @@ def fig_annual(base: Base, dim: str, limit: int = 12) -> dict:
         for s in (
             ("prev", base.labels["prev"], COLOR_PAST),
             ("ref", base.labels["ref"], COLOR_REF),
-            ("target", f"Orçamento {y.target_year}", COLOR_TARGET),
+            ("target", base.labels["target"], COLOR_TARGET),
         )
         if s[1]
     ):
@@ -619,8 +686,8 @@ def fig_variation(base: Base, by: str, mode: str, limit: int = 15) -> dict:
             hovertemplate=(
                 "<b>%{customdata[5]}</b><br>"
                 + base_label
-                + ": %{customdata[0]}<br>Orçamento "
-                + str(y.target_year)
+                + ": %{customdata[0]}<br>"
+                + base.labels["target"]
                 + ": %{customdata[1]}<br>Variação: %{customdata[2]} (%{customdata[3]})<extra></extra>"
             ),
         )
@@ -653,7 +720,6 @@ def fig_variation(base: Base, by: str, mode: str, limit: int = 15) -> dict:
 
 
 def fig_ranking(base: Base, top: int) -> dict:
-    y = base.ctx
     rows = sorted(group(base, "account"), key=lambda r: -r["target"])
     rows = [r for r in rows if r["target"] > 0]
     if top:
@@ -675,8 +741,8 @@ def fig_ranking(base: Base, top: int) -> dict:
                 for r in rows
             ],
             hovertemplate=(
-                "<b>%{customdata[4]}</b> · %{customdata[2]}<br>Orçamento "
-                + str(y.target_year)
+                "<b>%{customdata[4]}</b> · %{customdata[2]}<br>"
+                + base.labels["target"]
                 + ": %{customdata[0]} (%{customdata[1]} do total)<br>"
                 + (base.labels["ref"] or "Referência")
                 + ": %{customdata[3]}<extra></extra>"
@@ -722,7 +788,6 @@ def fig_composition(base: Base) -> dict:
 
 def fig_cost_centers(base: Base, limit: int = 20) -> dict:
     """Ref × alvo por CC: barras pareadas ordenadas, cor pela classificação (aumento/redução/estável)."""
-    y = base.ctx
     rows = group(base, "cost_center")
     has_ref = any(r["ref"] for r in rows)
     base_attr, base_label = ("ref", base.labels["ref"]) if has_ref else ("prev", base.labels["prev"])
@@ -753,7 +818,7 @@ def fig_cost_centers(base: Base, limit: int = 20) -> dict:
             x=[float(r["target"]) for r in rows],
             y=labels,
             orientation="h",
-            name=f"Orçamento {y.target_year}",
+            name=base.labels["target"],
             marker_color=[c[1] for c in classes],
             text=[
                 f"{c[0]} {fmt_pct(pct(r['target'], r[base_attr]))}"
@@ -765,8 +830,8 @@ def fig_cost_centers(base: Base, limit: int = 20) -> dict:
             cliponaxis=False,
             textfont={"size": 10},
             customdata=[[fmt_money(r["target"]), r["sub"], str(r["id"]), r["label"]] for r in rows],
-            hovertemplate="<b>%{customdata[3]}</b> · %{customdata[1]}<br>Orçamento "
-            + str(y.target_year)
+            hovertemplate="<b>%{customdata[3]}</b> · %{customdata[1]}<br>"
+            + base.labels["target"]
             + ": %{customdata[0]}<extra></extra>",
         ),
     ]
@@ -865,16 +930,16 @@ def dashboard(
     kpis = {
         "prev_actual": {"label": base.labels["prev"] or "Realizado", "value": str(prev), "compact": fmt_compact(prev)},
         "ref_budget": {"label": base.labels["ref"] or "Referência", "value": str(ref), "compact": fmt_compact(ref)},
-        "target": {"label": f"Orçamento {y.target_year}", "value": str(target), "compact": fmt_compact(target)},
+        "target": {"label": base.labels["target"], "value": str(target), "compact": fmt_compact(target)},
         "var_ref": {
-            "label": f"Variação {y.target_year} × {base.labels['ref'] or 'referência'}",
+            "label": f"{base.labels['target']} × {base.labels['ref'] or 'referência'}",
             "value": str(money(target - ref)),
             "compact": fmt_compact(target - ref),
             "pct": None if pct(target, ref) is None else str(pct(target, ref)),
             "pct_label": fmt_pct(pct(target, ref)),
         },
         "var_prev": {
-            "label": f"Variação {y.target_year} × {base.labels['prev'] or 'realizado'}",
+            "label": f"{base.labels['target']} × {base.labels['prev'] or 'realizado'}",
             "value": str(money(target - prev)),
             "compact": fmt_compact(target - prev),
             "pct": None if pct(target, prev) is None else str(pct(target, prev)),
@@ -893,7 +958,7 @@ def dashboard(
             "label": "Orçamento preenchido",
             "value": status["filled_pct"],
             "compact": fmt_pct(Decimal(status["filled_pct"])).lstrip("+") if status["filled_pct"] else "—",
-            "hint": f"{status['filled']} de {status['total']} CCs com valores em {y.target_year}",
+            "hint": f"{status['filled']} de {status['total']} CCs com valores em {base.labels['target']}",
         },
         "approved_pct": {
             "label": "Aprovado",

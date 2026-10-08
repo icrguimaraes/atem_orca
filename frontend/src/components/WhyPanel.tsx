@@ -32,9 +32,9 @@ export interface WhyData {
 }
 
 
-/** Desligamento: o nome fica embaçado e só aparece ao passar o mouse (dado sensível na defesa do orçamento). */
+/** Movimentação de pessoal: o nome do profissional fica embaçado e só aparece ao passar o mouse (dado sensível). */
 export function Subject({ text, movementType }: { text: string; movementType?: string }) {
-  if (movementType !== "TERMINATION") return <>{text}</>;
+  if (!movementType) return <>{text}</>;
   const i = text.indexOf(" de ");
   if (i < 0) return <span className="blur-name" title="Passe o mouse para ver o nome">{text}</span>;
   return <>{text.slice(0, i + 4)}<span className="blur-name" title="Passe o mouse para ver o nome">{text.slice(i + 4)}</span></>;

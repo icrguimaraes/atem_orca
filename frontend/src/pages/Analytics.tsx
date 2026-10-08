@@ -10,6 +10,7 @@ import { fmtInt } from "../labels";
 interface Kpi { label: string; value: string | null; compact: string; pct?: string | null; pct_label?: string; share?: string; hint?: string }
 interface Dashboard {
   years: { prev: number; ref: number; target: number };
+  series?: { prev: string; ref: string; labels: Record<string, string> };
   version: { id: number; label: string; status: string };
   kpis: Record<string, Kpi>;
   status: { total: number; filled: number; pending: number; submitted: number; returned: number; approved: number };
@@ -27,9 +28,13 @@ interface Options {
   versions: { id: number; label: string; status: string; current: boolean }[];
   series: { key: string; label: string }[];
   default_series: { prev: string; ref: string };
+  years: { year: number; kind: "target" | "actual"; closed: number | null }[];
+  target_year: number;
 }
-type Filters = { company_id: string; department_id: string; cost_center_id: string; account: string; module: string; package_id: string; version_id: string; prev: string; ref: string };
-const EMPTY: Filters = { company_id: "", department_id: "", cost_center_id: "", account: "", module: "", package_id: "", version_id: "", prev: "", ref: "" };
+type Filters = { company_id: string; department_id: string; cost_center_id: string; account: string; module: string; package_id: string; version_id: string; year: string; months: string; compare: string; same_period: string };
+// cabeçalho igual ao do Painel (08/10/2026): ano principal (vazio = ano do ciclo), meses, comparar com o ano anterior (desligado por padrão) e mesmo período
+const EMPTY: Filters = { company_id: "", department_id: "", cost_center_id: "", account: "", module: "", package_id: "", version_id: "", year: "", months: "", compare: "false", same_period: "" };
+const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MODULE_LABEL: Record<string, string> = { OPEX: "OPEX", CAPEX: "CAPEX", PERSONNEL: "Pessoal" };
 // drill-down: Empresa → Diretoria → Centro de custo → Conta → Mês
 const NEXT: Record<string, string> = { company: "department", department: "cost_center", cost_center: "account", account: "month" };
@@ -51,12 +56,13 @@ export default function Analytics() {
   const qs = useMemo(() => {
     const p = new URLSearchParams();
     Object.entries(filters).forEach(([k, v]) => v && p.set(k, v));
+    if (!filters.year && opts.data?.target_year) p.set("year", String(opts.data.target_year));
     p.set("dimension", dimension);
     p.set("variation_by", variationBy);
     p.set("variation_mode", variationMode);
     p.set("top", String(top));
     return p.toString();
-  }, [filters, dimension, variationBy, variationMode, top]);
+  }, [filters, dimension, variationBy, variationMode, top, opts.data?.target_year]);
   const { data, error } = useLoad(() => api<Dashboard>(`/analytics/dashboard?${qs}`), [qs]);
   const [shown, setShown] = useState<Dashboard | null>(null);
   useEffect(() => { if (data) setShown(data); }, [data]);
@@ -92,7 +98,7 @@ export default function Analytics() {
   const d = shown;
   const y = d.years;
   const k = d.kpis;
-  const active = Object.entries(filters).filter(([key, v]) => v && key !== "version_id").length;
+  const active = Object.entries(filters).filter(([key, v]) => v && !(["version_id", "compare", "same_period"].includes(key))).length + (filters.compare === "true" ? 1 : 0) + (filters.same_period === "false" ? 1 : 0);
 
   return (
     <>
@@ -161,14 +167,6 @@ export default function Analytics() {
             ],
           },
           {
-            key: "package_id", label: "Pacote GMD", value: filters.package_id,
-            onChange: (v) => set({ package_id: v }),
-            options: (d) => [
-              { value: "", label: "Todos os pacotes" },
-              ...(d.module && d.module !== "OPEX" ? [] : (packages.data ?? []).filter((p) => p.nature !== "CAPEX").map((p) => ({ value: String(p.id), label: `${p.roman ? `${p.roman} · ` : ""}${p.name}` }))),
-            ],
-          },
-          {
             key: "account", label: "Conta contábil", value: filters.account, wide: true,
             onChange: (v) => { set({ account: v }); setTrail([]); },
             options: (d) => [
@@ -185,30 +183,57 @@ export default function Analytics() {
             : []),
         ]}
       />
-      {(opts.data?.series.length ?? 0) > 0 && (
-        <div className="chip-groups">
-          <div className="chip-group">
-            <span className="chip-label">Realizado</span>
-            <div className="month-chips" role="group" aria-label="Série de realizado para comparar">
-              {opts.data!.series.filter((o) => o.key.startsWith("actual")).map((o) => {
-                const cur = filters.prev || opts.data!.default_series.prev;
-                return <button key={o.key} type="button" className={cur === o.key ? "active" : ""} aria-pressed={cur === o.key} onClick={() => set({ prev: o.key })}>{o.label}</button>;
-              })}
-              <button type="button" className={filters.prev === "none" ? "active" : ""} aria-pressed={filters.prev === "none"} onClick={() => set({ prev: "none" })}>Nenhum</button>
+      {opts.data && (
+        <>
+          <div className="chip-groups">
+            <div className="chip-group">
+              <span className="chip-label">Ano</span>
+              <div className="year-tabs" role="group" aria-label="Ano principal">
+                {opts.data.years.map((yy) => {
+                  const cur = Number(filters.year || opts.data!.target_year) === yy.year;
+                  return <button key={yy.year} type="button" className={cur ? "active" : ""} aria-pressed={cur} onClick={() => { set({ year: yy.year === opts.data!.target_year ? "" : String(yy.year) }); setTrail([]); }}>{yy.year}</button>;
+                })}
+              </div>
+            </div>
+            <div className="chip-group">
+              <span className="chip-label">Mês</span>
+              <div className="month-chips" role="group" aria-label="Meses">
+                <button type="button" className={!filters.months ? "active" : ""} aria-pressed={!filters.months} onClick={() => set({ months: "" })}>Todos</button>
+                {MONTHS.map((m, i) => {
+                  const sel = filters.months ? filters.months.split(",").map(Number) : [];
+                  const on = sel.includes(i + 1);
+                  return <button key={m} type="button" className={on ? "active" : ""} aria-pressed={on} onClick={() => { const next = on ? sel.filter((x) => x !== i + 1) : [...sel, i + 1].sort((a, b) => a - b); set({ months: next.length === 12 ? "" : next.join(",") }); }}>{m}</button>;
+                })}
+              </div>
+            </div>
+            <div className="chip-group">
+              <span className="chip-label">Pacote</span>
+              <select value={filters.package_id} aria-label="Pacote GMD" onChange={(e) => set({ package_id: e.target.value })}>
+                <option value="">Todos os pacotes</option>
+                {(filters.module && filters.module !== "OPEX" ? [] : (packages.data ?? []).filter((p) => p.nature !== "CAPEX")).map((p) => (
+                  <option key={p.id} value={String(p.id)}>{`${p.roman ? `${p.roman} · ` : ""}${p.name}`}</option>
+                ))}
+              </select>
             </div>
           </div>
-          <div className="chip-group">
-            <span className="chip-label">Referência</span>
-            <div className="month-chips" role="group" aria-label="Série de referência para comparar">
-              {opts.data!.series.map((o) => {
-                const cur = filters.ref || opts.data!.default_series.ref;
-                return <button key={o.key} type="button" className={cur === o.key ? "active" : ""} aria-pressed={cur === o.key} onClick={() => set({ ref: o.key })}>{o.label}</button>;
-              })}
-              <button type="button" className={filters.ref === "none" ? "active" : ""} aria-pressed={filters.ref === "none"} onClick={() => set({ ref: "none" })}>Nenhuma</button>
+          <div className="section-tools">
+            <div className="toggle-options" role="group" aria-label="Opções de comparação">
+              <label>
+                <input type="checkbox" checked={filters.compare === "true"} onChange={(e) => set({ compare: e.target.checked ? "true" : "false" })} />
+                Comparar com o ano anterior
+              </label>
+              <label title="Limita a base de comparação aos meses já fechados do realizado">
+                <input type="checkbox" checked={filters.same_period !== "false"} onChange={(e) => set({ same_period: e.target.checked ? "" : "false" })} />
+                Mesmo período
+              </label>
             </div>
+            <span className="selection-note">
+              Selecionado: <strong>{d.series?.labels?.target ?? k.target.label}</strong>
+              {d.series?.labels?.ref && <> · referência <strong>{d.series.labels.ref}</strong></>}
+              {d.series?.labels?.prev && <> · comparado com <strong>{d.series.labels.prev}</strong></>}
+            </span>
           </div>
-          <span className="muted small">Orçamento {y.target} é sempre a série principal; os cards e os gráficos seguem a escolha.</span>
-        </div>
+        </>
       )}
       {trail.length > 0 && (
         <nav className="breadcrumb" aria-label="Drill-down">
