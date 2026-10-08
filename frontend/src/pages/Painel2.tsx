@@ -293,9 +293,9 @@ export default function Painel2() {
                     <button
                       key={d.id}
                       type="button"
-                      className={department === String(d.id) ? "active" : ""}
-                      aria-pressed={department === String(d.id)}
-                      onClick={() => setDepartment((cur) => (cur === String(d.id) ? "" : String(d.id)))}
+                      className={department.split(",").includes(String(d.id)) ? "active" : ""}
+                      aria-pressed={department.split(",").includes(String(d.id))}
+                      onClick={() => setDepartment((cur) => { const picked = cur ? cur.split(",") : []; const next = picked.includes(String(d.id)) ? picked.filter((x) => x !== String(d.id)) : [...picked, String(d.id)]; return next.length === departments.length ? "" : next.join(","); })}
                     >
                       {d.name}
                     </button>
@@ -311,7 +311,7 @@ export default function Painel2() {
             onChange: (v) => setFilters({ ...filters, cost_center_id: v }),
             options: [
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
-              ...ccs.filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!department || String(c.department_id) === department)).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
+              ...ccs.filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!department || department.split(",").includes(String(c.department_id)))).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
             ],
           },
         ]}
@@ -379,6 +379,18 @@ export default function Painel2() {
               </select>
             </div>
           </div>
+          {activeFilters > 0 && (
+            <div className="active-filters" aria-label="Filtros ativos">
+              <span className="muted small">Filtros ativos (guardados da sua última visita):</span>
+              {filters.company_id && <span className="filter-chip">Empresa: {filters.company_id.split(",").map((i) => companies.find((c) => String(c.id) === i)?.short_name ?? i).join(" + ")}</span>}
+              {department && <span className="filter-chip">Área: {department.split(",").map((i) => departments.find((d) => String(d.id) === i)?.name ?? i).join(" + ")}</span>}
+              {filters.cost_center_id && <span className="filter-chip">Centro de custo: {ccs.find((c) => String(c.id) === filters.cost_center_id)?.code ?? filters.cost_center_id}</span>}
+              {modules.length > 0 && <span className="filter-chip">Tipo: {modules.map((m) => BUDGET_TYPES.find((b) => b.key === m)?.label ?? m).join(" + ")}</span>}
+              {months.length > 0 && <span className="filter-chip">Mês: {months.map((m) => MONTHS[m - 1]).join(", ")}</span>}
+              {filters.package_id && <span className="filter-chip">Pacote: {packages.find((p) => String(p.id) === filters.package_id)?.name ?? filters.package_id}</span>}
+              <button type="button" className="btn btn-ghost btn-sm" onClick={clearAll}>Limpar tudo</button>
+            </div>
+          )}
           {account && (
             <div className="active-filters" aria-label="Filtros aplicados por clique">
               <span className="filter-chip">
