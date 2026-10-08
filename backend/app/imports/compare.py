@@ -31,6 +31,8 @@ MODES = ("MERGE", "REPLACE")
 def financial_scope(dataset_type: str, scenario: str, year: int, company_code: str) -> str:
     if dataset_type == "ACTUAL":
         return f"ACTUAL:{year}:{company_code}"
+    if dataset_type == "PROJECTION":
+        return f"PROJECTION:{year}:{company_code}"
     return f"{dataset_type}:{scenario}:{year}:{company_code}"
 
 
@@ -85,7 +87,7 @@ def _same(a: dict[int, Decimal], b: dict[int, Decimal]) -> bool:
 def compare_financial(db: Session, result: ParseResult, options: dict) -> dict:
     mode = options.get("mode", "MERGE")
     scenario = options.get("scenario", "ORC")
-    model = ActualEntry if result.dataset_type == "ACTUAL" else ReferenceBudgetEntry
+    model = ActualEntry if result.dataset_type in ("ACTUAL", "PROJECTION") else ReferenceBudgetEntry
     groups = defaultdict(list)
     for r in _valid(result):
         groups[(r.data["company"], int(r.data["year"]))].append(r)
@@ -491,7 +493,7 @@ def compare(db: Session, result: ParseResult, options: dict) -> dict:
         return compare_opex_template(db, result, options)
     if result.dataset_type == "CAPEX_TEMPLATE":
         return compare_capex_template(db, result, options)
-    if result.dataset_type in ("ACTUAL", "REFERENCE_BUDGET"):
+    if result.dataset_type in ("ACTUAL", "REFERENCE_BUDGET", "PROJECTION"):
         return compare_financial(db, result, options)
     if result.dataset_type in ("MASTER_DATA", "COST_CENTERS", "ACCOUNTS"):
         return compare_master(result)

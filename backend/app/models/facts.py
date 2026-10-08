@@ -52,6 +52,8 @@ class ActualEntry(Base):
     currency: Mapped[str] = mapped_column(String(3), default="BRL")
     amount: Mapped[Decimal] = mapped_column(Money)
     source: Mapped[str] = mapped_column(String(20), default="EXCEL")
+    # linha veio da projeção do gestor (meses sem KSB1): aparece em vermelho no Painel
+    projected: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
 
 class ReferenceBudgetEntry(Base):

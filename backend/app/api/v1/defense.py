@@ -65,8 +65,8 @@ def _scope_ccs(db: Session, user: User, company_id, cost_center_id, department_i
         stmt = stmt.where(CostCenter.company_id.in_(_ints(company_id)))
     if cost_center_id:
         stmt = stmt.where(CostCenter.id == cost_center_id)
-    if department_id:
-        stmt = stmt.where(CostCenter.department_id == department_id)
+    if _ints(department_id):
+        stmt = stmt.where(CostCenter.department_id.in_(_ints(department_id)))
     for key in ("department_id", "area_id"):
         column = getattr(CostCenter, key)
         if parent.get(key) is not None:
@@ -91,7 +91,7 @@ def why(
     cost_center_id: int | None = None,
     package_id: int | None = None,
     account_id: int | None = None,
-    department_id: int | None = None,
+    department_id: str | None = None,
     modules: str | None = None,
     label: str | None = Query(None, max_length=200),
     db: Session = Depends(get_db),
@@ -294,7 +294,8 @@ def why(
             "cost_center_ids": scope,
             "single_cost_center": {"id": single.id, "code": single.code, "name": single.name} if single else None,
             "account_id": account_id or parent_account_id,
-            "department_id": department_id or parent_department_id,
+            "department_id": (next(iter(_ints(department_id))) if len(_ints(department_id)) == 1 else None)
+            or parent_department_id,
         },
     }
 

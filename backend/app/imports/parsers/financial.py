@@ -11,6 +11,7 @@ from app.imports.base import (
     clean_str,
     find_table,
     is_blank,
+    norm,
     to_date,
     to_decimal,
 )
@@ -139,6 +140,69 @@ def parse_wide(sheets: list[Sheet], options: dict, dataset_type: str) -> ParseRe
                 rec.warn("NO_VALUES", "Linha sem valores mensais")
             rec.natural_key = (
                 f"{rec.data['company']}|{rec.data['branch']}|{rec.data['cost_center']}|{rec.data['account']}"
+            )
+            result.records.append(rec)
+        return result
+    return result
+
+
+PROJECTION_ALIASES = {
+    "company": ("Empresa",),
+    "cost_center": ("Cód CC", "Cod CC"),
+    "cost_center_name": ("Descrição C. Custo", "Descricao C. Custo"),
+    "account": ("Código conta", "Codigo conta"),
+    "account_name": ("Descrição Conta Contábil", "Descricao Conta Contabil"),
+    "month": ("Mês", "Mes"),
+    "amount": ("Total 3ª Projeção", "Total 3a Projeção", "Total 3 Projeção"),
+}
+
+
+def parse_projection(sheets: list[Sheet], options: dict) -> ParseResult:
+    """Projeção do gestor (planilha 'Base'): CC × conta × mês, usando a 3ª projeção (é a 'Projeção Atual' do
+    resumo). Cada linha vira um lançamento mensal; a carga só mantém os meses sem realizado (KSB1)."""
+    result = ParseResult("PROJECTION", "PROJECTION_BASE")
+    for sheet in sheets:
+        if not norm(sheet.name).startswith("base"):
+            continue
+        table = find_table(sheet, PROJECTION_ALIASES, ("cost_center", "account", "amount", "month"))
+        if table is None:
+            continue
+        result.meta.update({"sheet": sheet.name})
+        for row_no, row in table.rows():
+            if is_blank(row):
+                continue
+            rec = Record("FACT", sheet.name, row_no, {})
+            month_value = table.value(row, "month")
+            if not hasattr(month_value, "month"):
+                rec.error("INVALID_DATE", "Mês inválido", "Mês", month_value)
+                result.records.append(rec)
+                continue
+            raw = table.value(row, "amount")
+            try:
+                amount = to_decimal(raw)
+            except ValueError:
+                rec.error("INVALID_NUMBER", "Projeção inválida", "Total 3ª Projeção", raw)
+                result.records.append(rec)
+                continue
+            if amount in (None, 0):
+                continue
+            rec.data.update(
+                {
+                    "company": clean_code(table.value(row, "company")),
+                    "branch": None,
+                    "branch_name": None,
+                    "cost_center": clean_code(table.value(row, "cost_center")),
+                    "cost_center_name": clean_str(table.value(row, "cost_center_name")),
+                    "manager": None,
+                    "account": clean_code(table.value(row, "account")),
+                    "account_name": clean_str(table.value(row, "account_name")),
+                    "package": None,
+                    "year": int(month_value.year),
+                    "values": {int(month_value.month): str(amount)},
+                }
+            )
+            rec.natural_key = (
+                f"{rec.data['company']}|{rec.data['cost_center']}|{rec.data['account']}|{month_value.month}"
             )
             result.records.append(rec)
         return result

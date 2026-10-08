@@ -586,7 +586,7 @@ def validate(result: ParseResult, dims: Dimensions, options: dict) -> None:
         return validate_capex_template(result, dims, options)
     if result.dataset_type in ("MASTER_DATA", "COST_CENTERS", "ACCOUNTS"):
         validate_master(result, dims, options)
-    elif result.dataset_type in ("ACTUAL", "REFERENCE_BUDGET"):
+    elif result.dataset_type in ("ACTUAL", "REFERENCE_BUDGET", "PROJECTION"):
         validate_financial(result, dims, options)
     elif result.dataset_type == "EMPLOYEES":
         validate_employees(result, dims, options)

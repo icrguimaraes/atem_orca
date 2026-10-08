@@ -313,7 +313,9 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
     scenario = (batch.options or {}).get("scenario", "ORC")
     source = "SAP_KSB1" if batch.layout == "SAP_KSB1" else "EXCEL"
     mode = (batch.options or {}).get("mode", "MERGE")
-    model = ActualEntry if dataset == "ACTUAL" else ReferenceBudgetEntry
+    if dataset == "PROJECTION":
+        mode = "REPLACE"  # a projeção substitui a anterior inteira; o realizado (KSB1) nunca é tocado
+    model = ActualEntry if dataset in ("ACTUAL", "PROJECTION") else ReferenceBudgetEntry
     # uma versão por empresa × ano: cargas parciais de outra empresa não substituem esta
     groups: dict[tuple[str, int], list[ImportRow]] = defaultdict(list)
     for row in rows:
@@ -321,7 +323,24 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
     versions = []
     for (company_code, year), group in sorted(groups.items()):
         scope = (
-            f"ACTUAL:{year}:{company_code}" if dataset == "ACTUAL" else f"{dataset}:{scenario}:{year}:{company_code}"
+            f"ACTUAL:{year}:{company_code}"
+            if dataset == "ACTUAL"
+            else f"PROJECTION:{year}:{company_code}"
+            if dataset == "PROJECTION"
+            else f"{dataset}:{scenario}:{year}:{company_code}"
+        )
+        # meses com realizado (KSB1) não são tocados pela projeção
+        closed_actual = (
+            db.scalar(
+                select(DatasetVersion.last_closed_period).where(
+                    DatasetVersion.dataset_type == "ACTUAL",
+                    DatasetVersion.is_current,
+                    DatasetVersion.scope_key == f"ACTUAL:{year}:{company_code}",
+                )
+            )
+            or 0
+            if dataset == "PROJECTION"
+            else 0
         )
         previous = db.scalar(
             select(DatasetVersion).where(
@@ -365,11 +384,13 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
             else:
                 for month, amount in d.get("values", {}).items():
                     value = Decimal(amount)
-                    if value == 0:
+                    if value == 0 or int(month) <= closed_actual:
                         continue
                     entry = base | {"fiscal_year": year, "period": int(month), "amount": value}
-                    if dataset == "ACTUAL":
+                    if dataset in ("ACTUAL", "PROJECTION"):
                         entry |= {"source": source, "currency": "BRL"}
+                    if dataset == "PROJECTION":
+                        entry["projected"] = True
                     else:
                         entry |= {"scenario": scenario}
                     payload.append(entry)
@@ -1008,6 +1029,7 @@ def _travel_from_template(db, ctx, batch, row, sub, cc, company_id, user_id) -> 
 
 
 LOADERS = {
+    "PROJECTION": load_financial,
     "OPEX_TEMPLATE": load_opex_template,
     "CAPEX_TEMPLATE": load_capex_template,
     "MASTER_DATA": load_master,

@@ -2,7 +2,7 @@ from collections.abc import Callable
 
 from app.imports.base import ParseResult, Sheet, StructureError, norm
 from app.imports.parsers.capex_template import is_capex_template, parse_capex_template
-from app.imports.parsers.financial import parse_ksb1, parse_wide
+from app.imports.parsers.financial import parse_ksb1, parse_projection, parse_wide
 from app.imports.parsers.master import parse_master
 from app.imports.parsers.opex_template import is_opex_template, parse_opex_template
 from app.imports.parsers.people import parse_employees, parse_macro
@@ -14,6 +14,7 @@ PARSERS: dict[str, list[Parser]] = {
     "MACRO_ASSUMPTIONS": [parse_macro],
     "ACTUAL": [parse_ksb1, lambda s, o: parse_wide(s, o, "ACTUAL")],
     "REFERENCE_BUDGET": [lambda s, o: parse_wide(s, o, "REFERENCE_BUDGET")],
+    "PROJECTION": [parse_projection],
     "OPEX_TEMPLATE": [parse_opex_template],
     "CAPEX_TEMPLATE": [parse_capex_template],
     "MASTER_DATA": [parse_master],

@@ -135,7 +135,7 @@ def pct(new: Decimal, base: Decimal) -> Decimal | None:
 @dataclass(frozen=True)
 class Filters:
     company_id: str | None = None  # uma ou mais empresas: "1" ou "1,2"
-    department_id: int | None = None  # Área
+    department_id: str | None = None  # uma ou mais áreas: "1" ou "1,2" (-1 = sem área)
     cost_center_id: int | None = None
     account: str | None = None
     module: str | None = None
@@ -204,6 +204,16 @@ def _package_name(module: str, acc: Account | None, packages: dict[int, str]) ->
 
 
 def _last_closed(db: Session, year: int) -> int | None:
+    """Último mês do realizado do ano. Com projeção carregada (meses sem KSB1), o ano vale completo."""
+    projected = db.scalar(
+        select(func.max(DatasetVersion.last_closed_period)).where(
+            DatasetVersion.dataset_type == "PROJECTION",
+            DatasetVersion.is_current,
+            DatasetVersion.scope_key.like(f"PROJECTION:{year}:%"),
+        )
+    )
+    if projected:
+        return max(12, int(projected)) if projected == 12 else int(projected)
     return db.scalar(
         select(func.max(DatasetVersion.last_closed_period)).where(
             DatasetVersion.dataset_type == "ACTUAL",
@@ -298,9 +308,10 @@ def build(db: Session, ctx: Context, version: BudgetVersion, visible: set[int] |
     wanted_companies = {int(x) for x in (f.company_id or "").split(",") if x.strip().isdigit()}
     if wanted_companies:
         scope &= {c.id for c in ccs.values() if c.company_id in wanted_companies}
-    if f.department_id:  # -1 = centros de custo sem diretoria
-        wanted = None if f.department_id == -1 else f.department_id
-        scope &= {c.id for c in ccs.values() if c.department_id == wanted}
+    wanted_depts = {int(x) for x in (f.department_id or "").split(",") if x.strip().lstrip("-").isdigit()}
+    if wanted_depts:  # -1 = centros de custo sem área
+        wanted = {None if d == -1 else d for d in wanted_depts}
+        scope &= {c.id for c in ccs.values() if c.department_id in wanted}
     if f.cost_center_id:
         scope &= {f.cost_center_id}
     package_accounts = {a.code for a in accounts.values() if a.package_id == f.package_id} if f.package_id else None

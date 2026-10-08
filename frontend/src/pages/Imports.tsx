@@ -15,6 +15,7 @@ const HELP: Record<string, string> = {
   ACTUAL:
     "Layout da aba Realizado (Empresa, Filial, Centro de Custos, Conta Razão e uma coluna por mês) ou exportação SAP KSB1 (partidas individuais: Centro custo, Classe de custo, Valor/moeda objeto e Data de lançamento; subtotais e total geral são ignorados). O último mês com lançamento vira o mês fechado do ano, base da anualização.",
   REFERENCE_BUDGET: "Mesmo layout do realizado, com os valores orçados (ex.: Orçamento 2026).",
+  PROJECTION: "Aba Base do arquivo PROJETADO: usa a 3ª projeção (\"Projeção Atual\") e substitui só os meses sem KSB1. O realizado jan–set continua sendo o KSB1.",
   EMPLOYEES: "Aba QUADRO FUNCIONARIOS (matrícula, nome, cargo, CC, salário, ação). As ações (PROMOVER, REMOVER, INCLUIR) e as vagas entram no orçamento de Pessoal do CC. Se o arquivo não tiver a coluna CENTRO DE CUSTO preenchida, informe o CC padrão.",
   MACRO_ASSUMPTIONS: "Aba PREMISSAS MACROECONOMICAS (indicador, fonte, anos).",
 };
@@ -29,7 +30,7 @@ function UploadForm({ onDone }: { onDone: (id: number) => void }) {
   const [mode, setMode] = useState<"MERGE" | "REPLACE">("MERGE");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const financial = type === "ACTUAL" || type === "REFERENCE_BUDGET";
+  const financial = type === "ACTUAL" || type === "REFERENCE_BUDGET" || type === "PROJECTION";
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -73,7 +74,7 @@ function UploadForm({ onDone }: { onDone: (id: number) => void }) {
           Tipo de dado
           <select value={type} onChange={(e) => setType(e.target.value)}>
             <option value="">Detectar automaticamente</option>
-            {["OPEX_TEMPLATE", "CAPEX_TEMPLATE", "MASTER_DATA", "ACTUAL", "REFERENCE_BUDGET", "EMPLOYEES", "MACRO_ASSUMPTIONS"].map((t) => (
+            {["OPEX_TEMPLATE", "CAPEX_TEMPLATE", "MASTER_DATA", "ACTUAL", "REFERENCE_BUDGET", "PROJECTION", "EMPLOYEES", "MACRO_ASSUMPTIONS"].map((t) => (
               <option key={t} value={t}>
                 {DATASET_LABELS[t]}
               </option>

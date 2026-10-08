@@ -15,8 +15,9 @@ from app.services.analytics import _br, _fig, _layout, fmt_compact, fmt_money, f
 
 MONTHS = ("JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ")
 REALIZADO, ORCADO, ANTERIOR = "#4472c4", "#4fa894", "#8a6bbf"  # azul, verde-água (orçamento), roxo
+PROJETADO = "#e24b4a"  # vermelho: projeção do gestor para os meses sem realizado (KSB1)
 # rótulos no tom escuro de cada série (legíveis em 10–11 px); o frontend troca pelo token do tema escuro
-INK = {REALIZADO: "#3a64b4", ORCADO: "#2b7a68", ANTERIOR: "#6a4c9c"}
+INK = {REALIZADO: "#3a64b4", ORCADO: "#2b7a68", ANTERIOR: "#6a4c9c", PROJETADO: "#a32d2d"}
 TXT_UP, TXT_DOWN, TXT_FLAT = "#c13515", "#008a05", "#767676"  # percentual no texto, como no Painel
 # variação na cascata da "Evolução do orçamento": areia (âmbar dessaturado), fora das cores de série e sem laranja
 VARIACAO = "#c8ad5e"
@@ -104,9 +105,15 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
     if o["has_budget"]:
         series.append(("budget", lb["budget"], ORCADO))
     rows = monthly or o["monthly"]
+    # meses projetados (sem realizado): a barra do realizado fica só com o realizado e a projeção sai em vermelho
+    proj = [_num(r.get("proj", 0)) for r in rows]
+    if any(proj):
+        series.append(("proj", "Projeção out–dez (gestor)", PROJETADO))
     picked = set(months or [])
     opacity = [1.0 if (not picked or m in picked) else 0.3 for m in range(1, 13)]
     values_by = {key: [_num(r[key]) for r in rows] for key, _, _ in series}
+    if "proj" in values_by:
+        values_by["ref"] = [max(0.0, v - p) for v, p in zip(values_by["ref"], values_by["proj"], strict=True)]
     zeros = [0.0] * 12
     # rótulo no tamanho fixo (sem o Plotly encolher para a largura da coluna): maior com menos colunas por mês
     label_size = {1: 14, 2: 12}.get(len(series), 11)

@@ -94,6 +94,7 @@ class DatasetType(StrEnum):
     MACRO_ASSUMPTIONS = "MACRO_ASSUMPTIONS"
     OPEX_TEMPLATE = "OPEX_TEMPLATE"
     CAPEX_TEMPLATE = "CAPEX_TEMPLATE"
+    PROJECTION = "PROJECTION"  # projeção do gestor para os meses que faltam do realizado (ex.: out–dez 2026)
 
 
 class MovementType(StrEnum):

@@ -601,3 +601,34 @@ def opex_template_nave() -> bytes:
     base.append([None, "Empresa", "Filial", "Nome Filial", "Centro de Custos", "Conta Razão"])
     base.append([None, "1012", "0070", "Nave - Manaus", "5010102102", "6010201003"])
     return _bytes(wb)
+
+
+def projecao_base(rows: list[tuple]) -> bytes:
+    """Aba 'Base' do arquivo PROJETADO: uma linha por CC × conta × mês; a 3ª projeção é a 'Projeção Atual'."""
+    from datetime import datetime as _dt
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Base "
+    header = [
+        "Cód CC_Código conta",
+        "Mês",
+        "Empresa",
+        "Tp",
+        "Centro de Custo SAP",
+        "Cód CC",
+        "Descrição C. Custo",
+        "Centro financ./item orçamento",
+        "Código conta",
+        "Descrição Conta Contábil",
+        "Pacote",
+        "Orçamento Atual",
+        "Realizado",
+        "Total 3ª Projeção",
+    ]
+    ws.append(header)
+    for cc, month, acc, acc_name, amount in rows:
+        ws.append(
+            [None, _dt(2026, month, 1), 1001, None, None, cc, "CC", None, acc, acc_name, None, None, None, amount]
+        )
+    return _bytes(wb)

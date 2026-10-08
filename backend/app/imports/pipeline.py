@@ -182,7 +182,7 @@ def validate_batch(db: Session, batch: ImportBatch, storage: LocalStorage) -> Im
 def _summarize(result) -> dict:
     by_type = Counter(r.record_type for r in result.records)
     summary: dict = {"record_types": dict(by_type)}
-    if result.dataset_type in ("ACTUAL", "REFERENCE_BUDGET"):
+    if result.dataset_type in ("ACTUAL", "REFERENCE_BUDGET", "PROJECTION"):
         total = Decimal("0")
         ccs, accounts = set(), set()
         new_ccs: dict[str, str | None] = {}

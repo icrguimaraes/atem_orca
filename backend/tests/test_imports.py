@@ -525,3 +525,67 @@ def test_unrecognized_file_fails_and_can_be_rejected(client, admin, run_worker):
 def test_wrong_extension_rejected(client, admin):
     resp = client.post("/api/v1/imports", headers=admin, files={"file": ("a.pdf", b"%PDF", "application/pdf")})
     assert resp.status_code == 422
+
+
+def test_projection_fills_only_months_without_ksb1(client, admin, run_worker):
+    """Projeção do gestor: entra só nos meses sem KSB1 (out–dez), é marcada como projetada, substitui a anterior
+    e não altera o realizado de jan–set. Com projeção, o ano passa a valer completo."""
+    _seed_cc(client, admin, run_worker)
+    lines = [
+        (
+            "1001",
+            "1050101011",
+            "6010301001",
+            "Hospedagem",
+            "2026",
+            "3",
+            "2026-03-15",
+            "1",
+            "100",
+            "BRL",
+            "t",
+            None,
+            None,
+        ),
+        (
+            "1001",
+            "1050101011",
+            "6010301001",
+            "Hospedagem",
+            "2026",
+            "9",
+            "2026-09-15",
+            "2",
+            "200",
+            "BRL",
+            "t",
+            None,
+            None,
+        ),
+    ]
+    import_and_load(client, admin, run_worker, builders.ksb1_csv(lines), "ksb1_2026_parcial.csv", dataset_type="ACTUAL")
+    before = client.get("/api/v1/dashboard/overview?years=2026&compare=false", headers=admin).json()["kpis"]["ref_ytd"]
+    proj = [
+        ("1050101011", 10, "6010301001", "Hospedagem", 50),
+        ("1050101011", 11, "6010301001", "Hospedagem", 70),
+        ("1050101011", 9, "6010301001", "Hospedagem", 999),
+    ]
+    import_and_load(
+        client, admin, run_worker, builders.projecao_base(proj), "PROJETADO 2026.xlsx", dataset_type="PROJECTION"
+    )
+    after = client.get("/api/v1/dashboard/overview?years=2026&compare=false", headers=admin).json()
+    # set (9) do arquivo é ignorado: o KSB1 é o realizado até setembro; out e nov entram como projeção
+    assert float(after["kpis"]["ref_ytd"]) == float(before) + 120
+    proj_months = sorted(round(float(r["proj"])) for r in after["monthly"] if float(r["proj"]) > 0)
+    assert proj_months == [50, 70]
+    # projeção substitui a anterior inteira (não soma)
+    import_and_load(
+        client,
+        admin,
+        run_worker,
+        builders.projecao_base([("1050101011", 12, "6010301001", "Hospedagem", 30)]),
+        "PROJETADO v2.xlsx",
+        dataset_type="PROJECTION",
+    )
+    again = client.get("/api/v1/dashboard/overview?years=2026&compare=false", headers=admin).json()["kpis"]
+    assert float(again["ref_ytd"]) == float(before) + 30

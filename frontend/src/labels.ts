@@ -6,6 +6,7 @@ export const DATASET_LABELS: Record<string, string> = {
   ACCOUNTS: "Contas contábeis",
   ACTUAL: "Realizado",
   REFERENCE_BUDGET: "Orçamento de referência",
+  PROJECTION: "Projeção do gestor (meses sem realizado)",
   EMPLOYEES: "Quadro de funcionários",
   MACRO_ASSUMPTIONS: "Premissas macroeconômicas",
 };

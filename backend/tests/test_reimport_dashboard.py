@@ -130,7 +130,12 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     )
     assert by_module["CAPEX"]["main"] == "0.00" and by_module["PERSONNEL"]["main"] == "0.00"
     assert data["kpis"]["ref_annualized"] == "645.00"
-    assert data["monthly"][0] == {"month": 1, "prev": "220.00", "ref": "110.00", "budget": "0.00"}
+    assert {k: v for k, v in data["monthly"][0].items() if k != "proj"} == {
+        "month": 1,
+        "prev": "220.00",
+        "ref": "110.00",
+        "budget": "0.00",
+    }
     assert [c["code"] for c in data["top_cost_centers"]] == ["1050101011", "1050101012"]
     assert 2027 in data["available_years"] and data["target_year"] == 2027  # ano do ciclo (orçamento proposto)
 
@@ -466,3 +471,20 @@ def test_dashboard_accepts_multiple_companies(client, admin, run_worker):
     assert both.json()["kpis"] == all_
     one = client.get(f"{q}&company_id={companies[0]['id']}", headers=admin)
     assert one.status_code == 200
+
+
+def test_dashboard_accepts_multiple_departments(client, admin, run_worker):
+    """Filtro com mais de uma área: "a,b" soma as duas áreas."""
+    from tests import builders
+    from tests.test_imports import import_and_load
+
+    import_and_load(client, admin, run_worker, builders.opex_template_filled(), "t-multi-dept.xlsx")
+    d1 = client.post("/api/v1/departments", headers=admin, json={"name": "Área X"}).json()
+    d2 = client.post("/api/v1/departments", headers=admin, json={"name": "Área Y"}).json()
+    cc = client.get("/api/v1/cost-centers", headers=admin).json()[0]
+    client.patch(f"/api/v1/cost-centers/{cc['id']}", headers=admin, json={"department_id": d1["id"]})
+    q = "/api/v1/dashboard/overview?years=2027&compare=false"
+    only1 = client.get(f"{q}&department_id={d1['id']}", headers=admin).json()["kpis"]
+    both = client.get(f"{q}&department_id={d1['id']},{d2['id']}", headers=admin)
+    assert both.status_code == 200, both.text
+    assert both.json()["kpis"] == only1  # a área Y não tem CCs: o resultado é o da área X

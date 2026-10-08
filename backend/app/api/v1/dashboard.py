@@ -76,6 +76,16 @@ def _loaded_years(db: Session, dataset_type: str, position: int) -> list[int]:
 
 
 def _last_closed(db: Session, year: int) -> int | None:
+    """Último mês do realizado do ano. Com projeção carregada (meses sem KSB1), o ano vale completo."""
+    projected = db.scalar(
+        select(func.max(DatasetVersion.last_closed_period)).where(
+            DatasetVersion.dataset_type == "PROJECTION",
+            DatasetVersion.is_current,
+            DatasetVersion.scope_key.like(f"PROJECTION:{year}:%"),
+        )
+    )
+    if projected:
+        return max(12, int(projected)) if projected == 12 else int(projected)
     return db.scalar(
         select(func.max(DatasetVersion.last_closed_period)).where(
             DatasetVersion.dataset_type == "ACTUAL",
@@ -286,11 +296,11 @@ class Facts:
         period: Period,
         parent: dict | None = None,
         account_id: int | None = None,
-        department_id: int | None = None,
+        department_id=None,  # inteiro ou lista "1,2"
     ) -> None:
         self.db = db
         self.account_id = account_id  # filtro por conta (clique nos visuais do Painel 2)
-        self.department_id = department_id  # filtro por área (Controladoria, Tributos…) do CC
+        self.department_ids = {department_id} if isinstance(department_id, int) else _ints(department_id)  # áreas do CC
         self.visible = visible_cost_center_ids(db, user)
         # empresa(s): inteiro ou lista "1,2" (filtro com mais de uma empresa, 08/10/2026)
         self.company_ids = {company_id} if isinstance(company_id, int) else _ints(company_id)
@@ -315,9 +325,9 @@ class Facts:
             stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id == self.package_id)))
         if self.account_id:
             stmt = stmt.where(model.account_id == self.account_id)
-        if self.department_id:
+        if self.department_ids:
             stmt = stmt.where(
-                model.cost_center_id.in_(select(CostCenter.id).where(CostCenter.department_id == self.department_id))
+                model.cost_center_id.in_(select(CostCenter.id).where(CostCenter.department_id.in_(self.department_ids)))
             )
         if self.modules:
             natures = [n for m in self.modules for n in cons.MODULE_NATURES[m]]
@@ -379,7 +389,7 @@ class Facts:
                 if self.parent.get("account_id") is not None and account_id != self.parent["account_id"]:
                     continue
                 dept_id, area_id = self._structure.get(r.cost_center_id, (None, None))
-                if self.department_id and dept_id != self.department_id:
+                if self.department_ids and dept_id not in self.department_ids:
                     continue
                 structure = {"department_id": dept_id, "area_id": area_id}
                 if any(
@@ -520,7 +530,7 @@ def overview(
     cost_center_id: int | None = None,
     package_id: int | None = None,
     account_id: int | None = None,
-    department_id: int | None = None,
+    department_id: str | None = None,
     year: int | None = None,
     years: str | None = None,
     months: str | None = None,
@@ -715,7 +725,7 @@ def evolution(
     cost_center_id: int | None = None,
     package_id: int | None = None,
     account_id: int | None = None,
-    department_id: int | None = None,
+    department_id: str | None = None,
     modules: str | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -759,12 +769,15 @@ def _by_module(f: Facts, P: Period) -> list[dict]:
 
 def _monthly(f: Facts, P: Period) -> list[dict]:
     """Série mensal (anos escolhidos somados mês a mês): ano anterior (base), realizado e orçado."""
-    monthly = {m: {"month": m, "prev": ZERO, "ref": ZERO, "budget": ZERO} for m in range(1, 13)}
+    monthly = {m: {"month": m, "prev": ZERO, "ref": ZERO, "budget": ZERO, "proj": ZERO} for m in range(1, 13)}
     if P.compare:
         for period, amount in f.sums(ActualEntry, P.prev_years, "period", max_period=P.base_cap):
             monthly[int(period)]["prev"] = amount
     for period, amount in f.sums(ActualEntry, P.years, "period"):
         monthly[int(period)]["ref"] = amount
+    for period, projected, amount in f.sums(ActualEntry, P.years, "period", "projected"):
+        if projected:
+            monthly[int(period)]["proj"] = amount
     for period, amount in f.sums(ReferenceBudgetEntry, P.years, "period"):
         monthly[int(period)]["budget"] = amount
     return [{k: (_money(v) if k != "month" else v) for k, v in row.items()} for row in monthly.values()]
@@ -803,7 +816,7 @@ def breakdown(
     cost_center_id: int | None = None,
     package_id: int | None = None,
     account_id: int | None = None,
-    department_id: int | None = None,
+    department_id: str | None = None,
     years: str | None = None,
     months: str | None = None,
     modules: str | None = None,
