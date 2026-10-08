@@ -298,3 +298,40 @@ def test_line_without_package_uses_current_account_package(client, admin, run_wo
     assert "Sem pacote" not in rows and "DTI" in rows
     progress = client.get("/api/v1/dashboard/overview", headers=admin).json()["budget_progress"]
     assert "Sem pacote" not in {p["package"] for p in progress["by_package"] if float(p["proposed"])}
+
+
+def test_travel_estimates_route_and_flat(client, admin, run_worker):
+    """Passagens estimadas pela Controladoria: por rota (AM→PA = tarifa do ciclo) ou fixa, trocando com um clique;
+    passagem informada pelo gestor não é sobrescrita; linhas marcadas como estimativa; registro em Apontamentos."""
+    import_and_load(client, admin, run_worker, builders.opex_template_filled(), "t-estimativa.xlsx")
+    st = client.get("/api/v1/consolidation/travel-estimates", headers=admin).json()
+    assert st["trips"] >= 1 and st["counts"]["none"] == st["trips"] and st["mode"] is None
+    route = client.post("/api/v1/consolidation/travel-estimates/apply", headers=admin, json={"mode": "route"})
+    assert route.status_code == 200, route.text
+    assert route.json()["trips"] == st["trips"] and route.json()["status"]["mode"] == "route"
+    assert Decimal(route.json()["total"]) == Decimal(st["projected"]["route"])
+    head = client.get("/api/v1/opex/cost-centers/1", headers=admin).json()
+    lines = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()
+    trip = next(line for line in lines if line["line_type"] == "TRAVEL")
+    a = trip["attributes"]
+    expected = st["routes"].get(f"{a['origin']}>{a['destination']}".upper(), st["flat"])
+    assert a["ticket_estimate"]["mode"] == "route" and a["ticket_amount"] == expected
+    # passagem real informada pelo gestor em uma viagem: a troca para o valor fixo não mexe nela
+    client.post(
+        "/api/v1/findings/fix",
+        headers=admin,
+        json={"key": f"{head['submission_id']}:TRAVEL:{trip['group_ref']}:TRAVEL_NO_FARE", "ticket_amount": 1500},
+    )
+    flat = client.post("/api/v1/consolidation/travel-estimates/apply", headers=admin, json={"mode": "flat"}).json()
+    assert (
+        flat["status"]["mode"] == "flat" and flat["status"]["counts"]["flat"] == st["trips"] - 0
+    )  # viagem com real não conta como estimada
+    after = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()
+    same = next(line for line in after if line["group_ref"] == trip["group_ref"] and line["line_type"] == "TRAVEL")
+    assert same["attributes"]["ticket_estimate"]["mode"] == "flat"  # estimada antes: segue a troca
+    reviews = client.get("/api/v1/findings", headers=admin).json()["reviews"]
+    assert any(r["kind"] == "TRAVEL_NO_FARE" and "estimada pela Controladoria" in (r["note"] or "") for r in reviews)
+    assert (
+        client.post("/api/v1/consolidation/travel-estimates/apply", headers=admin, json={"mode": "x"}).status_code
+        == 422
+    )

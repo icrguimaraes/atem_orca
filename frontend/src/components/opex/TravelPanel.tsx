@@ -132,6 +132,7 @@ export function TravelPanel({ submissionId, lines, options, editable, onChanged 
                   <tr key={group[0].group_ref ?? group[0].id}>
                     <td>{group[0].description ?? "—"}<div className="muted small">{a.job_level} · {a.days} dia(s)</div>
                       {(a.warnings ?? []).map((w: string) => <div key={w} className="error-text">{w}</div>)}
+                      {a.ticket_estimate && <div className="muted small">Passagem estimada pela Controladoria ({a.ticket_estimate.how}) — não orçada no template</div>}
                     </td>
                     <td>{a.origin} → {a.destination}<div className="muted small">{a.trip_type}{a.return_month ? "" : " · só ida"}</div></td>
                     <td>{MONTHS[Number(a.departure_month) - 1]}</td>

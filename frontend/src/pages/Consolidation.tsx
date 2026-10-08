@@ -85,6 +85,58 @@ function VersionCompareCard({ versions, companyId }: { versions: VersionInfo[]; 
   );
 }
 
+interface TravelStatus {
+  trips: number; counts: { real: number; route: number; flat: number; none: number }; mode: "route" | "flat" | null;
+  current_total: string; projected: { route: string; flat: string }; routes: Record<string, string>; flat: string; missing_routes: string[];
+}
+
+/** Passagens estimadas pela Controladoria (templates vieram sem tarifa): por rota ou valor fixo, com um clique. */
+function TravelEstimatesCard({ frozen, onApplied }: { frozen: boolean; onApplied: () => void }) {
+  const { data, error, reload } = useLoad(() => api<TravelStatus>("/consolidation/travel-estimates"));
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  if (error) return <Alert>{error}</Alert>;
+  if (!data || !data.trips) return null;
+  async function apply(mode: "route" | "flat") {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const r = await api<{ trips: number; total: string }>("/consolidation/travel-estimates/apply", { method: "POST", body: JSON.stringify({ mode }) });
+      setMsg(`${fmtInt(r.trips)} viagem(ns) com passagem ${mode === "route" ? "por rota" : "fixa"}: ${fmtMoney(r.total)}.`);
+      reload();
+      onApplied();
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const estimated = data.counts.route + data.counts.flat;
+  return (
+    <Card
+      title="Passagens estimadas (templates sem tarifa)"
+      actions={
+        <div className="inline-controls">
+          <button type="button" className={`btn btn-sm ${data.mode === "route" ? "btn-primary" : ""}`} disabled={busy || frozen} onClick={() => apply("route")}>
+            Média por rota · {fmtCompact(data.projected.route)}
+          </button>
+          <button type="button" className={`btn btn-sm ${data.mode === "flat" ? "btn-primary" : ""}`} disabled={busy || frozen} onClick={() => apply("flat")}>
+            Fixo {fmtMoney(data.flat)} por viagem · {fmtCompact(data.projected.flat)}
+          </button>
+        </div>
+      }
+    >
+      <p className="muted small">
+        {fmtInt(data.trips)} viagem(ns) no ciclo: {fmtInt(data.counts.real)} com passagem informada pelo gestor, {fmtInt(estimated)} com passagem
+        estimada pela Controladoria{data.mode ? ` (${data.mode === "route" ? "média por rota" : "valor fixo"})` : ""} e {fmtInt(data.counts.none)} sem passagem.
+        Passagem informada pelo gestor nunca é sobrescrita; a estimada fica marcada como "não orçada no template". Tarifas em <Link className="link" to="/ciclo">Ciclo e parâmetros</Link>.
+        {data.missing_routes.length > 0 && <> Rotas sem tarifa (usam o valor fixo): {data.missing_routes.join(", ")}.</>}
+      </p>
+      {msg && <Alert tone="good">{msg}</Alert>}
+    </Card>
+  );
+}
+
 export default function Consolidation() {
   const { can } = useAuth();
   const isController = can("CONTROLLER");
@@ -366,6 +418,8 @@ export default function Consolidation() {
           {data.personnel_accounts.severance?.code} ({data.personnel_accounts.severance?.name}) — configure em <Link className="link" to="/ciclo">Ciclo e parâmetros</Link>.
         </p>
       </Card>
+
+      {isController && viewingCurrent && <TravelEstimatesCard frozen={frozen} onApplied={() => { reload(); }} />}
 
       {data.versions.length > 1 && <VersionCompareCard versions={data.versions} companyId={companyId} />}
 

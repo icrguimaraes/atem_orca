@@ -15,7 +15,7 @@ from app.db import get_db
 from app.domain.rules.common import money
 from app.models import Account, BudgetPackage, BudgetSubmission, BudgetVersion, CostCenter, User
 from app.models.base import Role
-from app.services import audit, exports
+from app.services import audit, exports, travel_estimates
 from app.services import capex as capex_svc
 from app.services import consolidation as svc
 from app.services import opex as opex_svc
@@ -314,6 +314,43 @@ def attention_points(
 class VersionActionIn(BaseModel):
     reason: str | None = None
     major: bool = False
+
+
+class TravelEstimateIn(BaseModel):
+    mode: str  # "route" (média por rota) | "flat" (valor fixo por viagem)
+
+
+@router.get("/travel-estimates", summary="Passagens estimadas: situação e total por modo (rota × fixo)")
+def travel_estimates_status(db: Session = Depends(get_db), _: User = Depends(controller)):
+    return travel_estimates.status(db, _ctx(db))
+
+
+@router.post(
+    "/travel-estimates/apply", summary="Aplica a estimativa de passagem (por rota ou fixa) às viagens sem passagem real"
+)
+def travel_estimates_apply(
+    payload: TravelEstimateIn, request: Request, db: Session = Depends(get_db), user: User = Depends(controller)
+):
+    ctx = _ctx(db)
+    if ctx.frozen:
+        raise HTTPException(409, "A versão está congelada; abra uma revisão para alterar")
+    try:
+        result = travel_estimates.apply(db, ctx, payload.mode, user.id)
+    except opex_svc.OpexError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+    audit.record(
+        db,
+        user_id=user.id,
+        action="TRAVEL_ESTIMATE",
+        entity_type="budget_version",
+        entity_id=ctx.version.id,
+        after=result,
+        reason=f"Passagens estimadas ({travel_estimates.MODE_LABELS[payload.mode]}) nas viagens sem passagem real",
+        ip=client_ip(request),
+    )
+    db.commit()
+    return result | {"status": travel_estimates.status(db, ctx)}
 
 
 @router.post("/freeze", summary="Congelar a versão em elaboração (grava a fotografia do consolidado)")

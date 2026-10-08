@@ -68,6 +68,8 @@ export const PARAM_LABELS: Record<string, string> = {
   "personnel.severance_account": "Conta de verbas rescisórias (Pessoal)",
   "personnel.charges_split": "Rateio de encargos e benefícios por conta (Pessoal)",
   "review.justification_blocks": "Justificativa faltando bloqueia o envio",
+  "travel.route_estimates": "Passagem estimada por rota (ida e volta)",
+  "travel.flat_estimate": "Passagem estimada: valor fixo por viagem",
   "alert.growth_pct": "Alerta de crescimento (vs. realizado anualizado)",
   "alert.reduction_pct": "Alerta de redução (vs. realizado anualizado)",
   "alert.history_band_pct": "Banda em torno da média histórica",
