@@ -575,6 +575,14 @@ input:disabled, select:disabled { opacity: 0.6; }
 .drill-table tbody tr.drill-level-1 td, .drill-table tbody tr.drill-level-2 td { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
 .drill-table tbody tr.drill-level-2 td { font-size: 13px; }
 .drill-table tfoot td { font-weight: 700; border-top: 2px solid var(--border); }
+/* cabeçalho em destaque (pedido de 08/10/2026): fundo, texto forte e linha de base mais grossa */
+.drill-table thead th { background: var(--surface-2); color: var(--text); font-weight: 700; border-bottom: 2px solid var(--text); }
+.drill-table thead th:first-child { border-top-left-radius: var(--radius-sm); }
+.drill-table thead th:last-child { border-top-right-radius: var(--radius-sm); }
+.drill-table tbody tr.drill-level-0 td { font-weight: 600; }
+.drill-table tbody tr.drill-hit td:first-child { box-shadow: inset 3px 0 0 var(--series-1, #4472c4); }
+.drill-search { min-width: 240px; }
+@media (max-width: 860px) { .drill-search { min-width: 0; width: 100%; } }
 /* semáforo alinhado: bolinha em posição fixa, número com largura fixa e algarismos tabulares */
 .var-cell { display: inline-flex; align-items: center; gap: 8px; }
 .var-num { display: inline-block; min-width: 66px; text-align: right; font-variant-numeric: tabular-nums; }

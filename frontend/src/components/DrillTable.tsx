@@ -53,6 +53,8 @@ function VarCell({ pct, t }: { pct: string | null; t: { growth: number; reductio
   );
 }
 
+const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 function ownParam(level: Level, row: BreakdownRow): string {
   const [byId, none] = PARENT[level];
   if (row.id === null) return none ? `${none}=true` : "";
@@ -70,13 +72,32 @@ export function DrillTable({ query, refLabel, onSelect }: {
   const [children, setChildren] = useState<Record<string, BreakdownRow[] | "loading">>({});
   const [chains, setChains] = useState<Record<string, string>>({});  // filtros acumulados de cada linha aberta
   const [sort, setSort] = useState<Sort>("value_desc");
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     let alive = true;
     setChildren({});
     setChains({});
     api<Breakdown>(`/dashboard/breakdown?group_by=${LEVELS[0]}${query ? `&${query}` : ""}`)
-      .then((d) => alive && (setRoot(d), setError(null)))
+      .then(async (d) => {
+        if (!alive) return;
+        setRoot(d);
+        setError(null);
+        // por padrão a área já vem aberta (mostra os setores)
+        const open = d.rows.filter((r) => r.has_children);
+        const results = await Promise.all(
+          open.map(async (r) => {
+            const chain = ownParam(LEVELS[0], r);
+            const kids = await api<Breakdown>(
+              `/dashboard/breakdown?group_by=${LEVELS[1]}${chain ? `&${chain}` : ""}${query ? `&${query}` : ""}`,
+            ).catch(() => null);
+            return [`/${r.id ?? "none"}`, chain, kids?.rows ?? null] as const;
+          }),
+        );
+        if (!alive) return;
+        setChildren(Object.fromEntries(results.filter(([, , rows]) => rows).map(([k, , rows]) => [k, rows as BreakdownRow[]])));
+        setChains(Object.fromEntries(results.filter(([, , rows]) => rows).map(([k, chain]) => [k, chain])));
+      })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
@@ -111,12 +132,23 @@ export function DrillTable({ query, refLabel, onSelect }: {
   const th = root.thresholds;
   const pctLabel = (v: number) => `${Math.round(v * 100)}%`;
 
-  function renderRows(rows: BreakdownRow[], level: number, parentKey: string, parentChain = ""): JSX.Element[] {
+  const needle = fold(search.trim());
+  const rowMatches = (r: BreakdownRow) => fold(`${r.name} ${r.code ?? ""}`).includes(needle);
+  function matches(r: BreakdownRow, key: string): boolean {
+    if (!needle || rowMatches(r)) return true;
+    const kids = children[key];
+    return Array.isArray(kids) && kids.some((k) => matches(k, `${key}/${k.id ?? "none"}`));
+  }
+
+  function renderRows(rows: BreakdownRow[], level: number, parentKey: string, parentChain = "", parentHit = false): JSX.Element[] {
     return sortRows(rows, sort).flatMap((r) => {
       const key = `${parentKey}/${r.id ?? "none"}`;
+      // linha que bate com o filtro mostra todos os filhos abertos; senão, só os caminhos que levam a uma linha que bate
+      if (!parentHit && !matches(r, key)) return [];
+      const hit = parentHit || (Boolean(needle) && rowMatches(r));
       const kids = children[key];
       const line = (
-        <tr key={key} className={`drill-level-${level}`}>
+        <tr key={key} className={`drill-level-${level}${needle && rowMatches(r) ? " drill-hit" : ""}`}>
           <td>
             {r.has_children && level < LEVELS.length - 1 ? (
               <button
@@ -162,9 +194,11 @@ export function DrillTable({ query, refLabel, onSelect }: {
           </tr>,
         ];
       }
-      return kids ? [line, ...renderRows(kids, level + 1, key, chains[key] ?? "")] : [line];
+      return kids ? [line, ...renderRows(kids, level + 1, key, chains[key] ?? "", hit)] : [line];
     });
   }
+
+  const body = renderRows(root.rows, 0, "");
 
   return (
     <>
@@ -180,6 +214,15 @@ export function DrillTable({ query, refLabel, onSelect }: {
           )}
         </span>
         <div className="inline-controls">
+          <input
+            type="search"
+            className="drill-search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filtrar área, setor, pacote ou conta…"
+            aria-label="Filtrar linhas da tabela"
+            title="Filtra as linhas carregadas (abra com + para buscar dentro de um nível)"
+          />
           <label className="small muted">
             Ordenar{" "}
             <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Ordenar linhas">
@@ -210,7 +253,15 @@ export function DrillTable({ query, refLabel, onSelect }: {
               {hasBase && <th className="right">Variação %</th>}
             </tr>
           </thead>
-          <tbody>{renderRows(root.rows, 0, "")}</tbody>
+          <tbody>
+            {body.length ? body : (
+              <tr>
+                <td colSpan={hasBase ? 7 : 3} className="muted small">
+                  Nenhuma linha aberta contém “{search.trim()}”. Abra os níveis com + para buscar pacotes e contas.
+                </td>
+              </tr>
+            )}
+          </tbody>
           <tfoot>
             <tr>
               <td>Total</td>
