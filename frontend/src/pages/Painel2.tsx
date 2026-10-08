@@ -388,8 +388,8 @@ export default function Painel2() {
                 <input type="checkbox" checked={compare} disabled={!period?.compare_available} onChange={(e) => setCompare(e.target.checked)} />
                 Comparar com o ano anterior
               </label>
-              <label className={period?.same_period_available ? "" : "off"} title={period?.same_period_available ? "" : "Disponível quando o realizado do ano ainda está em andamento, sem filtro de meses"}>
-                <input type="checkbox" checked={samePeriod} disabled={!period?.same_period_available} onChange={(e) => setSamePeriod(e.target.checked)} />
+              <label title={period?.same_period_available ? "Limita a base de comparação aos meses já fechados do realizado" : "Vale quando há comparação (ano anterior ou orçado) e o realizado do ano ainda está em andamento, sem filtro de meses"}>
+                <input type="checkbox" checked={samePeriod} onChange={(e) => setSamePeriod(e.target.checked)} />
                 Mesmo período{period?.closed_month && (period.closed ?? 12) < 12 ? ` (até ${period.closed_month})` : ""}
               </label>
             </div>

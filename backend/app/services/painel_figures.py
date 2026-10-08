@@ -11,7 +11,7 @@ from decimal import Decimal
 
 import plotly.graph_objects as go
 
-from app.services.analytics import _br, _fig, _layout, _money_axis, fmt_compact, fmt_money, fmt_pct, short
+from app.services.analytics import _br, _fig, _layout, fmt_compact, fmt_money, fmt_pct, short
 
 MONTHS = ("JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ")
 REALIZADO, ORCADO, ANTERIOR = "#4472c4", "#4fa894", "#8a6bbf"  # azul, verde-água (orçamento), roxo
@@ -21,7 +21,17 @@ TXT_UP, TXT_DOWN, TXT_FLAT = "#c13515", "#008a05", "#767676"  # percentual no te
 # variação na cascata da "Evolução do orçamento": areia (âmbar dessaturado), fora das cores de série e sem laranja
 VARIACAO = "#c8ad5e"
 INK[VARIACAO] = "#7a6524"
-GUIDE = "rgba(128,128,128,0.6)"  # linhas tracejadas e seta do total (neutras nos dois temas)
+GUIDE = "rgba(128,128,128,0.6)"
+# legenda sempre visível (o Plotly a esconde com uma série só) e sem clique: a cor diz o que é realizado/orçado
+LEGEND = {
+    "orientation": "h",
+    "yanchor": "bottom",
+    "y": 1.02,
+    "x": 0,
+    "font": {"size": 12},
+    "itemclick": False,
+    "itemdoubleclick": False,
+}  # linhas tracejadas e seta do total (neutras nos dois temas)
 
 
 def _num(value) -> float:
@@ -116,7 +126,7 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
                 textposition="outside",
                 cliponaxis=False,
                 textfont={
-                    "size": 11,
+                    "size": 13,
                     # sem seleção, uma cor só; com meses escolhidos, os rótulos dos outros meses esmaecem
                     "color": [INK[color] if a == 1.0 else _rgba(INK[color], 0.4) for a in opacity]
                     if picked
@@ -132,7 +142,10 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
         bargroupgap=0.06,
         hovermode="x unified",
         uniformtext={"minsize": 9, "mode": "hide"},  # rótulo só quando cabe na coluna
-        yaxis=_money_axis(everything),
+        showlegend=True,
+        legend=LEGEND,
+        # sem eixo de valores: cada coluna traz o rótulo; folga no topo para o rótulo de fora da coluna
+        yaxis={"visible": False, "range": [0, (max(everything + [0.0]) or 1) * 1.15], "fixedrange": True},
         xaxis={"showgrid": False, "automargin": True, "fixedrange": True},
         margin={"l": 8, "r": 8, "t": 36, "b": 8},
     )
@@ -178,7 +191,7 @@ def fig_monthly_total(o: dict) -> dict:
                 text=[_short(v) if v > 0 else ""],
                 textposition="outside",
                 cliponaxis=False,
-                textfont={"size": 11, "color": INK[color]},
+                textfont={"size": 13, "color": INK[color]},
                 customdata=[[fmt_money(v), lines]],
                 hovertemplate=name + ": <b>%{customdata[0]}</b><extra></extra>",
             )
@@ -190,7 +203,7 @@ def fig_monthly_total(o: dict) -> dict:
         bargroupgap=0.12,
         hovermode="x unified",
         showlegend=False,
-        yaxis={"visible": False, "range": [0, (top or 1) * 1.12], "fixedrange": True},
+        yaxis={"visible": False, "range": [0, (top or 1) * 1.15], "fixedrange": True},
         xaxis={"showgrid": False, "automargin": True, "fixedrange": True},
         margin={"l": 8, "r": 8, "t": 36, "b": 8},
     )
@@ -234,7 +247,7 @@ def fig_cumulative(o: dict) -> dict:
                 fillcolor=_rgba(base_color, 0.14),
                 text=[_short(v) for v in base],
                 textposition=pos,
-                textfont={"size": 10, "color": INK[base_color]},
+                textfont={"size": 12, "color": INK[base_color]},
                 cliponaxis=False,
                 customdata=[
                     [fmt_money(v), m, [[f"{base_tip}: {fmt_money(v)}", base_color]]] for m, v in enumerate(base, 1)
@@ -264,7 +277,7 @@ def fig_cumulative(o: dict) -> dict:
                 fillcolor=_rgba(REALIZADO, 0.12),
                 text=[_short(v) for v in ref],
                 textposition=pos,
-                textfont={"size": 10, "color": INK[REALIZADO]},
+                textfont={"size": 12, "color": INK[REALIZADO]},
                 cliponaxis=False,
                 customdata=[[fmt_money(v), m, t] for m, (v, t) in enumerate(zip(ref, tips, strict=True), start=1)],
                 hovertemplate=lb["actual"] + ": <b>%{customdata[0]}</b><extra></extra>",
@@ -272,7 +285,10 @@ def fig_cumulative(o: dict) -> dict:
         )
     layout = _layout(
         hovermode="x unified",
-        yaxis=_money_axis(base + ref),
+        showlegend=True,
+        legend=LEGEND,
+        # sem eixo de valores: os pontos trazem o rótulo; folga no topo para o rótulo acima do último ponto
+        yaxis={"visible": False, "range": [0, (max(base + ref + [0.0]) or 1) * 1.12], "fixedrange": True},
         xaxis={
             "showgrid": False,
             "automargin": True,
@@ -280,7 +296,7 @@ def fig_cumulative(o: dict) -> dict:
             "categoryorder": "array",
             "categoryarray": list(MONTHS),
         },
-        margin={"l": 8, "r": 24, "t": 36, "b": 8},
+        margin={"l": 28, "r": 28, "t": 36, "b": 8},
     )
     return _fig(data, layout) | {"meta": {"tooltip": "unified"}}
 
