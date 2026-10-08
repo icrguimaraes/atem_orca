@@ -17,8 +17,9 @@ export interface FilterField {
  * (um toque em qualquer campo abre a folha inferior com todos os filtros, "Limpar" e "Aplicar").
  * `onApply` recebe todos os valores de uma vez (evita setState em cascata); sem ele, aplica campo a campo.
  */
-export function FilterBar({ fields, extra, onApply }: {
+export function FilterBar({ fields, lead, extra, onApply }: {
   fields: FilterField[];
+  lead?: ReactNode;         // controles antes dos selects (ex.: botões de empresa no Painel)
   extra?: ReactNode;
   onApply?: (values: Record<string, string>) => void;
 }) {
@@ -53,6 +54,7 @@ export function FilterBar({ fields, extra, onApply }: {
   return (
     <>
       <div className="filters desktop-filters">
+        {lead}
         {fields.map((f) => (
           <select key={f.key} value={f.value} onChange={(e) => f.onChange(e.target.value)} aria-label={f.ariaLabel ?? f.label}>
             {optionsOf(f, current).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -62,6 +64,7 @@ export function FilterBar({ fields, extra, onApply }: {
       </div>
 
       <div className="filter-summary" role="group" aria-label="Filtros">
+        {lead && <div className="filter-extra">{lead}</div>}
         {fields.map((f) => (
           <button key={f.key} type="button" className={`filter-field ${f.wide ? "wide" : ""} ${f.value ? "on" : ""}`} onClick={() => setOpen(true)}>
             <span className="filter-label">{f.label}</span>

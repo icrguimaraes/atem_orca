@@ -100,7 +100,7 @@ export default function Painel2() {
     const next = base.includes(y) ? base.filter((x) => x !== y) : [...base, y];
     if (next.length) setYears(next.sort((a, b) => a - b));
   }
-  const [compare, setCompare] = useState(true);
+  const [compare, setCompare] = useState(false); // desmarcado por padrão (pedido de 08/10/2026)
   const [samePeriod, setSamePeriod] = useState(true);
   const [modules, setModules] = useState<string[]>(() => {
     const t = (searchParams.get("tipo") ?? "").toUpperCase();
@@ -251,49 +251,79 @@ export default function Painel2() {
       <PackageReviews />
 
       <FilterBar
-        onApply={(v) => setFilters({ company_id: v.company_id, cost_center_id: v.cost_center_id, package_id: v.package_id })}
+        onApply={(v) => setFilters({ ...filters, cost_center_id: v.cost_center_id })}
+        lead={
+          <>
+            <div className="chip-group">
+              <span className="chip-label">Empresa</span>
+              <div className="month-chips" role="group" aria-label="Empresas">
+                <button type="button" className={!filters.company_id ? "active" : ""} aria-pressed={!filters.company_id} onClick={() => setFilters({ ...filters, company_id: "", cost_center_id: "" })}>
+                  Todas
+                </button>
+                {companies.map((c) => {
+                  const on = filters.company_id === String(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={on ? "active" : ""}
+                      aria-pressed={on}
+                      title={`${c.code} · ${c.name}`}
+                      onClick={() => setFilters({ ...filters, company_id: on ? "" : String(c.id), cost_center_id: "" })}
+                    >
+                      {c.short_name ?? c.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {departments.length > 0 && (
+              <div className="chip-group">
+                <span className="chip-label">Área</span>
+                <div className="month-chips" role="group" aria-label="Áreas">
+                  <button type="button" className={!department ? "active" : ""} aria-pressed={!department} onClick={() => setDepartment("")}>
+                    Todas
+                  </button>
+                  {[...departments].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
+                    <button
+                      key={d.id}
+                      type="button"
+                      className={department === String(d.id) ? "active" : ""}
+                      aria-pressed={department === String(d.id)}
+                      onClick={() => setDepartment((cur) => (cur === String(d.id) ? "" : String(d.id)))}
+                    >
+                      {d.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        }
         fields={[
-          {
-            key: "company_id", label: "Empresa", value: filters.company_id,
-            onChange: (v) => setFilters({ company_id: v, cost_center_id: "", package_id: filters.package_id }),
-            options: [{ value: "", label: "Todas as empresas" }, ...companies.map((c) => ({ value: String(c.id), label: `${c.code} · ${c.short_name ?? c.name}` }))],
-          },
-          {
-            key: "package_id", label: "Pacote GMD", value: filters.package_id,
-            onChange: (v) => setFilters({ ...filters, package_id: v }),
-            options: [{ value: "", label: "Todos os pacotes" }, ...packages.filter((p) => p.nature !== "CAPEX").map((p) => ({ value: String(p.id), label: `${p.roman ? `${p.roman} · ` : ""}${p.name}` }))],
-          },
           {
             key: "cost_center_id", label: "Centro de custo", value: filters.cost_center_id, wide: true,
             onChange: (v) => setFilters({ ...filters, cost_center_id: v }),
-            options: (d) => [
+            options: [
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
-              ...ccs.filter((c) => (!d.company_id || String(c.company_id) === d.company_id) && (!department || String(c.department_id) === department)).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
+              ...ccs.filter((c) => (!filters.company_id || String(c.company_id) === filters.company_id) && (!department || String(c.department_id) === department)).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
             ],
           },
         ]}
         extra={
-          departments.length > 0 && (
-            <div className="chip-group">
-              <span className="chip-label">Área</span>
-              <div className="month-chips" role="group" aria-label="Áreas">
-                <button type="button" className={!department ? "active" : ""} aria-pressed={!department} onClick={() => setDepartment("")}>
-                  Todas
+          <div className="chip-group">
+            <span className="chip-label">Tipo</span>
+            <div className="month-chips" role="group" aria-label="Tipos de orçamento">
+              <button type="button" className={modules.length === 0 ? "active" : ""} aria-pressed={modules.length === 0} onClick={() => setModules([])}>
+                Todos
+              </button>
+              {BUDGET_TYPES.map((b) => (
+                <button key={b.key} type="button" className={modules.includes(b.key) ? "active" : ""} aria-pressed={modules.includes(b.key)} onClick={() => toggleModule(b.key)}>
+                  {b.label}
                 </button>
-                {[...departments].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
-                  <button
-                    key={d.id}
-                    type="button"
-                    className={department === String(d.id) ? "active" : ""}
-                    aria-pressed={department === String(d.id)}
-                    onClick={() => setDepartment((cur) => (cur === String(d.id) ? "" : String(d.id)))}
-                  >
-                    {d.name}
-                  </button>
-                ))}
-              </div>
+              ))}
             </div>
-          )
+          </div>
         }
       />
 
@@ -335,17 +365,13 @@ export default function Painel2() {
               </div>
             </div>
             <div className="chip-group">
-              <span className="chip-label">Tipo</span>
-              <div className="month-chips" role="group" aria-label="Tipos de orçamento">
-                <button type="button" className={modules.length === 0 ? "active" : ""} aria-pressed={modules.length === 0} onClick={() => setModules([])}>
-                  Todos
-                </button>
-                {BUDGET_TYPES.map((b) => (
-                  <button key={b.key} type="button" className={modules.includes(b.key) ? "active" : ""} aria-pressed={modules.includes(b.key)} onClick={() => toggleModule(b.key)}>
-                    {b.label}
-                  </button>
+              <span className="chip-label">Pacote</span>
+              <select value={filters.package_id} aria-label="Pacote GMD" onChange={(e) => setFilters({ ...filters, package_id: e.target.value })}>
+                <option value="">Todos os pacotes</option>
+                {packages.filter((p) => p.nature !== "CAPEX").map((p) => (
+                  <option key={p.id} value={String(p.id)}>{`${p.roman ? `${p.roman} · ` : ""}${p.name}`}</option>
                 ))}
-              </div>
+              </select>
             </div>
           </div>
           {account && (

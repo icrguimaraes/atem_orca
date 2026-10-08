@@ -466,6 +466,9 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .filters select { max-width: 320px; }
+/* Painel: grupos de botões (Empresa, Área, Tipo) na mesma linha do select de CC, com o respiro das linhas de chips */
+.filters:has(> .chip-group) { gap: 10px 24px; }
+.chip-group > select { max-width: 280px; }
 .filter-summary { display: none; }
 .inline-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .theme-switch { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 9999px; background: var(--surface-2); }
