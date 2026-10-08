@@ -359,7 +359,10 @@ export default function Consolidation() {
           </div>
         )}
         <p className="muted small">
-          Pessoal entra nas contas {data.personnel_accounts.salary?.code} ({data.personnel_accounts.salary?.name}), {data.personnel_accounts.charges?.code} ({data.personnel_accounts.charges?.name}) e{" "}
+          Pessoal: salário em {data.personnel_accounts.salary?.code} ({data.personnel_accounts.salary?.name}); encargos e benefícios (parte do
+          multiplicador) {data.personnel_charges_split && data.personnel_charges_split.length > 1
+            ? `rateados em ${data.personnel_charges_split.length} contas (${data.personnel_charges_split.slice(0, 4).map((c) => `${c.name} ${Math.round(Number(c.weight) * 100)}%`).join(", ")}…)`
+            : `em ${data.personnel_accounts.charges?.code} (${data.personnel_accounts.charges?.name})`}; rescisão em{" "}
           {data.personnel_accounts.severance?.code} ({data.personnel_accounts.severance?.name}) — configure em <Link className="link" to="/ciclo">Ciclo e parâmetros</Link>.
         </p>
       </Card>

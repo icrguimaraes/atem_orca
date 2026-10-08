@@ -7,6 +7,26 @@ import { CYCLE_STATUS, PARAM_LABELS, fmtDate, fmtDateTime } from "../labels";
 
 const PERCENT_KEYS = new Set(["alert.growth_pct", "alert.reduction_pct", "alert.history_band_pct", "personnel.salary_adjustment_pct"]);
 
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/** Parâmetro dicionário {conta: peso} (ex.: rateio de encargos): uma linha por conta, com o peso normalizado em %. */
+function SplitView({ value }: { value: Record<string, unknown> }) {
+  const entries = Object.entries(value).map(([k, v]) => [k, Number(v)] as const).filter(([, v]) => v > 0);
+  const total = entries.reduce((acc, [, v]) => acc + v, 0);
+  if (!entries.length || !total) return <strong>— (sem rateio: conta única)</strong>;
+  return (
+    <div className="small mono">
+      {entries
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, v]) => (
+          <div key={k}>
+            {k}: {((v / total) * 100).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%
+          </div>
+        ))}
+    </div>
+  );
+}
+
 function display(key: string, value: unknown): string {
   if (key.endsWith("_account")) return String(value);  // código de conta: sem separador de milhar
   if (typeof value === "number" && PERCENT_KEYS.has(key)) return `${(value * 100).toLocaleString("pt-BR")}%`;
@@ -15,17 +35,36 @@ function display(key: string, value: unknown): string {
 
 function ParamRow({ cycleId, p, editable, onSaved }: { cycleId: number; p: Parameter; editable: boolean; onSaved: () => void }) {
   const isPct = PERCENT_KEYS.has(p.key);
+  const isJson = isObject(p.value);
+  const initial = isJson ? JSON.stringify(p.value, null, 2) : String(isPct ? Number(p.value) * 100 : p.value);
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(String(isPct ? Number(p.value) * 100 : p.value));
+  const [value, setValue] = useState(initial);
   const [error, setError] = useState<string | null>(null);
 
+  function parse(): { ok: true; value: unknown } | { ok: false; error: string } {
+    if (!isJson) {
+      const number = Number(value.replace(",", "."));
+      return Number.isNaN(number) ? { ok: false, error: "Informe um número" } : { ok: true, value: isPct ? number / 100 : number };
+    }
+    let parsed: unknown;
+    try {
+      parsed = value.trim() ? JSON.parse(value) : {};
+    } catch {
+      return { ok: false, error: 'JSON inválido: use {"conta": peso, ...}' };
+    }
+    if (!isObject(parsed)) return { ok: false, error: 'Informe um objeto JSON {"conta": peso, ...}' };
+    const bad = Object.entries(parsed).find(([, v]) => typeof v !== "number" || v < 0);
+    if (bad) return { ok: false, error: `Peso inválido para ${bad[0]}: use um número maior ou igual a zero` };
+    return { ok: true, value: parsed };
+  }
+
   async function save() {
-    const number = Number(value.replace(",", "."));
-    if (Number.isNaN(number)) return setError("Informe um número");
+    const parsed = parse();
+    if (!parsed.ok) return setError(parsed.error);
     try {
       await api(`/cycles/${cycleId}/parameters/${p.key}`, {
         method: "PUT",
-        body: JSON.stringify({ value: isPct ? number / 100 : number }),
+        body: JSON.stringify({ value: parsed.value }),
       });
       setEditing(false);
       setError(null);
@@ -43,7 +82,24 @@ function ParamRow({ cycleId, p, editable, onSaved }: { cycleId: number; p: Param
       </td>
       <td className="muted small">{p.description}</td>
       <td className="right nowrap">
-        {editing ? (
+        {editing && isJson ? (
+          <div className="stack">
+            <textarea
+              className="mono small"
+              style={{ minWidth: 240 }}
+              rows={Math.min(18, value.split("\n").length + 1)}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              aria-label={PARAM_LABELS[p.key] ?? p.key}
+              autoFocus
+            />
+            <div className="muted small">Pesos relativos (normalizados no cálculo). {"{}"} = tudo na conta de encargos.</div>
+            <span className="inline-edit">
+              <button className="btn btn-primary btn-sm" onClick={save}>Salvar</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setValue(initial); setEditing(false); }}>Cancelar</button>
+            </span>
+          </div>
+        ) : editing ? (
           <span className="inline-edit">
             <input value={value} onChange={(e) => setValue(e.target.value)} autoFocus />
             {isPct && "%"}
@@ -52,7 +108,7 @@ function ParamRow({ cycleId, p, editable, onSaved }: { cycleId: number; p: Param
           </span>
         ) : (
           <>
-            <strong>{display(p.key, p.value)}</strong>
+            {isJson ? <SplitView value={p.value as Record<string, unknown>} /> : <strong>{display(p.key, p.value)}</strong>}
             {editable && (
               <button className="btn btn-ghost btn-sm" onClick={() => setEditing(true)}>Alterar</button>
             )}

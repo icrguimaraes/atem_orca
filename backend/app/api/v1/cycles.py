@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -116,6 +118,25 @@ def list_parameters(cycle_id: int, db: Session = Depends(get_db), _: User = Depe
     )
 
 
+def _check_split(value: Any) -> dict:
+    """Rateio de encargos {código da conta: peso}: pesos numéricos ≥ 0 (normalizados no cálculo); {} = conta única."""
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise HTTPException(422, "Informe o rateio como objeto JSON {conta: peso}")
+    out = {}
+    for code, weight in value.items():
+        code = str(code).strip()
+        if not code.isdigit():
+            raise HTTPException(422, f"Código de conta inválido no rateio: {code or '(vazio)'}")
+        if isinstance(weight, bool) or not isinstance(weight, (int, float)) or weight < 0:
+            raise HTTPException(422, f"Peso inválido para a conta {code}: use um número maior ou igual a zero")
+        out[code] = weight
+    if out and not any(out.values()):
+        raise HTTPException(422, "O rateio precisa de ao menos uma conta com peso maior que zero")
+    return out
+
+
 @router.put("/{cycle_id}/parameters/{key}", response_model=ParameterOut)
 def set_parameter(
     cycle_id: int,
@@ -126,6 +147,8 @@ def set_parameter(
     actor: User = Depends(require_roles(Role.CONTROLLER)),
 ):
     _cycle(db, cycle_id)
+    if key == "personnel.charges_split":
+        payload.value = _check_split(payload.value)
     param = db.get(CycleParameter, (cycle_id, key))
     before = None if param is None else {"value": param.value}
     if param is None:

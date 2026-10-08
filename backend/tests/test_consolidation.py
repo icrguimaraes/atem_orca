@@ -1,4 +1,5 @@
 import io
+from decimal import Decimal
 
 from openpyxl import load_workbook
 
@@ -60,7 +61,13 @@ def test_overview_export_freeze_and_revision(client, admin, run_worker):
     var = {v["account"]: v for v in ov["variations"]}
     assert var["6010301001"]["flags"] == ["NO_BUDGET"] and var["6010301002"]["variation"] == "-600.00"
     assert var["6010101001"]["proposed"] == "267750.00"  # salário (com reajuste) do quadro
-    assert var["6010102001"]["proposed"] == "201600.00"  # parte do multiplicador
+    # parte do multiplicador: rateada entre as contas do parâmetro padrão `personnel.charges_split`
+    from app.seed_data import CYCLE_PARAMETERS
+
+    split_codes = set(CYCLE_PARAMETERS["personnel.charges_split"][0])
+    charges = [v for v in var.values() if v["account"] in split_codes and v["proposed"] != "0.00"]
+    assert {v["account"] for v in charges} == split_codes
+    assert sum(Decimal(v["proposed"]) for v in charges) == Decimal("201600.00")
     pessoas = next(p for p in ov["by_package"] if p["label"] == "Pessoas")
     assert pessoas["proposed"] == "469350.00"
 

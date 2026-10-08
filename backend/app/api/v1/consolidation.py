@@ -191,6 +191,11 @@ def overview(
             for f in ("GROWTH_ABOVE", "REDUCTION_ABOVE", "NEW_ACCOUNT", "NO_BUDGET")
         },
         "personnel_accounts": {k: {"code": c, "name": n} for k, (c, n) in svc.personnel_accounts(db, vctx).items()},
+        # rateio da parte do multiplicador (encargos e benefícios) entre contas
+        "personnel_charges_split": [
+            {"code": c, "name": n, "weight": str(w.quantize(Decimal("0.0001")))}
+            for c, n, w in svc.charges_split(db, vctx)
+        ],
     }
 
 
@@ -286,13 +291,19 @@ def attention_points(
                     for b in personnel_svc.blockers(db, ctx, sub):
                         add("medium", module, cc, b[0].upper() + b[1:], "JUSTIFICATION")
     # contas de pessoal da consolidação inexistentes no plano de contas
-    for kind, (code, _name) in svc.personnel_accounts(db, ctx).items():
+    configured = [(KIND_LABELS[kind], code) for kind, (code, _name) in svc.personnel_accounts(db, ctx).items()]
+    configured += [("rateio de encargos e benefícios", code) for code, _n, _w in svc.charges_split(db, ctx)]
+    seen: set[str] = set()
+    for label, code in configured:
+        if code in seen:
+            continue
+        seen.add(code)
         if db.scalar(select(Account.id).where(Account.code == code)) is None:
             add(
                 "low",
                 "PERSONNEL",
                 None,
-                f"Conta de {KIND_LABELS[kind]} {code} não está no cadastro de contas: confirme em Ciclo e parâmetros",
+                f"Conta de {label} {code} não está no cadastro de contas: confirme em Ciclo e parâmetros",
                 "ACCOUNT_CONFIG",
             )
     order = {"high": 0, "medium": 1, "low": 2, "info": 3}

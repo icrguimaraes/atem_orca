@@ -226,3 +226,43 @@ def terminations_summary(plans: Iterable[PositionPlan], scenario: Scenario, by: 
         bucket["people"] += 1
         bucket["annual_saving"] = money(bucket["annual_saving"] + saving)
     return result
+
+
+# ------------------------------------------------------------------ rateio de encargos e benefícios por conta
+
+
+def normalize_split(raw: object) -> list[tuple[str, Decimal]]:
+    """Parâmetro `personnel.charges_split` ({código da conta: peso}) → [(conta, peso normalizado)].
+
+    Pesos viram frações que somam 1 (soma diferente de 1 é normalizada). Entradas inválidas, zeradas ou
+    negativas são ignoradas; sem nenhuma entrada válida devolve lista vazia (vale a conta única de encargos).
+    Ordem: maior peso primeiro (empate pelo código), para o arredondamento ser estável."""
+    if not isinstance(raw, Mapping):
+        return []
+    weights: dict[str, Decimal] = {}
+    for key, value in raw.items():
+        code = str(key).strip()
+        if not code or isinstance(value, bool):
+            continue
+        try:
+            weight = Decimal(str(value))
+        except ArithmeticError:
+            continue
+        if not weight.is_finite() or weight <= 0:
+            continue
+        weights[code] = weights.get(code, Decimal("0")) + weight
+    total = sum(weights.values(), Decimal("0"))
+    if not total:
+        return []
+    return sorted(((code, w / total) for code, w in weights.items()), key=lambda x: (-x[1], x[0]))
+
+
+def split_amount(amount: Decimal, split: list[tuple[str, Decimal]]) -> dict[str, Decimal]:
+    """Rateia um valor entre contas pelos pesos normalizados, em centavos, somando exatamente `money(amount)`.
+    A diferença de arredondamento vai para a conta de maior peso (a primeira de `normalize_split`)."""
+    total = money(amount)
+    if not split:
+        return {}
+    shares = {code: money(total * weight) for code, weight in split}
+    shares[split[0][0]] += total - sum(shares.values(), Decimal("0"))
+    return shares

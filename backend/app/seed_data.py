@@ -330,6 +330,30 @@ CYCLE_PARAMETERS = {
     "personnel.salary_account": (6010101001, "Conta do salário (com reajuste) na consolidação e na carga SAP"),
     "personnel.charges_account": (6010102001, "Conta de encargos e benefícios (parte do multiplicador)"),
     "personnel.severance_account": (6010101010, "Conta das verbas rescisórias"),
+    "personnel.charges_split": (
+        {
+            # mix do realizado 2026 (KSB1, empresa 1001, 8 CCs da Controladoria, jan-set), % do custo de pessoal
+            # fora Salários, Aviso Prév/Indeniz e Cursos; eventuais (licença-maternidade, ajuda de custo) e
+            # contas abaixo de 0,05% ficam de fora. Pesos são normalizados no cálculo.
+            "6010102001": 25.30,  # INSS
+            "6010103003": 16.51,  # Assist Médica/Odonto
+            "6010103002": 9.47,  # V.R./Alimentação
+            "6010101012": 9.31,  # Férias
+            "6010102002": 8.39,  # FGTS
+            "6010101013": 6.58,  # 13º Salário
+            "6010103006": 6.06,  # Vale Combustíveis
+            "6010101009": 5.73,  # Gratific/Premiações
+            "6010101003": 4.54,  # H.E./Quebra de Caixa
+            "6010101016": 3.83,  # Prov de Grat/Abono
+            "6010101002": 3.25,  # Adic Periculos/Insal
+            "6010103010": 0.33,  # Bolsa de Estudo
+            "6010103004": 0.16,  # Seguros de Vida
+            "6010103005": 0.16,  # Auxílio Creche
+            "6010101008": 0.08,  # Adicional Noturno
+        },
+        "Rateio da parte do multiplicador (encargos e benefícios) entre contas: {conta: peso}, normalizado; "
+        "vazio = tudo na conta de encargos",
+    ),
 }
 
 # code, nome, aplica multiplicador, multiplicador padrão

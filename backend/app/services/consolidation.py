@@ -1,8 +1,9 @@
 """Consolidação do orçamento: OPEX + CAPEX + Pessoal numa base única (chave empresa-filial-CC-conta × mês),
 fotografia ao congelar a versão, revisão (nova versão) e variações contra o realizado.
 
-Pessoal vira três contas por CC (parâmetros do ciclo): salário com reajuste, encargos e benefícios (parte do
-multiplicador do contrato) e verbas rescisórias.
+Pessoal vira contas por CC (parâmetros do ciclo): salário com reajuste, encargos e benefícios (parte do
+multiplicador do contrato, rateada entre contas por `personnel.charges_split`; sem rateio, tudo na conta de
+encargos) e verbas rescisórias.
 """
 
 import dataclasses
@@ -15,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.domain.rules.common import money
+from app.domain.rules.personnel import normalize_split, split_amount
 from app.models import (
     Account,
     AccountJustification,
@@ -49,6 +51,7 @@ PERSONNEL_ACCOUNTS = (
     ("charges", "personnel.charges_account", 6010102001, "Encargos e benefícios (multiplicador)"),
     ("severance", "personnel.severance_account", 6010101010, "Verbas rescisórias"),
 )
+CHARGES_SPLIT_KEY = "personnel.charges_split"
 
 
 class ConsolidationError(OpexError):
@@ -93,6 +96,17 @@ def personnel_accounts(db: Session, ctx: Context) -> dict[str, tuple[str, str]]:
         acc = db.scalar(select(Account).where(Account.code == code))
         out[kind] = (code, acc.name if acc else label)
     return out
+
+
+def charges_split(db: Session, ctx: Context) -> list[tuple[str, str, Decimal]]:
+    """Rateio da parte do multiplicador (encargos e benefícios) entre contas → [(código, nome, peso normalizado)].
+    Parâmetro `personnel.charges_split` ausente, vazio ou sem peso válido: tudo em `personnel.charges_account`."""
+    split = normalize_split(ctx.params.get(CHARGES_SPLIT_KEY))
+    if not split:
+        code, name = personnel_accounts(db, ctx)["charges"]
+        return [(code, name, Decimal(1))]
+    names = dict(db.execute(select(Account.code, Account.name).where(Account.code.in_([c for c, _ in split]))).all())
+    return [(code, names.get(code, "Encargos e benefícios (rateio do multiplicador)"), w) for code, w in split]
 
 
 def _dims(db: Session):
@@ -219,19 +233,25 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
             add("CAPEX", company_id, branch_id, cc_id, acc.code, acc.name, "Capex", None, pending)
 
     pacc = personnel_accounts(db, ctx)
+    split = charges_split(db, ctx)
+    split_names = {code: name for code, name, _w in split}
+    split_weights = [(code, w) for code, _name, w in split]
     scenario = personnel_svc.baseline(db, ctx)
     for cc_id, positions in personnel_svc.build_positions(db, ctx, cc_ids).items():
         t = personnel_svc.totals_for(positions, scenario)
-        parts = {
-            "salary": t.salary,
-            "charges": [t.monthly[i] - t.salary[i] - t.severance[i] for i in range(12)],
-            "severance": t.severance,
-        }
-        for kind, series in parts.items():
+        for kind, series in (("salary", t.salary), ("severance", t.severance)):
             code, name = pacc[kind]
             for m, amount in enumerate(series, start=1):
                 if amount:
                     add("PERSONNEL", None, None, cc_id, code, name, "Pessoas", m, money(amount))
+        # parte do multiplicador, mês a mês, rateada entre as contas (soma exata em centavos)
+        for m in range(1, 13):
+            charges = t.monthly[m - 1] - t.salary[m - 1] - t.severance[m - 1]
+            if not charges:
+                continue
+            for code, amount in split_amount(charges, split_weights).items():
+                if amount:
+                    add("PERSONNEL", None, None, cc_id, code, split_names[code], "Pessoas", m, amount)
     rows = [r for r in grouped.values() if any(r.values) or r.unscheduled]
     for r in rows:
         r.values = [money(v) for v in r.values]

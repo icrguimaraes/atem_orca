@@ -459,6 +459,7 @@ export interface ConsolidationOverview {
   variations: VariationRow[];
   flag_counts: Record<string, number>;
   personnel_accounts: Record<string, { code: string; name: string }>;
+  personnel_charges_split?: { code: string; name: string; weight: string }[];  // rateio da parte do multiplicador
 }
 export interface AttentionPoint {
   severity: "high" | "medium" | "low" | "info"; module: string; module_label: string; kind: string;
