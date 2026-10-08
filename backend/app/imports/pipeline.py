@@ -19,7 +19,7 @@ from app.imports.compare import compare
 from app.imports.detector import detect_and_parse
 from app.imports.loaders import LOADERS
 from app.imports.resolver import Dimensions, final_status, validate
-from app.models import ImportBatch, ImportError_, ImportRow
+from app.models import DatasetVersion, ImportBatch, ImportError_, ImportRow
 from app.services import audit
 from app.services.storage import LocalStorage
 
@@ -82,6 +82,18 @@ def validate_batch(db: Session, batch: ImportBatch, storage: LocalStorage) -> Im
     options = batch.options or {}
     try:
         sheets = load_sheets(storage.read(batch.storage_path), batch.file_name)
+        if batch.dataset_type == "PROJECTION":
+            # meses que já têm realizado (KSB1) ficam de fora da projeção, por empresa × ano
+            options = dict(options) | {
+                "projection_closed": {
+                    k.split(":", 1)[1]: int(v or 0)
+                    for k, v in db.execute(
+                        select(DatasetVersion.scope_key, DatasetVersion.last_closed_period).where(
+                            DatasetVersion.dataset_type == "ACTUAL", DatasetVersion.is_current
+                        )
+                    )
+                }
+            }
         result = detect_and_parse(sheets, batch.dataset_type, options)
     except StructureError as exc:
         batch.status = "FAILED"

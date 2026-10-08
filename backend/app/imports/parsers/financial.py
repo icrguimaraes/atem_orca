@@ -168,15 +168,16 @@ def parse_projection(sheets: list[Sheet], options: dict) -> ParseResult:
         if table is None:
             continue
         result.meta.update({"sheet": sheet.name})
+        closed = options.get("projection_closed") or {}
+        default_company = options.get("company_code")
+        merged: dict[tuple, Record] = {}  # linhas repetidas do mesmo CC × conta × mês somam (não são duplicidade)
+        ignored = 0
         for row_no, row in table.rows():
             if is_blank(row):
                 continue
             rec = Record("FACT", sheet.name, row_no, {})
-            month_value = table.value(row, "month")
-            if not hasattr(month_value, "month"):
-                rec.error("INVALID_DATE", "Mês inválido", "Mês", month_value)
-                result.records.append(rec)
-                continue
+            if clean_code(table.value(row, "cost_center")) is None and clean_code(table.value(row, "account")) is None:
+                continue  # linha de total geral da planilha
             raw = table.value(row, "amount")
             try:
                 amount = to_decimal(raw)
@@ -185,26 +186,47 @@ def parse_projection(sheets: list[Sheet], options: dict) -> ParseResult:
                 result.records.append(rec)
                 continue
             if amount in (None, 0):
+                continue  # sem valor (inclui linhas de total/em branco)
+            month_value = table.value(row, "month")
+            if not hasattr(month_value, "month"):
+                rec.error("INVALID_DATE", "Mês inválido", "Mês", month_value)
+                result.records.append(rec)
+                continue
+            company = clean_code(table.value(row, "company")) or default_company
+            year, month = int(month_value.year), int(month_value.month)
+            # empresa sem KSB1 carregado (ex.: REAM) usa o mesmo mês de corte das demais no ano
+            cut = closed.get(f"{year}:{company}") or max(
+                (int(v or 0) for k, v in closed.items() if k.startswith(f"{year}:")), default=0
+            )
+            if month <= int(cut):
+                ignored += 1  # mês com realizado (KSB1): a projeção não entra
+                continue
+            cc = clean_code(table.value(row, "cost_center"))
+            account = clean_code(table.value(row, "account"))
+            key = (company, cc, account, year, month)
+            if key in merged:
+                prev = merged[key]
+                prev.data["values"][month] = str(Decimal(prev.data["values"][month]) + amount)
                 continue
             rec.data.update(
                 {
-                    "company": clean_code(table.value(row, "company")),
+                    "company": company,
                     "branch": None,
                     "branch_name": None,
-                    "cost_center": clean_code(table.value(row, "cost_center")),
+                    "cost_center": cc,
                     "cost_center_name": clean_str(table.value(row, "cost_center_name")),
                     "manager": None,
-                    "account": clean_code(table.value(row, "account")),
+                    "account": account,
                     "account_name": clean_str(table.value(row, "account_name")),
                     "package": None,
-                    "year": int(month_value.year),
-                    "values": {int(month_value.month): str(amount)},
+                    "year": year,
+                    "values": {month: str(amount)},
                 }
             )
-            rec.natural_key = (
-                f"{rec.data['company']}|{rec.data['cost_center']}|{rec.data['account']}|{month_value.month}"
-            )
-            result.records.append(rec)
+            rec.natural_key = f"{company}|{cc}|{account}|{month}"
+            merged[key] = rec
+        result.records.extend(merged.values())
+        result.meta["ignored_months_with_actual"] = ignored
         return result
     return result
 
