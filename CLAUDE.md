@@ -43,6 +43,11 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   07/10/2026; os blocos que não são gráfico (tarefas do gestor, validações GMD, quadro de pessoal e premissas) estão em
   `components/PainelBlocks.tsx`. Cadastros, contratos, qualidade da base, importações e versões ficam na página de consulta
   "Situação da base" (`pages/BaseStatus.tsx`, rota `/base`, só Controladoria).
+- Justificativas (08/10/2026, "justificar tudo"): toda conta OPEX orçada (ou zerada com histórico ≥ `alert.min_relevant_amount`),
+  toda movimentação de pessoal e toda solicitação de CAPEX precisam de justificativa — críticas em Apontamentos e bloqueiam o envio.
+  Tela `pages/Justifications.tsx` (`/justificativas`) sobre `services/justifications.py` + `api/v1/justifications.py` (salvar grava
+  auditoria e, se faltava, a correção em Apontamentos; `export.xlsx`). O template OPEX exportado leva a justificativa da conta
+  nas linhas sem justificativa própria.
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

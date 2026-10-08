@@ -21,6 +21,7 @@ from app.api.v1 import (
     findings,
     imports,
     integrations,
+    justifications,
     master,
     opex,
     personnel,
@@ -97,6 +98,7 @@ for module in (
     consolidation,
     analytics,
     findings,
+    justifications,
     validation,
     integrations,
 ):

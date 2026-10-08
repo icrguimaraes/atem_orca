@@ -19,14 +19,14 @@ const MODULE_OPTIONS = [
 ];
 // o que fazer em cada tipo, em uma linha (cabeçalho do grupo)
 const KIND_HINTS: Record<string, string> = {
-  OPEX_JUSTIFICATION: "Conta com variação acima do limite, conta nova ou sem orçamento: justificar é recomendado (não bloqueia o envio); a Controladoria pode manter em lote.",
+  OPEX_JUSTIFICATION: "Toda conta orçada (ou zerada com histórico relevante) precisa de justificativa: escreva aqui ou na tela Justificativas.",
   TRAVEL_NO_FARE: "A planilha não trouxe a passagem: informe o valor (vai para o mês de ida) ou mantenha, se não houver.",
   TRAVEL_RATE: "Diária ou hospedagem sem tarifa no ciclo: confira no orçamento do CC.",
   CAPEX_SCHEDULE_MISMATCH: "A soma dos meses não fecha com o valor do item: distribua o valor nos meses.",
   CAPEX_ACCOUNT_MISMATCH: "A conta do item difere da indicada no catálogo de ativos: use a do catálogo ou mantenha com o motivo.",
   CAPEX_NO_PROJECT_TYPE: "Projeto sem tipo: escolha o tipo.",
-  CAPEX_NO_JUSTIFICATION: "Solicitação sem justificativa: escreva a justificativa.",
-  PERSONNEL_JUSTIFICATION: "Contratação, desligamento ou transferência precisa de justificativa (análise da Controladoria e do RH).",
+  CAPEX_NO_JUSTIFICATION: "Toda solicitação de CAPEX precisa de justificativa: escreva a justificativa.",
+  PERSONNEL_JUSTIFICATION: "Toda movimentação (contratação, desligamento, transferência, promoção, reajuste) precisa de justificativa.",
   PERSONNEL_NO_SALARY: "A planilha não trouxe o novo salário: informe o valor mensal.",
   PERSONNEL_NO_MONTH: "A planilha não trouxe o mês da ação: escolha o mês (até lá, não mexe no custo).",
   PERSONNEL_CC_GUESSED: "O CC veio vazio e o sistema definiu pelo cargo: confirme; se estiver errado, corrija na planilha e importe de novo.",
@@ -185,14 +185,15 @@ export default function Findings() {
             <div>
               <Badge tone="bad">Crítico · bloqueia o envio</Badge>
               <ul>
-                <li><strong>Pessoal:</strong> justificativa de contratação, desligamento e transferência; novo salário e mês da ação que não vieram na planilha.</li>
-                <li><strong>CAPEX:</strong> cronograma diferente do valor do item; projeto sem tipo ou sem justificativa (Instruções do template CAPEX).</li>
+                <li><strong>Justificativas (todas):</strong> conta do OPEX orçada ou zerada com histórico, toda movimentação de pessoal e toda solicitação de CAPEX — o gestor da área defende o número. Veja a tela <Link to="/justificativas" className="link">Justificativas</Link>.</li>
+                <li><strong>Pessoal:</strong> novo salário e mês da ação que não vieram na planilha.</li>
+                <li><strong>CAPEX:</strong> cronograma diferente do valor do item; projeto sem tipo.</li>
               </ul>
             </div>
             <div>
               <Badge tone="warn">Aviso · não bloqueia</Badge>
               <ul>
-                <li><strong>OPEX:</strong> justificativa de conta com variação acima do limite, conta nova ou sem orçamento (o template só recomenda); passagem zerada; diária ou hospedagem sem tarifa.</li>
+                <li><strong>OPEX:</strong> passagem zerada; diária ou hospedagem sem tarifa.</li>
                 <li><strong>CAPEX:</strong> conta diferente do catálogo de ativos, software no CAPEX, valor baixo, vida útil curta.</li>
                 <li><strong>Pessoal:</strong> centro de custo definido pelo cargo (confirmar).</li>
                 <li><strong>Estrutura:</strong> CC sem área e setor (Controladoria).</li>

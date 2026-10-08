@@ -122,7 +122,7 @@ def check_project(is_project: bool, project_type: str | None, justification: str
     """Instrução: se 'Projeto?' = Sim → tipo de projeto e justificativa obrigatórios."""
     issues: list[Issue] = []
     if not (justification or "").strip():
-        issues.append(Issue("CAPEX_NO_JUSTIFICATION", "CRITICAL" if is_project else "WARNING", "Justificativa ausente"))
+        issues.append(Issue("CAPEX_NO_JUSTIFICATION", "CRITICAL", "Justificativa ausente"))  # justificar tudo
     if is_project and not project_type:
         issues.append(Issue("CAPEX_NO_PROJECT_TYPE", "CRITICAL", "Projeto sem tipo de projeto"))
     return issues

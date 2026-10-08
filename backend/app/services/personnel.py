@@ -682,19 +682,29 @@ def pending_cost_centers(db: Session, sub: BudgetSubmission) -> list[Employee]:
     )
 
 
+# movimentações que precisam de justificativa ("justificar tudo", 08/10/2026: promoção e reajuste também)
+REASON_REQUIRED = ("HIRE", "TERMINATION", "TRANSFER", "PROMOTION", "SALARY_ADJUSTMENT")
+REASON_NOUNS = {"PROMOTION": "promoção", "SALARY_ADJUSTMENT": "reajuste individual"}
+
+
 def missing_reasons(db: Session, sub: BudgetSubmission) -> list[tuple[PersonnelMovement, str]]:
-    """Contratações, desligamentos e transferências sem justificativa, com o rótulo ("desligamento de Fulano")."""
+    """Movimentações (contratação, desligamento, transferência, promoção, reajuste) sem justificativa, com o rótulo
+    ("desligamento de Fulano")."""
     missing = []
     for mv in db.scalars(select(PersonnelMovement).where(PersonnelMovement.submission_id == sub.id)):
         if mv.employee_id:
             emp = db.get(Employee, mv.employee_id)
             if emp is None or emp.cost_center_id != sub.cost_center_id:
                 continue  # colaborador mudou de CC na base: a movimentação não aparece nem bloqueia
-        if mv.movement_type in ("HIRE", "TERMINATION", "TRANSFER") and not (mv.reason or "").strip():
+        if mv.movement_type in REASON_REQUIRED and not (mv.reason or "").strip():
             who = (mv.attributes or {}).get("position_name") if mv.movement_type == "HIRE" else None
             if who is None and mv.employee_id:
                 emp = db.get(Employee, mv.employee_id)
                 who = emp.name if emp else f"#{mv.employee_id}"
-            label = "contratação" if mv.movement_type == "HIRE" else MOVE_LABELS[mv.movement_type].lower()
+            label = (
+                "contratação"
+                if mv.movement_type == "HIRE"
+                else REASON_NOUNS.get(mv.movement_type, MOVE_LABELS[mv.movement_type].lower())
+            )
             missing.append((mv, f"{label} de {who}"))
     return missing

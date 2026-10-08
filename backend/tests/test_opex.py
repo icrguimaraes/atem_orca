@@ -89,10 +89,12 @@ def test_opex_full_flow(client, admin, run_worker):
     assert rows["6010301002"]["ref_annualized"] == "6000.00" and rows["6010301002"]["flags"] == []
     assert rows["6010301001"]["flags"] == ["REDUCTION_ABOVE"]  # 3.600 vs 12.000 anualizado
     assert rows["6010301011"]["flags"] == ["NEW_ACCOUNT"]
-    assert view["pending_justifications"] == 3
-
-    # justificativa de conta é recomendada (aviso em Apontamentos), não bloqueia o envio; o gestor justifica antes
-    for code in ("6010301001", "6010301011", "6010501002"):
+    # "justificar tudo": toda conta orçada (ou com histórico relevante zerado) precisa de justificativa
+    pending = [code for code, r in rows.items() if r["needs_justification"] and not r["justification"]]
+    assert view["pending_justifications"] == len(pending) == 5
+    blocked = client.post(f"/api/v1/opex/submissions/{sub}/actions/submit", headers=mgr, json={})
+    assert blocked.status_code == 409 and "sem justificativa" in blocked.json()["detail"]
+    for code in pending:
         client.put(
             f"/api/v1/opex/submissions/{sub}/justifications/{acc[code]['id']}",
             headers=mgr,
@@ -162,6 +164,11 @@ def test_package_adjustment_and_access(client, admin, run_worker):
         f"/api/v1/opex/submissions/{sub}/justifications/{acc['6010301002']['id']}",
         headers=mgr,
         json={"text": "Telefonia migrou para o CC de TI"},
+    )
+    client.put(
+        f"/api/v1/opex/submissions/{sub}/justifications/{acc['6010301001']['id']}",
+        headers=mgr,
+        json={"text": "Viagens de acompanhamento das filiais"},
     )
     assert client.post(f"/api/v1/opex/submissions/{sub}/actions/submit", headers=mgr, json={}).status_code == 200
 

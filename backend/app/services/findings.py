@@ -48,7 +48,7 @@ OPEN = ("IN_PROGRESS", "ADJUSTMENT_REQUESTED", "SUBMITTED", "UNDER_REVIEW")
 ROUTES = {"OPEX": "/orcamento", "CAPEX": "/capex", "PERSONNEL": "/pessoal"}
 MODULE_LABELS = {"OPEX": "OPEX", "CAPEX": "CAPEX", "PERSONNEL": "Pessoal"}
 KIND_LABELS = {
-    "OPEX_JUSTIFICATION": "Variação sem justificativa",
+    "OPEX_JUSTIFICATION": "Conta sem justificativa",
     "TRAVEL_NO_FARE": "Passagem zerada",
     "TRAVEL_RATE": "Viagem sem tarifa",
     "CAPEX_SCHEDULE_MISMATCH": "Cronograma diferente do total",
@@ -372,19 +372,19 @@ def _add(
 
 
 def _opex(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, add) -> None:
-    # contas com alerta (variação acima do limite, conta nova, sem orçamento) sem justificativa: aviso (recomendada,
-    # não bloqueia o envio — o template OPEX só recomenda justificar)
+    # "justificar tudo" (08/10/2026): toda conta orçada (ou zerada com histórico relevante) sem justificativa é
+    # crítica e bloqueia o envio — o gestor da área defende o número
     for row in opex_svc.account_view(db, ctx, sub)["accounts"]:
-        if not row["needs_justification"] or (row["justification"] or "").strip():
+        if not opex_svc.justification_missing(row):
             continue
-        flag = FLAG_TEXT.get(row["flags"][0], row["flags"][0])
+        flag = FLAG_TEXT.get(row["flags"][0], row["flags"][0]) if row["flags"] else "Conta orçada"
         add(
-            "WARNING",
+            "CRITICAL",
             "OPEX_JUSTIFICATION",
             ("OPEX_ACCOUNT", row["account_id"]),
             f"{row['code']} {row['name']}",
             f"{flag}: proposto {brl(Decimal(row['proposed']))} × referência {brl(Decimal(row['variation_base']))}"
-            f"{_pct(row['variation_pct'])}. Justifique a conta (recomendado; não bloqueia o envio)",
+            f"{_pct(row['variation_pct'])}. Justificativa obrigatória para enviar",
             row["proposed"],
             fix={"type": "text", "label": "Justificativa da conta"},
         )

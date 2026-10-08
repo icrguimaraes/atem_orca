@@ -115,6 +115,20 @@ def test_personnel_projection_workflow_and_transfer(client, admin, run_worker):
     assert incoming["kind"] == "TRANSFER_IN" and incoming["annual"] == "113400.00"
     assert incoming["from_cost_center"].startswith(CC1)
 
+    # "justificar tudo": promoções e reajustes também pedem justificativa — preenchidas na tela de Justificativas
+    blocked = client.post(f"/api/v1/personnel/submissions/{sub}/actions/submit", headers=mgr, json={})
+    assert blocked.status_code == 409
+    items = client.get(f"/api/v1/justifications?cost_center_id={ccs[CC1]['id']}", headers=mgr).json()["items"]
+    missing = [i for i in items if i["module"] == "PERSONNEL" and not i["justified"]]
+    assert missing and all(i["editable"] for i in missing)
+    for i in missing:
+        r = client.put("/api/v1/justifications", headers=mgr, json={"key": i["key"], "text": "Plano de carreira 2027"})
+        assert r.status_code == 200 and r.json()["justified"], r.text
+    logs = client.get("/api/v1/findings", headers=admin).json()["reviews"]
+    assert any(r["note"] == "Justificativa: Plano de carreira 2027" for r in logs)
+    xlsx = client.get("/api/v1/justifications/export.xlsx", headers=admin)
+    assert xlsx.status_code == 200 and xlsx.content[:2] == b"PK"
+
     head = client.post(f"/api/v1/personnel/submissions/{sub}/actions/submit", headers=mgr, json={}).json()
     assert head["status"] == "SUBMITTED" and head["package_review"]["status"] == "PENDING"
     client.post(f"/api/v1/personnel/submissions/{sub}/actions/start_review", headers=admin, json={})

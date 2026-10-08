@@ -206,6 +206,15 @@ def account_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
         j.account_id: j
         for j in db.scalars(select(AccountJustification).where(AccountJustification.submission_id == sub.id))
     }
+    # justificativa escrita nas linhas do template (coluna JUSTIFICATIVA) também justifica a conta
+    line_justified = set(
+        db.scalars(
+            select(BudgetLine.account_id).where(
+                BudgetLine.submission_id == sub.id,
+                func.length(func.trim(func.coalesce(BudgetLine.justification, ""))) > 0,
+            )
+        )
+    )
     ids = set(prev) | set(ref) | set(ref_budget) | set(proposed)
     accounts = {a.id: a for a in db.scalars(select(Account).where(Account.id.in_(ids)))} if ids else {}
     packages = {p.id: p for p in db.scalars(select(BudgetPackage))}
@@ -238,6 +247,8 @@ def account_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
                 flags.append("REDUCTION_ABOVE")
         just = justifications.get(acc_id)
         pkg = packages.get(acc.package_id)
+        # regra de 08/10/2026 ("justificar tudo"): toda conta orçada, ou com histórico relevante que foi zerado
+        requires = prop > 0 or base >= min_relevant
         row = {
             "account_id": acc_id,
             "code": acc.code,
@@ -253,8 +264,9 @@ def account_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
             "variation_base": str(money(base)),
             "variation_pct": str(((prop - base) / base).quantize(Decimal("0.0001"))) if base else None,
             "flags": flags,
-            "needs_justification": bool(flags),
+            "needs_justification": requires,
             "justification": just.text if just else None,
+            "line_justified": acc_id in line_justified,
             "ref_monthly": [str(money(v)) for v in ref_m[acc_id]] if acc_id in ref_m else None,
         }
         rows.append(row)
@@ -279,10 +291,13 @@ def account_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
             "budget": monthly_total(budget_m),
             "proposed": monthly_total(prop_m),
         },
-        "pending_justifications": sum(
-            1 for r in rows if r["needs_justification"] and not (r["justification"] or "").strip()
-        ),
+        "pending_justifications": sum(1 for r in rows if justification_missing(r)),
     }
+
+
+def justification_missing(row: dict) -> bool:
+    """Conta que precisa de justificativa e não tem (nem na conta, nem nas linhas do template)."""
+    return row["needs_justification"] and not (row["justification"] or "").strip() and not row["line_justified"]
 
 
 def account_monthly(db: Session, ctx: Context, sub: BudgetSubmission, account_id: int) -> dict:
@@ -312,8 +327,10 @@ def submit_blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[st
     blockers = []
     if not db.scalar(select(func.count()).select_from(BudgetLine).where(BudgetLine.submission_id == sub.id)):
         blockers.append("nenhuma linha orçada")
-    # justificativa de conta (variação acima do limite, conta nova, sem orçamento) é recomendada, não obrigatória:
-    # o template pede "evite orçar despesas sem histórico ou sem justificativa clara" — fica como aviso em Apontamentos
+    # "justificar tudo" (08/10/2026): toda conta orçada ou zerada com histórico relevante precisa de justificativa
+    missing = account_view(db, ctx, sub)["pending_justifications"]
+    if missing:
+        blockers.append(f"{missing} conta(s) sem justificativa")
     return blockers
 
 

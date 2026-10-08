@@ -60,7 +60,7 @@ function Justification({ row, submissionId, editable, onSaved }: { row: OpexAcco
         className={`justification ${row.needs_justification && !text.trim() ? "required" : ""}`}
         rows={2}
         value={text}
-        placeholder={row.needs_justification ? "Recomendada: explique a variação" : "Opcional"}
+        placeholder={row.needs_justification ? "Obrigatória: explique o valor e a variação" : "Opcional"}
         onChange={(e) => setText(e.target.value)}
         onBlur={() => save()}
       />

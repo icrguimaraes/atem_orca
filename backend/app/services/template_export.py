@@ -23,6 +23,7 @@ from app.imports.base import export_marker
 from app.models import (
     Account,
     AccountDetail,
+    AccountJustification,
     Branch,
     BudgetLine,
     BudgetPackage,
@@ -224,8 +225,11 @@ def _package_sheet(
     accounts: dict[int, Account],
     branches: dict[int, Branch],
     details: dict[int, str],
+    account_texts: dict[int, str] | None = None,
 ) -> None:
-    """Aba de pacote genérico: CHAVE, detalhamento, fornecedor, justificativa, códigos e JAN..DEZ."""
+    """Aba de pacote genérico: CHAVE, detalhamento, fornecedor, justificativa, códigos e JAN..DEZ. Linha sem
+    justificativa própria leva a justificativa da conta (tela de Justificativas), para o template final."""
+    account_texts = account_texts or {}
     company = cc.company.code
     ws["B2"], ws["B2"].font = f"{ws.title} · {cc.code} · {cc.name} · orçamento {ctx.target_year}", TITLE_FONT
     ws["B3"] = "Uma linha por lançamento (conta × detalhamento). A CHAVE é empresa-filial-centro de custo-conta."
@@ -263,7 +267,7 @@ def _package_sheet(
             line.description,
             line.contract_manager,
             line.supplier,
-            line.justification,
+            line.justification or account_texts.get(line.account_id),
             line.assumption,
             details.get(line.account_detail_id) if line.account_detail_id else None,
             branch.name if branch else None,
@@ -297,6 +301,10 @@ def opex_template_workbook(db: Session, ctx: Context, sub: BudgetSubmission) -> 
         select(BudgetPackage).where(BudgetPackage.roman.is_not(None)).order_by(BudgetPackage.sort_order)
     ).all()
     lines = db.scalars(select(BudgetLine).where(BudgetLine.submission_id == sub.id).order_by(BudgetLine.id)).all()
+    texts = {
+        j.account_id: j.text
+        for j in db.scalars(select(AccountJustification).where(AccountJustification.submission_id == sub.id))
+    }
 
     by_package: dict[int | None, list[BudgetLine]] = defaultdict(list)
     trips: dict[str, list[BudgetLine]] = defaultdict(list)
@@ -336,13 +344,13 @@ def opex_template_workbook(db: Session, ctx: Context, sub: BudgetSubmission) -> 
             ordered = [trips[k] for k in sorted(trips, key=lambda k: trips[k][0].id)]
             _travel_sheet(ws, ctx, cc, ordered, accounts, branches)
         else:
-            _package_sheet(ws, ctx, cc, by_package.pop(pkg.id, []), accounts, branches, details)
+            _package_sheet(ws, ctx, cc, by_package.pop(pkg.id, []), accounts, branches, details, texts)
     leftovers = [line for pid, group in by_package.items() for line in group]  # sem pacote, ou do pacote Viagens
     if travel_pkg is not None:
         leftovers = [line for line in leftovers if line.package_id != travel_pkg.id] + by_package.get(travel_pkg.id, [])
     if leftovers:
         ws = wb.create_sheet(OTHER_SHEET)
-        _package_sheet(ws, ctx, cc, sorted(leftovers, key=lambda line: line.id), accounts, branches, details)
+        _package_sheet(ws, ctx, cc, sorted(leftovers, key=lambda line: line.id), accounts, branches, details, texts)
     if events:
         _events_sheet(wb.create_sheet("Eventos (leitura)"), ctx, events, accounts)
     buf = io.BytesIO()

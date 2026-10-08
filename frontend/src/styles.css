@@ -149,6 +149,17 @@ a { color: inherit; }
 .link { color: var(--text); text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; font-weight: 600; }
 .link:hover { text-decoration-color: var(--text); }
 .error-text { color: var(--bad); font-size: 12px; }
+.good-text { color: var(--good); font-size: 12px; }
+/* tela de Justificativas */
+.just-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.just-item { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; display: grid; gap: 8px; }
+.just-item.missing { border-left: 3px solid var(--bad); }
+.just-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.just-subject { font-weight: 600; }
+.just-values { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; }
+.just-details { margin: 0; padding-left: 18px; }
+.just-edit textarea { width: 100%; min-height: 56px; resize: vertical; }
+.just-actions { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
 
 /* ---------- layout */
 .shell { display: grid; grid-template-columns: 248px 1fr; min-height: 100%; }
