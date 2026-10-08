@@ -1,0 +1,83 @@
+/* Contratos PJ (/pj): cabeçalho, cartões, lista (tabela no desktop, cartões no celular), janela de edição e modo
+   privacidade da página (botão "olho": embaça nomes, CNPJ, valores e fotos). */
+.pj-year { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.pj-year select { min-height: 36px; padding-top: 6px; padding-bottom: 6px; }
+.pj-rule { margin: 0; max-width: 980px; }
+.pj-stats .stat { min-width: 0; }
+.pj-stats .stat-value { overflow-wrap: anywhere; }
+.pj-loading { opacity: 0.6; transition: opacity 150ms ease; }
+
+/* privacidade: .pii = dados pessoais, .sens = valores em R$; focar um campo revela */
+.pii, .sens, .pj-avatar img { transition: filter 150ms ease; }
+.pj-private .pii, .pj-private .sens { filter: blur(6px); }
+.pj-private .pj-avatar img { filter: blur(8px); transform: scale(1.15); }
+.pj-private .pii:focus, .pj-private .sens:focus { filter: none; }
+.pj-eye[aria-pressed="true"] { background: var(--surface-2); }
+
+/* avatar redondo (foto ou silhueta) */
+.pj-avatar { display: block; flex: none; width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: var(--neutral-bg); }
+.pj-avatar img, .pj-avatar svg { display: block; width: 100%; height: 100%; object-fit: cover; }
+.pj-avatar.blurred img { filter: blur(5px); transform: scale(1.1); }
+.pj-avatar .av-bg { fill: var(--neutral-bg); }
+.pj-avatar .av-fg { fill: var(--muted); opacity: 0.55; }
+
+.table.pj-table td { vertical-align: middle; }
+.pj-row { cursor: pointer; }
+.pj-who { min-width: 220px; }
+.pj-person {
+  display: flex; align-items: center; gap: 12px; width: 100%; padding: 0; border: 0; background: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.pj-person-text { display: grid; gap: 1px; min-width: 0; }
+.pj-person-text strong { font-weight: 700; }
+.pj-person:hover strong { text-decoration: underline; }
+.pj-person:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; border-radius: 6px; }
+
+.pj-form { gap: 16px; }
+.pj-form label { align-content: start; }
+.pj-form textarea { min-height: 72px; }
+.pj-photo { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.pj-photo .pj-avatar { width: 64px; height: 64px; }
+.pj-photo-actions { display: grid; gap: 8px; }
+.pj-photo-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.pj-calc { padding-top: 12px; border-top: 1px solid var(--border); font-size: 14px; }
+.pj-modal-foot { display: flex; align-items: center; gap: 8px; width: 100%; }
+.pj-spacer { flex: 1; }
+.btn.pj-archive { color: var(--bad); }
+.field-error { display: block; font-size: 12px; color: var(--bad); margin-top: 4px; }
+
+/* editor de recorte da foto */
+.photo-editor { display: grid; gap: 12px; justify-items: center; }
+.photo-editor canvas { width: min(260px, 100%); height: auto; aspect-ratio: 1; border-radius: 50%; border: 1px solid var(--border); background: var(--surface-2); cursor: grab; touch-action: none; }
+.photo-editor canvas:active { cursor: grabbing; }
+.photo-editor canvas:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.photo-zoom { display: flex; align-items: center; gap: 8px; width: min(300px, 100%); }
+.photo-zoom input[type="range"] { flex: 1; min-height: 0; padding: 0; border: 0; background: none; accent-color: var(--text); }
+
+/* Usuários → editor: select "Vê contratos PJ" */
+.pj-access { display: grid; gap: 6px; max-width: 560px; }
+.pj-access select { max-width: 240px; }
+
+@media (max-width: 860px) {
+  .pj-year select { min-height: 44px; }
+  .pj-stats .stat-value { font-size: 19px; line-height: 26px; }
+
+  /* celular: cada contrato vira um cartão (pessoa em cima; valores em duas colunas), sem rolagem lateral */
+  .table.pj-table thead { display: none; }
+  .table.pj-table, .pj-table tbody { display: block; width: 100%; }
+  .table.pj-table tr {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; padding: 14px 0; border-bottom: 1px solid var(--border);
+  }
+  .table.pj-table tbody tr:hover { background: none; }
+  .table.pj-table td { display: block; border: 0; padding: 0; min-width: 0; text-align: left; }
+  .table.pj-table td.right { text-align: left; }
+  .table.pj-table td.pj-who { grid-column: 1 / -1; min-width: 0; }
+  .table.pj-table td[data-label]::before {
+    content: attr(data-label); display: block; font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .pj-modal-foot { gap: 4px; }
+  .pj-modal-foot .btn { padding-left: 12px; padding-right: 12px; }
+  .pj-calc { grid-template-columns: 1fr; gap: 2px; }
+  .pj-calc dd { margin-bottom: 8px; }
+}

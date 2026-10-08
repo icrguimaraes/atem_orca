@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Company, type CostCenter, type Department, type UserAccess, type UserListItem } from "../api";
-import { ROLE_LABELS, fmtInt } from "../labels";
+import { api, type Company, type CostCenter, type Department, type PjAccess, type UserAccess, type UserListItem } from "../api";
+import { PJ_ACCESS_LABELS, ROLE_LABELS, fmtInt } from "../labels";
 import { Alert, Loading, Modal } from "./ui";
 
 /* Criar e editar usuário num formulário só (08/10/2026): dados, perfis e os centros de custo que ele acessa — por
@@ -30,6 +30,8 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
     is_active: user?.is_active ?? true,
     roles: user?.roles ?? ["MANAGER"],
   });
+  // Contratos PJ (confidencial): "Vê contratos PJ: Não / Da área / Todos" — flag do usuário, independe do perfil
+  const [pj, setPj] = useState<PjAccess>(user?.pj_access ?? "NONE");
   const [ccs, setCcs] = useState<CostCenter[] | null>(null);
   const [depts, setDepts] = useState<Department[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -153,7 +155,10 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
       if (creating) {
         await api("/users", {
           method: "POST",
-          body: JSON.stringify({ name: form.name.trim(), email: form.email.trim(), password: form.password, roles: form.roles, cost_center_ids, manager_of, department_ids }),
+          body: JSON.stringify({
+            name: form.name.trim(), email: form.email.trim(), password: form.password, roles: form.roles, cost_center_ids, manager_of, department_ids,
+            can_view_pj: pj !== "NONE", can_view_all_pj: pj === "ALL",
+          }),
         });
         onSaved(`Usuário ${form.email.trim().toLowerCase()} criado com ${fmtInt(selected.size)} centro(s) de custo. Envie a senha inicial por um canal seguro.`);
       } else {
@@ -162,6 +167,10 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
         if (form.email.trim().toLowerCase() !== user!.email) patch.email = form.email.trim();
         if (form.is_active !== user!.is_active) patch.is_active = form.is_active;
         if (form.password) patch.password = form.password;
+        if (pj !== (user!.pj_access ?? "NONE")) {
+          patch.can_view_pj = pj !== "NONE";
+          patch.can_view_all_pj = pj === "ALL";
+        }
         if (Object.keys(patch).length) await api(`/users/${user!.id}`, { method: "PATCH", body: JSON.stringify(patch) });
         if ([...form.roles].sort().join() !== [...user!.roles].sort().join())
           await api(`/users/${user!.id}/roles`, { method: "PUT", body: JSON.stringify(form.roles) });
@@ -221,6 +230,16 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
               </label>
             ))}
           </div>
+          <label className="pj-access">
+            Vê contratos PJ
+            <select value={pj} onChange={(e) => setPj(e.target.value as PjAccess)} aria-label="Vê contratos PJ">
+              {(["NONE", "AREA", "ALL"] as PjAccess[]).map((v) => <option key={v} value={v}>{PJ_ACCESS_LABELS[v]}</option>)}
+            </select>
+            <span className="muted small">
+              Página confidencial (valores dos prestadores PJ). "Da área": só os centros de custo das áreas dos CCs do próprio
+              usuário, mesmo com perfil Administrador ou Controladoria. "Todos": todos os contratos. Toda troca fica na auditoria.
+            </span>
+          </label>
         </section>
 
         <section className="stack">

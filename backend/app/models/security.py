@@ -15,6 +15,10 @@ class User(TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Contratos PJ (confidencial; migração 0009): "Vê contratos PJ: Não / Da área / Todos" — dado pelo Administrador,
+    # vale para qualquer perfil (um Administrador sem o acesso pode concedê-lo, mas não vê os dados antes disso)
+    can_view_pj: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    can_view_all_pj: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     roles: Mapped[list["UserRole"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
     scopes: Mapped[list["UserScope"]] = relationship(cascade="all, delete-orphan", lazy="selectin")

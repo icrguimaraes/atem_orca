@@ -20,9 +20,14 @@ const ACTIONS: Record<string, string> = {
   SET_PARAMETER: "Parâmetro alterado",
   CYCLE_OPEN: "Ciclo aberto",
   CYCLE_CLOSE: "Ciclo fechado",
+  ARCHIVE: "Arquivamento",
+  PHOTO_SET: "Foto incluída",
+  PHOTO_DELETE: "Foto removida",
+  EXPORT: "Exportação",
+  PJ_VIEW: "Consulta aos contratos PJ",
 };
 
-const ENTITIES = ["", "import_batch", "cost_center", "account", "branch", "budget_cycle", "cycle_parameter", "user", "employee"];
+const ENTITIES = ["", "import_batch", "cost_center", "account", "branch", "budget_cycle", "cycle_parameter", "user", "employee", "pj_contract"];
 
 function changes(log: AuditLog): string {
   const after = log.after ?? {};

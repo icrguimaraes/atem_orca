@@ -26,6 +26,7 @@ from app.api.v1 import (
     master,
     opex,
     personnel,
+    pj,
     rules,
     users,
     validation,
@@ -103,6 +104,7 @@ for module in (
     defense,
     validation,
     integrations,
+    pj,
 ):
     api.include_router(module.router)
 app.include_router(api)

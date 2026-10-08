@@ -39,6 +39,13 @@ def require_roles(*roles: Role) -> Callable[[User], User]:
     return checker
 
 
+def require_pj(user: User = Depends(get_current_user)) -> User:
+    """Contratos PJ: só quem tem "Vê contratos PJ" (dado pelo Administrador), qualquer que seja o perfil."""
+    if not user.can_view_pj:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem acesso aos contratos PJ")
+    return user
+
+
 def is_global(user: User) -> bool:
     return bool(user.role_codes & {Role.ADMIN, Role.CONTROLLER})
 
@@ -47,6 +54,11 @@ def visible_cost_center_ids(db: Session, user: User) -> set[int] | None:
     """None = acesso a todos. Gestor: CCs onde é gestor + escopos atribuídos."""
     if is_global(user):
         return None
+    return own_cost_center_ids(db, user)
+
+
+def own_cost_center_ids(db: Session, user: User) -> set[int]:
+    """CCs da própria pessoa (gestor + escopos atribuídos), sem o "vê tudo" dos perfis globais."""
     ids = set(db.scalars(select(CostCenter.id).where(CostCenter.manager_user_id == user.id)))
     for scope in db.scalars(select(UserScope).where(UserScope.user_id == user.id)):
         if scope.cost_center_id:

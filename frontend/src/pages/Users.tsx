@@ -4,7 +4,7 @@ import { useAuth } from "../auth";
 import { Alert, Badge, Card, Loading, PageHeader, SearchBox, useLoad } from "../components/ui";
 import { UserAccessModal } from "../components/UserAccess";
 import { UserEditor } from "../components/UserEditor";
-import { ROLE_LABELS, fmtDateTime, fmtInt } from "../labels";
+import { ROLE_LABELS, fmtDateTime, fmtInt, PJ_ACCESS_LABELS } from "../labels";
 
 /* Usuários agrupados por área (08/10/2026): cada área lista quem acessa os CCs dela, com o setor e o CC explícitos;
    Administrador/Controladoria ficam num grupo à parte (veem tudo) e quem ainda não tem CC aparece em destaque. */
@@ -102,7 +102,12 @@ export default function Users() {
                           {u.name}
                           <div className="muted small">{u.email}</div>
                         </td>
-                        <td className="small">{u.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}</td>
+                        <td className="small">
+                          {u.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}
+                          {u.pj_access && u.pj_access !== "NONE" && (
+                            <div><Badge tone="warn">Contratos PJ: {PJ_ACCESS_LABELS[u.pj_access]}</Badge></div>
+                          )}
+                        </td>
                         <td>
                           {group === GLOBAL_GROUP ? (
                             <>

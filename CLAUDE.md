@@ -52,6 +52,12 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   hover, painel lateral no clique) sobre `GET /dashboard/why` (`api/v1/defense.py`: orçamento do ciclo × realizado do ano anterior
   anualizado, decomposição por conta/CC, justificativas, alertas). "Questionar o gestor" grava `BudgetQuestion` (migração 0007;
   `/questions`, responde o gestor de algum CC do recorte ou a Controladoria; auditoria) — página `pages/Questions.tsx` (`/perguntas`).
+- Contratos PJ (08/10/2026, confidencial; `docs/06-contratos-pj.md`): página `pages/ContratosPj.tsx` (`/pj`) sobre
+  `domain/rules/pj.py` (CNPJ inclusive alfanumérico, bonificação proporcional) + `services/pj.py` + `api/v1/pj.py`
+  (migração 0009). Acesso por flags do usuário, não por perfil: `users.can_view_pj`/`can_view_all_pj` ("Vê contratos PJ:
+  Não / Da área / Todos" no editor de Usuários; `/auth/me` expõe `pj_access`); "Da área" = CCs das áreas dos CCs da própria
+  pessoa, mesmo com perfil global. Toda rota exige `core.deps.require_pj`; auditoria sem valores em R$ e escondida de quem
+  não tem acesso (`api/v1/audit_logs.py`).
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

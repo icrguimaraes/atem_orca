@@ -7,7 +7,8 @@ import { useAuth } from "../auth";
 import { ROLE_LABELS } from "../labels";
 import { ThemeSwitch, useTheme, type Theme } from "../theme";
 
-interface NavItem { to: string; label: string; icon: string; end?: boolean; roles?: string[] }
+// `pj`: só para quem tem "Vê contratos PJ" (flag do usuário, não perfil)
+interface NavItem { to: string; label: string; icon: string; end?: boolean; roles?: string[]; pj?: boolean }
 
 // traço de 24 px (stroke), o mesmo desenho no menu lateral, na barra de abas e na folha "Mais"
 // (mesmo padrão do menu do projeto Movimentação de Pessoal)
@@ -27,6 +28,7 @@ const ICON = {
   usuarios: "M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7",
   base: "M4 19h16M7 16v-5M12 16V7M17 16v-8M4 5h4",
   auditoria: "M12 3 5 6v5c0 4.5 3 8.3 7 9.5 4-1.2 7-5 7-9.5V6l-7-3zM9 12l2 2 4-4",
+  pj: "M4 7h16v12H4zM9 7V4h6v3M4 12h16M12 11v3",
   senha: "M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4",
   sair: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   mais: "M5 12h.01M12 12h.01M19 12h.01",
@@ -43,6 +45,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { to: "/justificativas", label: "Justificativas", icon: ICON.justificativas },
       { to: "/perguntas", label: "Perguntas", icon: ICON.perguntas },
       { to: "/validacao", label: "Validação", roles: ["CONTROLLER"], icon: ICON.validacao },
+      { to: "/pj", label: "Contratos PJ", pj: true, icon: ICON.pj },
     ],
   },
   {
@@ -108,6 +111,8 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
 
 export default function Layout() {
   const { user, logout, can } = useAuth();
+  // item visível: perfil (`roles`) e, para Contratos PJ, a flag "Vê contratos PJ" do usuário
+  const allowed = (n: NavItem) => (!n.roles || can(...n.roles)) && (!n.pj || (user?.pj_access ?? "NONE") !== "NONE");
   const [pwd, setPwd] = useState(false);
   const [more, setMore] = useState(false); // folha "Mais" da barra inferior (celular)
   const [theme, setTheme] = useTheme();
@@ -125,7 +130,7 @@ export default function Layout() {
         </div>
         <nav id="main-nav" aria-label="Navegação principal">
           {NAV_GROUPS.map((g) => {
-            const items = g.items.filter((n) => !n.roles || can(...n.roles));
+            const items = g.items.filter(allowed);
             if (!items.length) return null;
             return (
               <div className="nav-group" key={g.title}>
@@ -155,7 +160,7 @@ export default function Layout() {
         <Outlet />
       </main>
       {pwd && <PasswordModal onClose={() => setPwd(false)} />}
-      <MobileTabs can={can} more={more} setMore={setMore} onPassword={() => setPwd(true)} onLogout={logout} userName={user?.name} theme={theme} setTheme={setTheme} />
+      <MobileTabs allowed={allowed} more={more} setMore={setMore} onPassword={() => setPwd(true)} onLogout={logout} userName={user?.name} theme={theme} setTheme={setTheme} />
     </div>
   );
 }
@@ -242,11 +247,11 @@ function Icon({ d, size = 22 }: { d: string; size?: number }) {
   );
 }
 
-function MobileTabs({ can, more, setMore, onPassword, onLogout, userName, theme, setTheme }: {
-  can: (...roles: string[]) => boolean; more: boolean; setMore: (v: boolean) => void;
+function MobileTabs({ allowed, more, setMore, onPassword, onLogout, userName, theme, setTheme }: {
+  allowed: (n: NavItem) => boolean; more: boolean; setMore: (v: boolean) => void;
   onPassword: () => void; onLogout: () => void; userName?: string; theme: Theme; setTheme: (t: Theme) => void;
 }) {
-  const rest = NAV.filter((n) => !TABS.some((t) => t.to === n.to) && (!n.roles || can(...n.roles)));
+  const rest = NAV.filter((n) => !TABS.some((t) => t.to === n.to) && allowed(n));
   return (
     <>
       {more && (

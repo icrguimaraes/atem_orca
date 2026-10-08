@@ -45,7 +45,13 @@ def create_user(
     if db.scalar(select(User).where(User.email == payload.email.lower())):
         raise HTTPException(409, "E-mail já cadastrado")
     _check_roles(db, payload.roles)
-    user = User(email=payload.email.lower(), name=payload.name, password_hash=hash_password(payload.password))
+    user = User(
+        email=payload.email.lower(),
+        name=payload.name,
+        password_hash=hash_password(payload.password),
+        can_view_pj=payload.can_view_pj,
+        can_view_all_pj=payload.can_view_pj and payload.can_view_all_pj,
+    )
     user.roles = [UserRole(role_code=r) for r in set(payload.roles)]
     db.add(user)
     db.flush()
@@ -92,6 +98,8 @@ def update_user(
     for key, value in data.items():
         if value is not None:
             setattr(user, key, value)
+    if not user.can_view_pj:  # "Vê contratos PJ: Não" limpa também o "Todos"
+        user.can_view_all_pj = False
     if "name" in data:  # nome do gestor exibido nos CCs que ele gere
         for cc in db.scalars(select(CostCenter).where(CostCenter.manager_user_id == user.id)):
             cc.manager_name = user.name

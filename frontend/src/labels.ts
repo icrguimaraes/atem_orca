@@ -261,3 +261,57 @@ export const MOVEMENT_LABELS: Record<string, { label: string; tone: Tone }> = {
   TRANSFER: { label: "Transferência", tone: "warn" },
   HIRE: { label: "Admissão", tone: "good" },
 };
+
+// ---------------------------------------------------------------- contratos PJ (página /pj)
+
+export const PJ_STATUS: Record<string, { label: string; tone: Tone }> = {
+  ACTIVE: { label: "Ativo", tone: "good" },
+  ENDED: { label: "Encerrado", tone: "neutral" },
+};
+export const PJ_ACCESS_LABELS: Record<string, string> = { NONE: "Não", AREA: "Da área", ALL: "Todos" };
+
+const DEC2 = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/** String decimal da API ("12345.67") → campo de edição "12.345,67" (vazio se nulo). */
+export function fmtMoneyInput(v: string | null | undefined): string {
+  if (v === null || v === undefined || v === "") return "";
+  const n = Number(v);
+  return Number.isFinite(n) ? DEC2.format(n) : v;
+}
+
+/**
+ * Texto digitado ("R$ 12.345,67", "12345.6", "12.345") → string decimal para a API ("12345.67").
+ * null = vazio; undefined = inválido.
+ */
+export function parseMoney(text: string): string | null | undefined {
+  const t = text.replace(/R\$|\s/g, "");
+  if (!t) return null;
+  let norm: string;
+  if (t.includes(",")) norm = t.replace(/\./g, "").replace(",", ".");
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) norm = t.replace(/\./g, "");
+  else norm = t;
+  if (!/^\d+(\.\d{1,2})?$/.test(norm)) return undefined;
+  return norm.replace(/^0+(?=\d)/, "");
+}
+
+/** "AAAA-MM-DD" → "DD/MM/AAAA" sem passar por Date (evita voltar um dia pelo fuso). */
+export const fmtDay = (d: string | null | undefined) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—");
+
+/** Tempo de casa: "2 anos e 3 meses", "8 meses", "menos de 1 mês". */
+export function fmtTenure(t: { years: number; months: number }): string {
+  const y = t.years ? `${t.years} ano${t.years > 1 ? "s" : ""}` : "";
+  const m = t.months ? `${t.months} ${t.months > 1 ? "meses" : "mês"}` : "";
+  if (y && m) return `${y} e ${m}`;
+  return y || m || "menos de 1 mês";
+}
+
+/** CNPJ enquanto digita: 00.000.000/0000-00 (aceita o CNPJ alfanumérico, letras nas 12 primeiras posições). */
+export function maskCnpj(text: string): string {
+  const v = text.toUpperCase().replace(/[^0-9A-Z]/g, "").slice(0, 14);
+  let out = v.slice(0, 2);
+  if (v.length > 2) out += `.${v.slice(2, 5)}`;
+  if (v.length > 5) out += `.${v.slice(5, 8)}`;
+  if (v.length > 8) out += `/${v.slice(8, 12)}`;
+  if (v.length > 12) out += `-${v.slice(12)}`;
+  return out;
+}

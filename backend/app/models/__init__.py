@@ -41,4 +41,5 @@ from app.models.personnel import (
     PersonnelScenario,
     ScenarioMultiplier,
 )
+from app.models.pj import PjContract, PjPhoto
 from app.models.security import RoleDef, User, UserRole, UserScope

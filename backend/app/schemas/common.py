@@ -22,6 +22,13 @@ class LoginIn(BaseModel):
     password: str
 
 
+def pj_access(user) -> str:
+    """Nível nos contratos PJ: NONE (sem acesso), AREA (só os CCs das áreas da própria pessoa) ou ALL."""
+    if not user.can_view_pj:
+        return "NONE"
+    return "ALL" if user.can_view_all_pj else "AREA"
+
+
 class UserOut(ORM):
     id: int
     email: str
@@ -29,6 +36,10 @@ class UserOut(ORM):
     is_active: bool
     roles: list[str] = []
     last_login_at: datetime | None = None
+    # contratos PJ (confidencial): "Vê contratos PJ: Não / Da área / Todos"
+    can_view_pj: bool = False
+    can_view_all_pj: bool = False
+    pj_access: str = "NONE"  # NONE | AREA | ALL
 
     @classmethod
     def build(cls, user) -> "UserOut":
@@ -39,6 +50,9 @@ class UserOut(ORM):
             is_active=user.is_active,
             roles=sorted(user.role_codes),
             last_login_at=user.last_login_at,
+            can_view_pj=bool(user.can_view_pj),
+            can_view_all_pj=bool(user.can_view_pj and user.can_view_all_pj),
+            pj_access=pj_access(user),
         )
 
 
@@ -50,6 +64,8 @@ class UserCreate(BaseModel):
     cost_center_ids: list[int] = []  # CCs liberados já na criação (escopo)
     manager_of: list[int] = []  # CCs em que o usuário passa a ser o gestor (cadastro do CC)
     department_ids: list[int] = []  # áreas inteiras
+    can_view_pj: bool = False  # contratos PJ: Da área
+    can_view_all_pj: bool = False  # contratos PJ: Todos (só vale com can_view_pj)
 
 
 class UserUpdate(BaseModel):
@@ -57,6 +73,8 @@ class UserUpdate(BaseModel):
     email: EmailStr | None = None
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=8)
+    can_view_pj: bool | None = None  # "Não" (False) limpa também o "Todos"
+    can_view_all_pj: bool | None = None
 
 
 class UserCostCentersIn(BaseModel):
