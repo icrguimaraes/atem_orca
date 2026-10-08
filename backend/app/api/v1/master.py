@@ -1,5 +1,6 @@
 """Cadastros mestres com CRUD auditado (leitura para todos os autenticados; escrita só ADMIN)."""
 
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -46,8 +47,10 @@ def _register_crud(
     order_by: Any = None,
     filters: dict[str, Any] | None = None,
     list_endpoint: bool = True,
+    after_update: Callable[[Session, Any, dict, int, str | None], None] | None = None,
 ) -> None:
-    """Gera GET lista / GET item / POST / PATCH com auditoria para um cadastro simples."""
+    """Gera GET lista / GET item / POST / PATCH com auditoria para um cadastro simples. `after_update(db, obj, before,
+    actor_id, ip)` roda depois do PATCH, na mesma transação (ex.: setor que muda de área leva os seus CCs)."""
     filters = filters or {}
     tag = [path.strip("/")]
 
@@ -120,6 +123,8 @@ def _register_crud(
             after=audit.snapshot(obj),
             ip=client_ip(request),
         )
+        if after_update:
+            after_update(db, obj, before, actor.id, client_ip(request))
         db.commit()
         return obj
 
@@ -192,9 +197,40 @@ _register_crud(
     order_by=ContractType.code,
 )
 _register_crud("/departments", Department, s.NamedIn, s.NamedOut, "department", order_by=Department.name)
+
+
+def _sector_moved(db: Session, area: Area, before: dict, actor_id: int, ip: str | None) -> None:
+    """Setor que mudou de área leva os seus centros de custo junto (o CC guarda a área para os filtros e o Painel)."""
+    if before.get("department_id") == area.department_id:
+        return
+    for cc in db.scalars(select(CostCenter).where(CostCenter.area_id == area.id)):
+        if cc.department_id == area.department_id:
+            continue
+        old = {"department_id": cc.department_id}
+        cc.department_id = area.department_id
+        audit.record(
+            db,
+            user_id=actor_id,
+            action="UPDATE",
+            entity_type="cost_center",
+            entity_id=cc.id,
+            before=old,
+            after={"department_id": cc.department_id, "motivo": f"setor {area.name} mudou de área"},
+            ip=ip,
+        )
+    _flush(db)
+
+
 # no Painel: "Área" = departments (Controladoria, Tributos…) e "Setor" = areas (Fiscal, Contabilidade…)
 _register_crud(
-    "/areas", Area, s.AreaIn, s.AreaOut, "area", order_by=Area.name, filters={"department_id": Area.department_id}
+    "/areas",
+    Area,
+    s.AreaIn,
+    s.AreaOut,
+    "area",
+    order_by=Area.name,
+    filters={"department_id": Area.department_id},
+    after_update=_sector_moved,
 )
 _register_crud(
     "/package-managers",
