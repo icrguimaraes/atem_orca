@@ -1193,18 +1193,21 @@ def budget_progress(
             )
         ).all()
     )
+    # pacote da linha; linha importada antes de a conta ter pacote usa o pacote atual da conta
+    line_pkg = func.coalesce(BudgetLine.package_id, Account.package_id)
     line_stmt = (
-        select(BudgetLine.package_id, BudgetLine.cost_center_id, func.sum(BudgetLine.total_amount))
+        select(line_pkg, BudgetLine.cost_center_id, func.sum(BudgetLine.total_amount))
         .join(BudgetSubmission, BudgetSubmission.id == BudgetLine.submission_id)
+        .join(Account, Account.id == BudgetLine.account_id)
         .where(
             BudgetSubmission.version_id == version.id,
             BudgetSubmission.module == "OPEX",
             BudgetLine.cost_center_id.in_(cc_ids or {-1}),
         )
-        .group_by(BudgetLine.package_id, BudgetLine.cost_center_id)
+        .group_by(line_pkg, BudgetLine.cost_center_id)
     )
     if package_id:
-        line_stmt = line_stmt.where(BudgetLine.package_id == package_id)
+        line_stmt = line_stmt.where(line_pkg == package_id)
     proposed: dict[int | None, Decimal] = defaultdict(lambda: ZERO)
     started: set[int] = set()
     for pkg_id, cc_id, amount in db.execute(line_stmt):

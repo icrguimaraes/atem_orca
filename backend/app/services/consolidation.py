@@ -160,7 +160,9 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
     )
     for company_id, branch_id, cc_id, acc_id, pkg_id, month, amount in opex:
         acc = accounts.get(acc_id)
-        add("OPEX", company_id, branch_id, cc_id, acc.code, acc.name, packages.get(pkg_id), month, amount)
+        # linha importada antes de a conta ter pacote: vale o pacote atual da conta
+        package = packages.get(pkg_id) or packages.get(acc.package_id)
+        add("OPEX", company_id, branch_id, cc_id, acc.code, acc.name, package, month, amount)
 
     capex = db.execute(
         select(

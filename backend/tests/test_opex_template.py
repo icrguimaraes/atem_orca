@@ -280,3 +280,21 @@ def test_validation_shows_sheet_and_findings_point_to_rows(client, admin, run_wo
     assert client.get(f"/api/v1/validation/{batch_id}/sheet", headers=admin, params={"name": "x"}).status_code == 404
     _, mgr = _user(client, admin, "gestor.valid@t.com", ["MANAGER"])
     assert client.get("/api/v1/validation/files", headers=mgr).status_code == 403
+
+
+def test_line_without_package_uses_current_account_package(client, admin, run_worker):
+    """Linha importada quando a conta ainda não tinha pacote: depois que a conta ganha pacote no cadastro, o Painel e
+    a consolidação usam o pacote atual da conta (não fica em "Sem pacote")."""
+    acc = next(
+        a for a in client.get("/api/v1/accounts?q=6010301002", headers=admin).json() if a["code"] == "6010301002"
+    )
+    pkg_id = acc["package_id"]
+    assert client.patch(f"/api/v1/accounts/{acc['id']}", headers=admin, json={"package_id": None}).status_code == 200
+    import_and_load(client, admin, run_worker, builders.opex_template_filled(), "t-sem-pacote.xlsx")
+    q = "/api/v1/dashboard/breakdown?group_by=package&years=2027&compare=false&modules=OPEX"
+    assert "Sem pacote" in {r["name"] for r in client.get(q, headers=admin).json()["rows"]}
+    assert client.patch(f"/api/v1/accounts/{acc['id']}", headers=admin, json={"package_id": pkg_id}).status_code == 200
+    rows = {r["name"] for r in client.get(q, headers=admin).json()["rows"]}
+    assert "Sem pacote" not in rows and "DTI" in rows
+    progress = client.get("/api/v1/dashboard/overview", headers=admin).json()["budget_progress"]
+    assert "Sem pacote" not in {p["package"] for p in progress["by_package"] if float(p["proposed"])}
