@@ -674,6 +674,79 @@ def move_employee(
     return {"employee_id": emp.id, "cost_center": f"{cc.code} · {cc.name}", "movements_moved": len(moved)}
 
 
+class ExcludeEmployeeIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+@router.put(
+    "/employees/{employee_id}/exclude",
+    summary="Retira o colaborador do orçamento (Controladoria): fica inativo e as movimentações dele no ciclo saem",
+)
+def exclude_employee(
+    employee_id: int,
+    body: ExcludeEmployeeIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(Role.CONTROLLER)),
+):
+    """Correção de quadro (ex.: pessoa que já está no orçamento de outra área). O cadastro é mantido, inativo; as
+    movimentações do ciclo são removidas e guardadas na auditoria. Reimportar o quadro reativa o colaborador."""
+    ctx = _ctx(db)
+    emp = db.get(Employee, employee_id)
+    if emp is None:
+        raise HTTPException(404, "Colaborador não encontrado")
+    if not emp.is_active:
+        raise HTTPException(409, "O colaborador já está fora do orçamento")
+    sub = opex_svc.get_submission(db, ctx, emp.cost_center_id, module="PERSONNEL") if emp.cost_center_id else None
+    removed = []
+    for mv in db.scalars(
+        select(PersonnelMovement)
+        .join(BudgetSubmission, BudgetSubmission.id == PersonnelMovement.submission_id)
+        .where(PersonnelMovement.employee_id == emp.id, BudgetSubmission.version_id == ctx.version.id)
+    ):
+        removed.append(
+            {
+                "type": mv.movement_type,
+                "month": mv.effective_month,
+                "new_salary": str(mv.new_salary or ""),
+                "reason": mv.reason,
+            }
+        )
+        db.delete(mv)
+    cc = db.get(CostCenter, emp.cost_center_id) if emp.cost_center_id else None
+    emp.is_active = False
+    db.flush()
+    note = f"{emp.name} retirado do orçamento de pessoal ({cc.code if cc else 'sem CC'}): {body.reason}"
+    if sub is not None:
+        findings_svc.log(
+            db,
+            sub,
+            {
+                "key": f"{sub.id}:EMPLOYEE:{emp.id}:PERSONNEL_EXCLUDED",
+                "kind": "PERSONNEL_EXCLUDED",
+                "severity": "INFO",
+                "subject": emp.name,
+                "message": "Colaborador retirado do orçamento pela Controladoria",
+            },
+            "CORRECTED",
+            note,
+            actor.id,
+        )
+    audit.record(
+        db,
+        user_id=actor.id,
+        action="EXCLUDE",
+        entity_type="employee",
+        entity_id=emp.id,
+        before={"is_active": True, "cost_center": cc.code if cc else None, "movements": removed},
+        after={"is_active": False},
+        reason=note,
+        ip=client_ip(request),
+    )
+    db.commit()
+    return {"employee_id": emp.id, "movements_removed": len(removed)}
+
+
 @router.get("/options", summary="Contratos, cargos, centros de custo (transferência) e cenário base")
 def options(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     ctx = _ctx(db)

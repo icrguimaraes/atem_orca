@@ -68,6 +68,7 @@ KIND_LABELS = {
     "PERSONNEL_NO_CC": "Colaborador sem centro de custo",
     "OPEX_MOVED_CC": "Lançamento em CC de outra área",
     "PERSONNEL_CC_MOVED": "Colaborador movido de centro de custo",
+    "PERSONNEL_EXCLUDED": "Colaborador retirado do orçamento",
 }
 FLAG_TEXT = {
     "NEW_ACCOUNT": "Conta nova, sem histórico",

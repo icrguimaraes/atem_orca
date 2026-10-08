@@ -489,3 +489,37 @@ def test_move_employee_to_other_cost_center(client, admin, run_worker):
         ).status_code
         == 409
     )
+
+
+def test_exclude_employee_from_budget(client, admin, run_worker):
+    """Controladoria retira o colaborador do orçamento: fica inativo, sai do quadro e as movimentações saem."""
+    from tests import builders
+    from tests.test_imports import import_and_load
+
+    import_and_load(client, admin, run_worker, builders.opex_template_filled(), "t-excl.xlsx")
+    src = client.get("/api/v1/cost-centers", headers=admin).json()[0]
+    head = client.get(f"/api/v1/personnel/cost-centers/{src['id']}", headers=admin).json()
+    view = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).json()
+    emp = next((p for p in view["positions"] if p["employee_id"]), None)
+    if emp is None:
+        return
+    assert (
+        client.put(
+            f"/api/v1/personnel/employees/{emp['employee_id']}/exclude", headers=admin, json={"reason": "x"}
+        ).status_code
+        == 422
+    )
+    r = client.put(
+        f"/api/v1/personnel/employees/{emp['employee_id']}/exclude",
+        headers=admin,
+        json={"reason": "já está em outro orçamento"},
+    )
+    assert r.status_code == 200, r.text
+    after = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).json()
+    assert emp["employee_id"] not in [p["employee_id"] for p in after["positions"]]
+    assert (
+        client.put(
+            f"/api/v1/personnel/employees/{emp['employee_id']}/exclude", headers=admin, json={"reason": "repetido"}
+        ).status_code
+        == 409
+    )
