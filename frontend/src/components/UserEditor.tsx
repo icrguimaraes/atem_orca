@@ -34,6 +34,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
   const [depts, setDepts] = useState<Department[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [access, setAccess] = useState<UserAccess | null>(null);
+  const [people, setPeople] = useState<Map<number, UserListItem>>(new Map());
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [manager, setManager] = useState<Set<number>>(new Set());
   const [q, setQ] = useState("");
@@ -46,8 +47,10 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
       api<Department[]>("/departments"),
       api<Company[]>("/companies"),
       user ? api<UserAccess>(`/users/${user.id}/access`) : Promise.resolve(null),
+      api<UserListItem[]>("/users"),
     ])
-      .then(([c, d, co, a]) => {
+      .then(([c, d, co, a, us]) => {
+        setPeople(new Map(us.map((u) => [u.id, u])));
         setCcs(c.filter((x) => x.is_active || (a && (a.managed.some((m) => m.id === x.id) || a.scopes.some((s) => s.cost_center_id === x.id)))));
         setDepts(d);
         setCompanies(co);
@@ -121,8 +124,25 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
     if (!form.roles.length) return setError("Escolha ao menos um perfil");
     const cost_center_ids = [...selected].filter((id) => !manager.has(id));
     const manager_of = [...manager];
+    // o CC está ligado a OUTRA conta de usuário (o nome no CC pode ser igual: ex. a mesma pessoa com dois logins)
     const stealing = (ccs ?? []).filter((c) => manager.has(c.id) && c.manager_user_id && c.manager_user_id !== user?.id);
-    if (stealing.length && !window.confirm(`Trocar o gestor de ${stealing.map((c) => `${c.code} (hoje: ${c.manager_name ?? "outro usuário"})`).join(", ")}?`)) return;
+    const owner = (c: CostCenter) => {
+      const u = people.get(c.manager_user_id!);
+      return u ? `${u.name} <${u.email}>` : `usuário #${c.manager_user_id}`;
+    };
+    if (
+      stealing.length &&
+      !window.confirm(
+        [
+          "Estes CCs estão ligados a outra conta de usuário, que deixará de ser a gestora:",
+          "",
+          ...stealing.map((c) => `${c.code} · ${c.name}: hoje ${owner(c)}`),
+          "",
+          `Passar para ${form.name.trim()} <${form.email.trim().toLowerCase()}>?`,
+        ].join("\n"),
+      )
+    )
+      return;
     setBusy(true);
     try {
       if (creating) {
@@ -231,7 +251,12 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
                           <input type="checkbox" checked={selected.has(cc.id)} onChange={() => toggleCc(cc.id)} />
                           <span>
                             <strong>{cc.code}</strong> · {cc.name}
-                            <span className="muted small"> · {companyName(cc.company_id)}{cc.manager_name ? ` · gestor: ${cc.manager_name}` : " · sem gestor"}</span>
+                            <span className="muted small">
+                              {" "}· {companyName(cc.company_id)}
+                              {cc.manager_user_id
+                                ? ` · gestor: ${people.get(cc.manager_user_id)?.email ?? cc.manager_name ?? "outro usuário"}${cc.manager_user_id === user?.id ? " (este usuário)" : ""}`
+                                : cc.manager_name ? ` · gestor (sem login): ${cc.manager_name}` : " · sem gestor"}
+                            </span>
                           </span>
                         </label>
                         <label className="cc-manager" title="Gravar como gestor do CC (cadastro)">
