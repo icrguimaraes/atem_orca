@@ -160,6 +160,32 @@ def add_scope(db: Session, user: User, *, cost_center_id: int | None, company_id
     return scope
 
 
+def set_cost_centers(db: Session, user: User, cost_center_ids: list[int], manager_of: list[int]) -> dict:
+    """Define em lote os CCs do usuário: escopos por CC (substitui; empresas inteiras ficam) e de quais CCs ele é o
+    gestor. CC em que ele é gestor não precisa de escopo. Devolve o que mudou de gestor para a auditoria."""
+    wanted_mgr = set(manager_of)
+    wanted = set(cost_center_ids) - wanted_mgr
+    known = set(db.scalars(select(CostCenter.id).where(CostCenter.id.in_(wanted | wanted_mgr or {-1}))))
+    missing = (wanted | wanted_mgr) - known
+    if missing:
+        raise AccessError(f"Centro(s) de custo não encontrado(s): {sorted(missing)}", 404)
+    user.scopes = [s for s in user.scopes if not s.cost_center_id] + [
+        UserScope(user_id=user.id, cost_center_id=cc_id) for cc_id in sorted(wanted)
+    ]
+    changed = []
+    for cc in db.scalars(
+        select(CostCenter).where((CostCenter.manager_user_id == user.id) | CostCenter.id.in_(wanted_mgr or {-1}))
+    ):
+        if cc.id in wanted_mgr and cc.manager_user_id != user.id:
+            changed.append({"cost_center": cc.code, "from": cc.manager_user_id, "to": user.id})
+            cc.manager_user_id, cc.manager_name = user.id, user.name
+        elif cc.id not in wanted_mgr and cc.manager_user_id == user.id:
+            changed.append({"cost_center": cc.code, "from": user.id, "to": None})
+            cc.manager_user_id = None
+    db.flush()
+    return {"managers": changed}
+
+
 def remove_scope(db: Session, user: User, scope_id: int) -> None:
     scope = next((s for s in user.scopes if s.id == scope_id), None)
     if scope is None:

@@ -190,6 +190,17 @@ a { color: inherit; }
 .question-form { display: grid; gap: 6px; }
 .question-form textarea { width: 100%; }
 @media (max-width: 860px) { .why-tip { display: none; } .why-bar-row { grid-template-columns: minmax(0, 1fr) 70px 84px; } }
+/* Usuários: perfis e seleção de centros de custo */
+.role-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+.role-option { display: flex; gap: 8px; align-items: flex-start; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; cursor: pointer; font-size: 13px; }
+.role-option.on { border-color: var(--text); }
+.cc-picker { display: grid; gap: 12px; max-height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; }
+.cc-group { display: grid; gap: 2px; }
+.cc-group-head { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); position: sticky; top: -8px; background: var(--surface); z-index: 1; }
+.cc-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 5px 4px 5px 22px; border-radius: 6px; font-size: 13px; }
+.cc-row.on { background: var(--surface-2); }
+.cc-main { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; min-width: 0; }
+.cc-manager { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; white-space: nowrap; cursor: pointer; }
 /* tela de Justificativas */
 .just-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .just-item { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; display: grid; gap: 8px; }

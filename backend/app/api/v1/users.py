@@ -5,9 +5,17 @@ from sqlalchemy.orm import Session
 from app.core.deps import client_ip, require_roles
 from app.core.security import hash_password
 from app.db import get_db
-from app.models import RoleDef, User, UserRole, UserScope
+from app.models import CostCenter, RoleDef, User, UserRole, UserScope
 from app.models.base import Role
-from app.schemas.common import ScopeIn, UserAccessOut, UserCreate, UserListOut, UserOut, UserUpdate
+from app.schemas.common import (
+    ScopeIn,
+    UserAccessOut,
+    UserCostCentersIn,
+    UserCreate,
+    UserListOut,
+    UserOut,
+    UserUpdate,
+)
 from app.services import audit
 from app.services import user_access as access_svc
 
@@ -41,13 +49,19 @@ def create_user(
     user.roles = [UserRole(role_code=r) for r in set(payload.roles)]
     db.add(user)
     db.flush()
+    changes = {}
+    if payload.cost_center_ids or payload.manager_of:
+        try:
+            changes = access_svc.set_cost_centers(db, user, payload.cost_center_ids, payload.manager_of)
+        except access_svc.AccessError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
     audit.record(
         db,
         user_id=actor.id,
         action="CREATE",
         entity_type="user",
         entity_id=user.id,
-        after=audit.snapshot(user) | {"roles": payload.roles},
+        after=audit.snapshot(user) | {"roles": payload.roles, "scopes": access_svc.snapshot(db, user)} | changes,
         ip=client_ip(request),
     )
     db.commit()
@@ -65,10 +79,20 @@ def update_user(
     user = db.get(User, user_id) or _not_found()
     before = audit.snapshot(user)
     data = payload.model_dump(exclude_unset=True)
+    if data.get("email"):
+        data["email"] = data["email"].lower()
+        if db.scalar(select(User).where(User.email == data["email"], User.id != user.id)):
+            raise HTTPException(409, "E-mail já cadastrado")
+    if user.id == actor.id and data.get("is_active") is False:
+        raise HTTPException(409, "Você não pode desativar o próprio usuário")
     if "password" in data:
         user.password_hash = hash_password(data.pop("password"))
     for key, value in data.items():
-        setattr(user, key, value)
+        if value is not None:
+            setattr(user, key, value)
+    if "name" in data:  # nome do gestor exibido nos CCs que ele gere
+        for cc in db.scalars(select(CostCenter).where(CostCenter.manager_user_id == user.id)):
+            cc.manager_name = user.name
     audit.record(
         db,
         user_id=actor.id,
@@ -192,6 +216,35 @@ def remove_scope(
         entity_id=user.id,
         before={"scopes": before},
         after={"scopes": access_svc.snapshot(db, user), "removed": scope_id},
+        ip=client_ip(request),
+    )
+    out = access_svc.detail(db, user)
+    db.commit()
+    return out
+
+
+@router.put("/{user_id}/cost-centers", response_model=UserAccessOut, summary="CCs do usuário em lote (escopo e gestor)")
+def set_cost_centers(
+    user_id: int,
+    payload: UserCostCentersIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    actor: User = Depends(controller),
+) -> dict:
+    user = db.get(User, user_id) or _not_found()
+    before = access_svc.snapshot(db, user)
+    try:
+        changes = access_svc.set_cost_centers(db, user, payload.cost_center_ids, payload.manager_of)
+    except access_svc.AccessError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+    audit.record(
+        db,
+        user_id=actor.id,
+        action="SET_COST_CENTERS",
+        entity_type="user",
+        entity_id=user.id,
+        before={"scopes": before},
+        after={"scopes": access_svc.snapshot(db, user)} | changes,
         ip=client_ip(request),
     )
     out = access_svc.detail(db, user)

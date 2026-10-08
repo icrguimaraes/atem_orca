@@ -104,3 +104,48 @@ def test_only_controller_changes_access(client, admin):
     assert client.delete(f"{USERS}/{other_id}/scopes/{scope_id}", headers=other).status_code == 403
     assert client.delete(f"{USERS}/{mgr_id}/scopes/{scope_id}", headers=admin).status_code == 404  # escopo de outro
     assert _visible(client, other) == ["3001002"]
+
+
+def test_create_with_cost_centers_and_edit_user(client, admin):
+    """Criar já com os CCs (escopo e gestor) e editar tudo depois: nome, e-mail, perfis, ativo, senha e CCs."""
+    _, _, _, ccs = _setup(client, admin)
+    body = {
+        "email": "novo.gestor@t.com",
+        "name": "Novo Gestor",
+        "password": "Senha@123",
+        "roles": ["MANAGER"],
+        "cost_center_ids": [ccs["3001002"]],
+        "manager_of": [ccs["3002001"]],
+    }
+    created = client.post(USERS, headers=admin, json=body)
+    assert created.status_code == 201, created.text
+    uid = created.json()["id"]
+    access = client.get(f"{USERS}/{uid}/access", headers=admin).json()
+    assert [c["code"] for c in access["managed"]] == ["3002001"] and access["cost_centers"] == 2
+    cc = client.get(f"/api/v1/cost-centers/{ccs['3002001']}", headers=admin).json()
+    assert cc["manager_user_id"] == uid and cc["manager_name"] == "Novo Gestor"
+
+    upd = client.patch(f"{USERS}/{uid}", headers=admin, json={"name": "Gestor Renomeado", "email": "Renomeado@t.com"})
+    assert upd.status_code == 200 and upd.json()["email"] == "renomeado@t.com"
+    assert (
+        client.get(f"/api/v1/cost-centers/{ccs['3002001']}", headers=admin).json()["manager_name"] == "Gestor Renomeado"
+    )
+    assert client.patch(f"{USERS}/{uid}", headers=admin, json={"email": "gestor.acesso@t.com"}).status_code == 409
+    assert client.put(f"{USERS}/{uid}/roles", headers=admin, json=["VIEWER"]).json()["roles"] == ["VIEWER"]
+
+    # troca os CCs em lote: deixa de ser gestor do 3002001 (fica sem gestor) e passa a ver só o 3001001
+    out = client.put(
+        f"{USERS}/{uid}/cost-centers", headers=admin, json={"cost_center_ids": [ccs["3001001"]], "manager_of": []}
+    )
+    assert out.status_code == 200, out.text
+    assert out.json()["cost_centers"] == 1 and not out.json()["managed"]
+    assert client.get(f"/api/v1/cost-centers/{ccs['3002001']}", headers=admin).json()["manager_user_id"] is None
+    assert (
+        client.patch(f"{USERS}/{uid}", headers=admin, json={"is_active": False, "password": "NovaSenha@1"}).json()[
+            "is_active"
+        ]
+        is False
+    )
+    logs = client.get("/api/v1/audit-logs?entity_type=user", headers=admin).json()
+    actions = {x["action"] for x in (logs["items"] if isinstance(logs, dict) else logs)}
+    assert {"CREATE", "UPDATE", "SET_ROLES", "SET_COST_CENTERS"} <= actions

@@ -47,12 +47,23 @@ class UserCreate(BaseModel):
     name: str = Field(min_length=2)
     password: str = Field(min_length=8)
     roles: list[str] = ["MANAGER"]
+    cost_center_ids: list[int] = []  # CCs liberados já na criação (escopo)
+    manager_of: list[int] = []  # CCs em que o usuário passa a ser o gestor (cadastro do CC)
 
 
 class UserUpdate(BaseModel):
-    name: str | None = None
+    name: str | None = Field(default=None, min_length=2)
+    email: EmailStr | None = None
     is_active: bool | None = None
     password: str | None = Field(default=None, min_length=8)
+
+
+class UserCostCentersIn(BaseModel):
+    """CCs do usuário em lote: `cost_center_ids` substitui os CCs atribuídos (empresas inteiras ficam como estão);
+    `manager_of` define de quais CCs ele é o gestor (cadastro do CC) — os que saírem da lista ficam sem gestor."""
+
+    cost_center_ids: list[int] = []
+    manager_of: list[int] = []
 
 
 class ScopeIn(BaseModel):
