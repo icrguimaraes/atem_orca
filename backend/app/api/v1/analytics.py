@@ -25,7 +25,7 @@ def _ctx(db: Session) -> opex_svc.Context:
 @router.get("/dashboard", summary="KPIs e figuras Plotly do orçamento, já filtrados e formatados (pt-BR)")
 def dashboard(
     version_id: int | None = None,
-    company_id: int | None = None,
+    company_id: str | None = Query(None, description="Uma ou mais empresas: 1 ou 1,2"),
     department_id: int | None = Query(None, description="Diretoria"),
     cost_center_id: int | None = None,
     account: str | None = Query(None, description="Código da conta contábil"),

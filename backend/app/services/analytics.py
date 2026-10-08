@@ -134,8 +134,8 @@ def pct(new: Decimal, base: Decimal) -> Decimal | None:
 
 @dataclass(frozen=True)
 class Filters:
-    company_id: int | None = None
-    department_id: int | None = None  # Diretoria
+    company_id: str | None = None  # uma ou mais empresas: "1" ou "1,2"
+    department_id: int | None = None  # Área
     cost_center_id: int | None = None
     account: str | None = None
     module: str | None = None
@@ -295,8 +295,9 @@ def build(db: Session, ctx: Context, version: BudgetVersion, visible: set[int] |
     scope = set(ccs)
     if visible is not None:
         scope &= visible
-    if f.company_id:
-        scope &= {c.id for c in ccs.values() if c.company_id == f.company_id}
+    wanted_companies = {int(x) for x in (f.company_id or "").split(",") if x.strip().isdigit()}
+    if wanted_companies:
+        scope &= {c.id for c in ccs.values() if c.company_id in wanted_companies}
     if f.department_id:  # -1 = centros de custo sem diretoria
         wanted = None if f.department_id == -1 else f.department_id
         scope &= {c.id for c in ccs.values() if c.department_id == wanted}

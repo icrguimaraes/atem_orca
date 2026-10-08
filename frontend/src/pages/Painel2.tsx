@@ -262,7 +262,8 @@ export default function Painel2() {
                   Todas
                 </button>
                 {companies.map((c) => {
-                  const on = filters.company_id === String(c.id);
+                  const picked = filters.company_id ? filters.company_id.split(",") : [];
+                  const on = picked.includes(String(c.id));
                   return (
                     <button
                       key={c.id}
@@ -270,7 +271,10 @@ export default function Painel2() {
                       className={on ? "active" : ""}
                       aria-pressed={on}
                       title={`${c.code} · ${c.name}`}
-                      onClick={() => setFilters({ ...filters, company_id: on ? "" : String(c.id), cost_center_id: "" })}
+                      onClick={() => {
+                        const next = on ? picked.filter((x) => x !== String(c.id)) : [...picked, String(c.id)];
+                        setFilters({ ...filters, company_id: next.length === companies.length ? "" : next.join(","), cost_center_id: "" });
+                      }}
                     >
                       {c.short_name ?? c.name}
                     </button>
@@ -307,7 +311,7 @@ export default function Painel2() {
             onChange: (v) => setFilters({ ...filters, cost_center_id: v }),
             options: [
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
-              ...ccs.filter((c) => (!filters.company_id || String(c.company_id) === filters.company_id) && (!department || String(c.department_id) === department)).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
+              ...ccs.filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!department || String(c.department_id) === department)).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
             ],
           },
         ]}

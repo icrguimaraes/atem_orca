@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.v1.dashboard import Facts, _last_closed, _period
+from app.api.v1.dashboard import Facts, _ints, _last_closed, _period
 from app.core.deps import client_ip, get_current_user, is_global, visible_cost_center_ids
 from app.db import get_db
 from app.models import (
@@ -61,8 +61,8 @@ def _scope_ccs(db: Session, user: User, company_id, cost_center_id, department_i
     visible = visible_cost_center_ids(db, user)
     if visible is not None:
         stmt = stmt.where(CostCenter.id.in_(visible or {-1}))
-    if company_id:
-        stmt = stmt.where(CostCenter.company_id == company_id)
+    if _ints(company_id):
+        stmt = stmt.where(CostCenter.company_id.in_(_ints(company_id)))
     if cost_center_id:
         stmt = stmt.where(CostCenter.id == cost_center_id)
     if department_id:
@@ -87,7 +87,7 @@ def why(
     parent_package_id: int | None = None,
     parent_no_package: bool = False,
     parent_account_id: int | None = None,
-    company_id: int | None = None,
+    company_id: str | None = None,
     cost_center_id: int | None = None,
     package_id: int | None = None,
     account_id: int | None = None,

@@ -117,9 +117,10 @@ export default function Analytics() {
               <div className="month-chips" role="group" aria-label="Empresas">
                 <button type="button" className={!filters.company_id ? "active" : ""} aria-pressed={!filters.company_id} onClick={() => { set({ company_id: "", cost_center_id: "" }); setTrail([]); }}>Todas</button>
                 {(companies.data ?? []).map((c) => {
-                  const on = filters.company_id === String(c.id);
+                  const picked = filters.company_id ? filters.company_id.split(",") : [];
+                  const on = picked.includes(String(c.id));
                   return (
-                    <button key={c.id} type="button" className={on ? "active" : ""} aria-pressed={on} title={`${c.code} · ${c.name}`} onClick={() => { set({ company_id: on ? "" : String(c.id), cost_center_id: "" }); setTrail([]); }}>
+                    <button key={c.id} type="button" className={on ? "active" : ""} aria-pressed={on} title={`${c.code} · ${c.name}`} onClick={() => { const next = on ? picked.filter((x) => x !== String(c.id)) : [...picked, String(c.id)]; set({ company_id: next.length === (companies.data ?? []).length ? "" : next.join(","), cost_center_id: "" }); setTrail([]); }}>
                       {c.short_name ?? c.name}
                     </button>
                   );
@@ -162,7 +163,7 @@ export default function Analytics() {
             options: () => [
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
               ...(opts.data?.cost_centers ?? [])
-                .filter((c) => (!filters.company_id || String(c.company_id) === filters.company_id) && (!filters.department_id || String(c.department_id) === filters.department_id))
+                .filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!filters.department_id || String(c.department_id) === filters.department_id))
                 .map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
             ],
           },

@@ -292,7 +292,10 @@ class Facts:
         self.account_id = account_id  # filtro por conta (clique nos visuais do Painel 2)
         self.department_id = department_id  # filtro por área (Controladoria, Tributos…) do CC
         self.visible = visible_cost_center_ids(db, user)
-        self.company_id, self.cost_center_id, self.package_id = company_id, cost_center_id, package_id
+        # empresa(s): inteiro ou lista "1,2" (filtro com mais de uma empresa, 08/10/2026)
+        self.company_ids = {company_id} if isinstance(company_id, int) else _ints(company_id)
+        self.company_id = next(iter(self.company_ids)) if len(self.company_ids) == 1 else None
+        self.cost_center_id, self.package_id = cost_center_id, package_id
         self.months = period.months
         self.modules = period.modules
         self.target_year = period.target_year
@@ -304,8 +307,8 @@ class Facts:
         stmt = stmt.join(DatasetVersion, DatasetVersion.id == model.dataset_version_id).where(DatasetVersion.is_current)
         if self.visible is not None:
             stmt = stmt.where(model.cost_center_id.in_(self.visible or {-1}))
-        if self.company_id:
-            stmt = stmt.where(model.company_id == self.company_id)
+        if self.company_ids:
+            stmt = stmt.where(model.company_id.in_(self.company_ids))
         if self.cost_center_id:
             stmt = stmt.where(model.cost_center_id == self.cost_center_id)
         if self.package_id:
@@ -354,10 +357,10 @@ class Facts:
             accounts = {a.code: a.id for a in self.db.scalars(select(Account))}
             packages = {p.name.upper(): p.id for p in self.db.scalars(select(BudgetPackage))}
             self._structure = {c.id: (c.department_id, c.area_id) for c in self.db.scalars(select(CostCenter))}
-            company_code = companies.get(self.company_id) if self.company_id else None
+            company_codes = {companies[i] for i in self.company_ids if i in companies}
             out = []
             for r in rows:
-                if r.cost_center_id is None or (company_code and r.company_code != company_code):
+                if r.cost_center_id is None or (company_codes and r.company_code not in company_codes):
                     continue
                 if self.cost_center_id and r.cost_center_id != self.cost_center_id:
                     continue
@@ -513,7 +516,7 @@ def _base_sums(f: Facts, P: Period, key: str) -> dict:
 
 @router.get("/overview", summary="KPIs, evolução mensal e rankings do período (anos somados × meses × tipos)")
 def overview(
-    company_id: int | None = None,
+    company_id: str | None = None,
     cost_center_id: int | None = None,
     package_id: int | None = None,
     account_id: int | None = None,
@@ -708,7 +711,7 @@ def _evolution(db: Session, f: Facts, P: Period, marks: list[str] | None = None)
 @router.get("/evolution", summary="Evolução do orçamento (cascata) com os marcos escolhidos no próprio visual")
 def evolution(
     marks: str | None = Query(None, description='Marcos, ex.: "actual:2024,actual:2025,target:2027"'),
-    company_id: int | None = None,
+    company_id: str | None = None,
     cost_center_id: int | None = None,
     package_id: int | None = None,
     account_id: int | None = None,
@@ -796,7 +799,7 @@ def breakdown(
     parent_package_id: int | None = None,
     parent_no_package: bool = False,
     parent_account_id: int | None = None,
-    company_id: int | None = None,
+    company_id: str | None = None,
     cost_center_id: int | None = None,
     package_id: int | None = None,
     account_id: int | None = None,
@@ -1159,7 +1162,7 @@ def _heatmap(db: Session, f: Facts, model, years: list[int], limit: int = 12) ->
 def budget_progress(
     db: Session,
     user: User,
-    company_id: int | None = None,
+    company_id: str | None = None,
     cost_center_id: int | None = None,
     package_id: int | None = None,
 ) -> dict | None:
@@ -1180,8 +1183,8 @@ def budget_progress(
     cc_stmt = select(CostCenter.id).where(CostCenter.is_active)
     if visible is not None:
         cc_stmt = cc_stmt.where(CostCenter.id.in_(visible or {-1}))
-    if company_id:
-        cc_stmt = cc_stmt.where(CostCenter.company_id == company_id)
+    if _ints(company_id):
+        cc_stmt = cc_stmt.where(CostCenter.company_id.in_(_ints(company_id)))
     if cost_center_id:
         cc_stmt = cc_stmt.where(CostCenter.id == cost_center_id)
     cc_ids = set(db.scalars(cc_stmt))

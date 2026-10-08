@@ -449,3 +449,20 @@ def test_data_quality(client, admin, run_worker):
     assert checks["NO_ACTUAL_2025"]["title"] == "Realizado 2025 ainda não carregado"
     assert checks["MULTIPLE_CURRENT"]["severity"] == "OK"
     assert checks["CC_NO_USER"]["count"] == 2
+
+
+def test_dashboard_accepts_multiple_companies(client, admin, run_worker):
+    """Filtro com mais de uma empresa no Painel: "1,2" soma as duas; o total sem filtro é igual ao das duas juntas."""
+    from tests import builders
+    from tests.test_imports import import_and_load
+
+    import_and_load(client, admin, run_worker, builders.opex_template_filled(), "t-multi.xlsx")
+    companies = client.get("/api/v1/companies", headers=admin).json()
+    ids = ",".join(str(c["id"]) for c in companies)
+    q = "/api/v1/dashboard/overview?years=2027&compare=false"
+    all_ = client.get(q, headers=admin).json()["kpis"]
+    both = client.get(f"{q}&company_id={ids}", headers=admin)
+    assert both.status_code == 200, both.text
+    assert both.json()["kpis"] == all_
+    one = client.get(f"{q}&company_id={companies[0]['id']}", headers=admin)
+    assert one.status_code == 200
