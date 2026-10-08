@@ -8,6 +8,7 @@ const Analytics = lazy(() => import("./pages/Analytics"));
 // Painel (Plotly): só baixa o Plotly quando aberto
 const Painel2 = lazy(() => import("./pages/Painel2"));
 import Audit from "./pages/Audit";
+import BaseStatus from "./pages/BaseStatus";
 import CapexCostCenter from "./pages/CapexCostCenter";
 import Consolidation from "./pages/Consolidation";
 import CyclePage from "./pages/CyclePage";
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="pessoal/:ccId" element={<PersonnelCostCenter />} />
             <Route path="consolidacao" element={<Consolidation />} />
             <Route path="apontamentos" element={<Findings />} />
+            <Route path="base" element={<Protected roles={["CONTROLLER"]}><BaseStatus /></Protected>} />
             <Route path="validacao" element={<Protected roles={["CONTROLLER"]}><Validation /></Protected>} />
             <Route path="validacao/:id" element={<Protected roles={["CONTROLLER"]}><Validation /></Protected>} />
             <Route path="cadastros" element={<MasterData />} />

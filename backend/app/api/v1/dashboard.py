@@ -1128,6 +1128,7 @@ def inventory(db: Session = Depends(get_db), user: User = Depends(get_current_us
         },
         "personnel": personnel,
         "macro": {"years": sorted(years), "rows": list(macro_rows.values())},
+        "figures": {"people_by_cost_center": painel_figures.fig_people(personnel["by_cost_center"])},
     }
 
 

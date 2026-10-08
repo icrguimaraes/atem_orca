@@ -40,8 +40,9 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   figuras em `services/painel_figures.py` (`overview?figures=true`, filtro extra `account_id`); tooltip próprio via `meta.tooltip`
   + linhas no fim do `customdata`; clique nos visuais filtra (o visual clicado destaca em vez de se filtrar — séries sem o
   próprio filtro e `heatmap_all`; novo clique desmarca) e "Limpar filtros" reseta. O Painel antigo em SVG (`Home.tsx`) saiu em
-  07/10/2026; os blocos que não são gráfico (tarefas do gestor, validações GMD, base importada, qualidade, importações, versões)
-  estão em `components/PainelBlocks.tsx`.
+  07/10/2026; os blocos que não são gráfico (tarefas do gestor, validações GMD, quadro de pessoal e premissas) estão em
+  `components/PainelBlocks.tsx`. Cadastros, contratos, qualidade da base, importações e versões ficam na página de consulta
+  "Situação da base" (`pages/BaseStatus.tsx`, rota `/base`, só Controladoria).
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

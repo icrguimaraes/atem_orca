@@ -64,6 +64,14 @@ def _category(name: str | None, code: str | None) -> str:
     return f"{short(name, 26)} · {code}" if code else short(name, 34)
 
 
+def _categories(rows: list[dict], show_code: bool) -> list[str]:
+    """Categorias do eixo; sem código, o nome basta, e o código só volta quando dois itens têm o mesmo nome."""
+    if show_code:
+        return [_category(r["name"], r.get("code")) for r in rows]
+    names = [short(r["name"] or r.get("code") or "—", 34) for r in rows]
+    return [_category(r["name"], r.get("code")) if names.count(n) > 1 else n for r, n in zip(rows, names, strict=True)]
+
+
 def _labels(o: dict) -> dict:
     p = o["period"]
     prev_series = f"Realizado {o['previous_year']}" if p["annualized_base"] and o["previous_year"] else p["base_label"]
@@ -304,12 +312,12 @@ def fig_cumulative(o: dict) -> dict:
     return _fig(data, layout) | {"meta": {"tooltip": "unified"}}
 
 
-def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None = None) -> dict:
+def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None = None, show_code: bool = True) -> dict:
     """Barras horizontais do maior para o menor, em cor sólida; com base, barra fina abaixo de cada barra e a variação
     % no texto. As barras usam a largura útil inteira (valor e variação ficam na margem direita).
     customdata = [valor, base, variação, id (o clique filtra), linhas do tooltip]; a barra fina usa o mesmo."""
     rows = [r for r in rows if _num(r["value"]) or _num(r.get("base"))]
-    cats = [_category(r["name"], r.get("code")) for r in rows]
+    cats = _categories(rows, show_code)
     values = [_num(r["value"]) for r in rows]
     bases = [_num(r.get("base")) for r in rows]
     variations = [
@@ -373,8 +381,9 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
     top = max([*values, *bases, 0.0])
     layout = _layout(
         barmode="overlay",
-        showlegend=False,
-        height=max(120, 44 * len(rows) + 30),
+        showlegend=True,
+        legend=LEGEND,
+        height=max(150, 44 * len(rows) + 58),
         xaxis={
             "showticklabels": False,
             "showgrid": False,
@@ -383,7 +392,57 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
             "fixedrange": True,
         },
         yaxis={"autorange": "reversed", "automargin": True, "tickfont": {"size": 12}, "fixedrange": True},
-        margin={"l": 8, "r": 150 if show_base else 96, "t": 8, "b": 8},
+        margin={"l": 8, "r": 150 if show_base else 96, "t": 36, "b": 8},
+    )
+    return _fig(data, layout) | {"meta": {"tooltip": "point"}}
+
+
+def fig_people(rows: list[dict]) -> dict | None:
+    """Maiores centros de custo em pessoas (quadro importado): barras horizontais pela quantidade de pessoas, com a
+    folha mensal no rótulo. Só o nome do CC (o código entra apenas para diferenciar nomes iguais)."""
+    rows = [r for r in rows if r.get("headcount")]
+    if not rows:
+        return None
+    cats = _categories(rows, False)
+    counts = [int(r["headcount"]) for r in rows]
+    payroll = [_num(r["payroll"]) for r in rows]
+    text = [
+        f"<b>{n} pessoa{'s' if n != 1 else ''}</b>  <span style='font-size:11px'>{fmt_compact(v)} de folha</span>"
+        for n, v in zip(counts, payroll, strict=True)
+    ]
+    tips = [
+        [[f"Pessoas: {n}", REALIZADO], [f"Folha mensal: {fmt_money(v)}", ""]]
+        for n, v in zip(counts, payroll, strict=True)
+    ]
+    data = [
+        go.Bar(
+            orientation="h",
+            x=counts,
+            y=cats,
+            name="Pessoas no quadro",
+            width=0.6,
+            marker={"color": REALIZADO, "cornerradius": 4},
+            text=text,
+            textposition="outside",
+            cliponaxis=False,
+            textfont={"size": 12},
+            customdata=[[n, fmt_money(v), t] for n, v, t in zip(counts, payroll, tips, strict=True)],
+            hovertemplate="<b>%{y}</b><br>Pessoas: %{customdata[0]}<br>Folha mensal: %{customdata[1]}<extra></extra>",
+        )
+    ]
+    layout = _layout(
+        showlegend=True,
+        legend=LEGEND,
+        height=max(150, 44 * len(rows) + 58),
+        xaxis={
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+            "range": [0, max(counts) * 1.02],
+            "fixedrange": True,
+        },
+        yaxis={"autorange": "reversed", "automargin": True, "tickfont": {"size": 12}, "fixedrange": True},
+        margin={"l": 8, "r": 190, "t": 36, "b": 8},
     )
     return _fig(data, layout) | {"meta": {"tooltip": "point"}}
 
@@ -640,6 +699,7 @@ def build(
             lb,
             show_base,
             selected.get("cost_center_id"),
+            show_code=False,
         ),
         "top_accounts": fig_rank(
             ranked(o["top_accounts"] if top_accounts is None else top_accounts),

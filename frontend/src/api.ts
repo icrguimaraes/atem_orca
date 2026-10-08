@@ -245,6 +245,7 @@ export interface Inventory {
     years: number[];
     rows: { category: string; indicator: string; segment: string | null; source: string | null; reference_date: string | null; values: Record<string, string> }[];
   };
+  figures?: { people_by_cost_center: unknown };  // figura Plotly (PlotlyChart.Figure) ou null
 }
 
 // ---------------------------------------------------------------- OPEX

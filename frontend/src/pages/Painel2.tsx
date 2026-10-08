@@ -526,7 +526,7 @@ export default function Painel2() {
                 title={`Maiores centros de custo · ${mainLabel}`}
                 actions={filters.cost_center_id ? unpick("Desmarcar", () => setFilters((cur) => ({ ...cur, cost_center_id: "" }))) : undefined}
               >
-                <p className="muted small">{hasBase ? `Barra fina: ${baseLabel}. ` : ""}Clique num centro de custo para filtrar; de novo para desmarcar.</p>
+                <p className="muted small">Clique num centro de custo para filtrar; de novo para desmarcar.</p>
                 {o.top_cost_centers.length ? (
                   <PlotlyChart figure={f.top_cost_centers} onClick={onCostCenter} ariaLabel="Maiores centros de custo" />
                 ) : (
@@ -545,7 +545,7 @@ export default function Painel2() {
                 <p className="muted small">Clique numa célula para filtrar por centro de custo e mês; no nome, só pelo centro de custo. De novo para desmarcar.</p>
                 <Heatmap
                   budget={isBudgetMain}
-                  rows={heat.rows.map((r) => ({ label: r.name, sub: r.code, values: r.values.map(Number), total: Number(r.total) }))}
+                  rows={heat.rows.map((r) => ({ label: r.name, sub: heat.rows.filter((x) => x.name === r.name).length > 1 ? r.code : null, values: r.values.map(Number), total: Number(r.total) }))}
                   selectedRow={heatSelected >= 0 ? heatSelected : null}
                   selectedMonths={months}
                   onSelect={(ri, m) => {

@@ -23,6 +23,7 @@ const ICON = {
   estrutura: "M9 3h6v5H9zM12 8v3M6 14v-3h12v3M3 14h6v5H3zM15 14h6v5h-6z",
   ciclo: "M4 6h9m4 0h3M4 12h3m4 0h9M4 18h11m4 0h1M15 4v4M9 10v4M17 16v4",
   usuarios: "M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 20v-1.5a3.5 3.5 0 0 0-2.5-3.35M15.5 4.15a3.5 3.5 0 0 1 0 6.7",
+  base: "M4 19h16M7 16v-5M12 16V7M17 16v-8M4 5h4",
   auditoria: "M12 3 5 6v5c0 4.5 3 8.3 7 9.5 4-1.2 7-5 7-9.5V6l-7-3zM9 12l2 2 4-4",
   senha: "M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4",
   sair: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
@@ -44,6 +45,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     title: "Administração",
     items: [
       { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"], icon: ICON.importacoes },
+      { to: "/base", label: "Situação da base", roles: ["CONTROLLER"], icon: ICON.base },
       { to: "/cadastros", label: "Cadastros", roles: ["CONTROLLER"], icon: ICON.cadastros },
       { to: "/estrutura", label: "Áreas e setores", roles: ["CONTROLLER"], icon: ICON.estrutura },
       { to: "/ciclo", label: "Ciclo e parâmetros", roles: ["CONTROLLER"], icon: ICON.ciclo },
