@@ -86,12 +86,12 @@ export interface User {
 /** Resumo da lista: perfil global (todos os CCs) ou CCs distintos como gestor + escopos. */
 /** CC que o usuário acessa, com área e setor (lista de usuários por área). */
 export interface AccessItem { id: number; code: string; name: string; department: string | null; sector: string | null; manager: boolean }
-export interface AccessSummary { is_global: boolean; cost_centers: number; managed: number; scopes: number; items: AccessItem[] }
+export interface AccessSummary { is_global: boolean; cost_centers: number; managed: number; scopes: number; items: AccessItem[]; departments: string[] }
 export interface UserListItem extends User { access: AccessSummary }
 export interface AccessCostCenter { id: number; code: string; name: string; company: string; is_active: boolean }
 /** Escopo atribuído: um CC ou a empresa inteira (`cost_centers` = quantos CCs a linha libera). */
 export interface UserScope {
-  id: number; kind: "COST_CENTER" | "COMPANY" | "EMPTY"; cost_center_id: number | null; company_id: number | null;
+  id: number; kind: "COST_CENTER" | "COMPANY" | "DEPARTMENT" | "EMPTY"; cost_center_id: number | null; company_id: number | null; department_id?: number | null;
   code: string | null; name: string; company: string | null; is_active: boolean; cost_centers: number;
 }
 export interface UserAccess {

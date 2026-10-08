@@ -168,10 +168,11 @@ export function UserAccessModal({ user, onClose, onChanged }: { user: UserListIt
                       <tr key={s.id}>
                         <td>
                           {s.kind === "COMPANY" && <><Badge tone="info">Empresa inteira</Badge> </>}
+                          {s.kind === "DEPARTMENT" && <><Badge tone="info">Área inteira</Badge> </>}
                           {s.code && <><strong>{s.code}</strong> · </>}
                           {s.name} {!s.is_active && <Badge tone="neutral">Inativo</Badge>}
                           <span className="muted small access-sub">
-                            {s.kind === "COMPANY" ? `${plural(s.cost_centers, "centro de custo", "centros de custo")}, inclusive os criados depois` : s.company}
+                            {s.kind === "COMPANY" || s.kind === "DEPARTMENT" ? `${plural(s.cost_centers, "centro de custo", "centros de custo")}, inclusive os criados depois` : s.company}
                           </span>
                         </td>
                         <td className="row-actions">

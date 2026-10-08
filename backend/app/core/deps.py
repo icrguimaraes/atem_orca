@@ -53,6 +53,8 @@ def visible_cost_center_ids(db: Session, user: User) -> set[int] | None:
             ids.add(scope.cost_center_id)
         elif scope.company_id:
             ids.update(db.scalars(select(CostCenter.id).where(CostCenter.company_id == scope.company_id)))
+        elif scope.department_id:  # área inteira (Tributos, Controladoria…)
+            ids.update(db.scalars(select(CostCenter.id).where(CostCenter.department_id == scope.department_id)))
     return ids
 
 

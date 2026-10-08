@@ -49,6 +49,7 @@ class UserCreate(BaseModel):
     roles: list[str] = ["MANAGER"]
     cost_center_ids: list[int] = []  # CCs liberados já na criação (escopo)
     manager_of: list[int] = []  # CCs em que o usuário passa a ser o gestor (cadastro do CC)
+    department_ids: list[int] = []  # áreas inteiras
 
 
 class UserUpdate(BaseModel):
@@ -64,11 +65,13 @@ class UserCostCentersIn(BaseModel):
 
     cost_center_ids: list[int] = []
     manager_of: list[int] = []
+    department_ids: list[int] = []  # áreas inteiras (substitui as áreas atribuídas)
 
 
 class ScopeIn(BaseModel):
     company_id: int | None = None
     cost_center_id: int | None = None
+    department_id: int | None = None  # área inteira
 
 
 # acesso a centros de custo (Usuários → Acessos; services/user_access.py)
@@ -80,6 +83,7 @@ class AccessSummary(BaseModel):
     managed: int
     scopes: int
     items: list[dict] = []  # CCs com área e setor: {id, code, name, department, sector, manager}
+    departments: list[str] = []  # áreas inteiras atribuídas
 
 
 class UserListOut(UserOut):
@@ -96,9 +100,10 @@ class AccessCostCenterOut(BaseModel):
 
 class UserScopeOut(BaseModel):
     id: int
-    kind: str  # COST_CENTER | COMPANY | EMPTY
+    kind: str  # COST_CENTER | COMPANY | DEPARTMENT | EMPTY
     cost_center_id: int | None
     company_id: int | None
+    department_id: int | None = None
     code: str | None
     name: str
     company: str | None

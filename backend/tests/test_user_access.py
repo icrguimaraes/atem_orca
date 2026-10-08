@@ -53,7 +53,7 @@ def test_assign_and_remove_cost_center_access(client, admin):
     assert scope["kind"] == "COST_CENTER" and scope["code"] == "3001002" and resp.json()["cost_centers"] == 2
     assert _visible(client, mgr) == ["3001001", "3001002"]
     summary = _summary(client, ctrl, mgr_id)
-    assert {k: v for k, v in summary.items() if k != "items"} == {
+    assert {k: v for k, v in summary.items() if k not in ("items", "departments")} == {
         "is_global": False,
         "cost_centers": 2,
         "managed": 1,
@@ -156,3 +156,29 @@ def test_create_with_cost_centers_and_edit_user(client, admin):
     logs = client.get("/api/v1/audit-logs?entity_type=user", headers=admin).json()
     actions = {x["action"] for x in (logs["items"] if isinstance(logs, dict) else logs)}
     assert {"CREATE", "UPDATE", "SET_ROLES", "SET_COST_CENTERS"} <= actions
+
+
+def test_whole_department_scope(client, admin):
+    """Área inteira (Tributos): o usuário vê todos os CCs da área, inclusive os criados depois."""
+    _, _, _, ccs = _setup(client, admin)
+    dept = client.post("/api/v1/departments", headers=admin, json={"name": "Tributos T"}).json()
+    for code in ("3001001", "3001002"):
+        client.patch(f"/api/v1/cost-centers/{ccs[code]}", headers=admin, json={"department_id": dept["id"]})
+    uid, hdr = _user(client, admin, "area.inteira@t.com", ["MANAGER"])
+    r = client.put(
+        f"{USERS}/{uid}/cost-centers",
+        headers=admin,
+        json={"cost_center_ids": [], "manager_of": [], "department_ids": [dept["id"]]},
+    )
+    assert r.status_code == 200, r.text
+    assert any(s["kind"] == "DEPARTMENT" and s["cost_centers"] == 2 for s in r.json()["scopes"])
+    assert sorted(_visible(client, hdr)) == ["3001001", "3001002"]
+    company = client.get(f"/api/v1/cost-centers/{ccs['3001001']}", headers=admin).json()["company_id"]
+    client.post(
+        "/api/v1/cost-centers",
+        headers=admin,
+        json={"company_id": company, "code": "3001009", "name": "NOVO DA AREA", "department_id": dept["id"]},
+    )
+    assert "3001009" in _visible(client, hdr)
+    summary = _summary(client, admin, uid)
+    assert summary["departments"] == ["Tributos T"] and summary["cost_centers"] == 3

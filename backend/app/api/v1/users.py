@@ -50,9 +50,11 @@ def create_user(
     db.add(user)
     db.flush()
     changes = {}
-    if payload.cost_center_ids or payload.manager_of:
+    if payload.cost_center_ids or payload.manager_of or payload.department_ids:
         try:
-            changes = access_svc.set_cost_centers(db, user, payload.cost_center_ids, payload.manager_of)
+            changes = access_svc.set_cost_centers(
+                db, user, payload.cost_center_ids, payload.manager_of, payload.department_ids
+            )
         except access_svc.AccessError as exc:
             raise HTTPException(exc.status, str(exc)) from exc
     audit.record(
@@ -140,8 +142,14 @@ def set_scopes(
 ) -> list[ScopeIn]:
     """Substitui todos os escopos (uso em lote); a tela usa os endpoints de adicionar/remover abaixo."""
     user = db.get(User, user_id) or _not_found()
-    before = [{"company_id": s.company_id, "cost_center_id": s.cost_center_id} for s in user.scopes]
-    user.scopes = [UserScope(company_id=s.company_id, cost_center_id=s.cost_center_id) for s in scopes]
+    before = [
+        {"company_id": s.company_id, "cost_center_id": s.cost_center_id, "department_id": s.department_id}
+        for s in user.scopes
+    ]
+    user.scopes = [
+        UserScope(company_id=s.company_id, cost_center_id=s.cost_center_id, department_id=s.department_id)
+        for s in scopes
+    ]
     audit.record(
         db,
         user_id=actor.id,
@@ -175,7 +183,13 @@ def add_scope(
     user = db.get(User, user_id) or _not_found()
     before = access_svc.snapshot(db, user)
     try:
-        scope = access_svc.add_scope(db, user, cost_center_id=payload.cost_center_id, company_id=payload.company_id)
+        scope = access_svc.add_scope(
+            db,
+            user,
+            cost_center_id=payload.cost_center_id,
+            company_id=payload.company_id,
+            department_id=payload.department_id,
+        )
     except access_svc.AccessError as exc:
         raise HTTPException(exc.status, str(exc)) from exc
     audit.record(
@@ -234,7 +248,9 @@ def set_cost_centers(
     user = db.get(User, user_id) or _not_found()
     before = access_svc.snapshot(db, user)
     try:
-        changes = access_svc.set_cost_centers(db, user, payload.cost_center_ids, payload.manager_of)
+        changes = access_svc.set_cost_centers(
+            db, user, payload.cost_center_ids, payload.manager_of, payload.department_ids
+        )
     except access_svc.AccessError as exc:
         raise HTTPException(exc.status, str(exc)) from exc
     audit.record(

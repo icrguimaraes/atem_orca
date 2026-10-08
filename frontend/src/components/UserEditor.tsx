@@ -37,6 +37,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
   const [people, setPeople] = useState<Map<number, UserListItem>>(new Map());
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [manager, setManager] = useState<Set<number>>(new Set());
+  const [wholeDepts, setWholeDepts] = useState<Set<number>>(new Set()); // áreas inteiras (inclui CCs criados depois)
   const [q, setQ] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -59,6 +60,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
           const mgr = new Set(a.managed.map((m) => m.id));
           setManager(mgr);
           setSelected(new Set([...mgr, ...a.scopes.filter((s) => s.kind === "COST_CENTER" && s.cost_center_id).map((s) => s.cost_center_id!)]));
+          setWholeDepts(new Set(a.scopes.filter((s) => s.kind === "DEPARTMENT" && s.department_id).map((s) => s.department_id!)));
         }
       })
       .catch((e: Error) => setError(e.message));
@@ -67,6 +69,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
   const groups = useMemo(() => {
     const needle = fold(q.trim());
     const deptName = new Map(depts.map((d) => [d.id, d.name]));
+    const deptId = new Map(depts.map((d) => [d.name, d.id]));
     const company = new Map(companies.map((c) => [c.id, c.short_name || c.name]));
     const out = new Map<string, CostCenter[]>();
     for (const cc of ccs ?? []) {
@@ -75,7 +78,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
       if (needle && !fold(label).includes(needle)) continue;
       out.set(area, [...(out.get(area) ?? []), cc]);
     }
-    return [...out.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    return [...out.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([area, list]) => [area, list, deptId.get(area) ?? null] as const);
   }, [ccs, depts, companies, q]);
   const companyName = (id: number) => companies.find((c) => c.id === id)?.short_name ?? "";
   const companyScopes = access?.scopes.filter((s) => s.kind === "COMPANY") ?? [];
@@ -122,7 +125,9 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
     if (creating && form.password.length < 8) return setError("A senha inicial precisa de pelo menos 8 caracteres");
     if (!creating && form.password && form.password.length < 8) return setError("A nova senha precisa de pelo menos 8 caracteres");
     if (!form.roles.length) return setError("Escolha ao menos um perfil");
-    const cost_center_ids = [...selected].filter((id) => !manager.has(id));
+    const department_ids = [...wholeDepts];
+    const coveredByDept = new Set((ccs ?? []).filter((c) => c.department_id && wholeDepts.has(c.department_id)).map((c) => c.id));
+    const cost_center_ids = [...selected].filter((id) => !manager.has(id) && !coveredByDept.has(id));
     const manager_of = [...manager];
     // o CC está ligado a OUTRA conta de usuário (o nome no CC pode ser igual: ex. a mesma pessoa com dois logins)
     const stealing = (ccs ?? []).filter((c) => manager.has(c.id) && c.manager_user_id && c.manager_user_id !== user?.id);
@@ -148,7 +153,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
       if (creating) {
         await api("/users", {
           method: "POST",
-          body: JSON.stringify({ name: form.name.trim(), email: form.email.trim(), password: form.password, roles: form.roles, cost_center_ids, manager_of }),
+          body: JSON.stringify({ name: form.name.trim(), email: form.email.trim(), password: form.password, roles: form.roles, cost_center_ids, manager_of, department_ids }),
         });
         onSaved(`Usuário ${form.email.trim().toLowerCase()} criado com ${fmtInt(selected.size)} centro(s) de custo. Envie a senha inicial por um canal seguro.`);
       } else {
@@ -160,7 +165,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
         if (Object.keys(patch).length) await api(`/users/${user!.id}`, { method: "PATCH", body: JSON.stringify(patch) });
         if ([...form.roles].sort().join() !== [...user!.roles].sort().join())
           await api(`/users/${user!.id}/roles`, { method: "PUT", body: JSON.stringify(form.roles) });
-        await api(`/users/${user!.id}/cost-centers`, { method: "PUT", body: JSON.stringify({ cost_center_ids, manager_of }) });
+        await api(`/users/${user!.id}/cost-centers`, { method: "PUT", body: JSON.stringify({ cost_center_ids, manager_of, department_ids }) });
         onSaved(`Usuário ${form.name.trim()} atualizado${form.password ? " (senha redefinida: envie por um canal seguro)" : ""}.`);
       }
       onClose();
@@ -179,7 +184,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
       footer={
         <>
           <span className="muted small" style={{ marginRight: "auto" }}>
-            {fmtInt(selected.size)} centro(s) de custo · gestor de {fmtInt(manager.size)}
+            {wholeDepts.size ? `${fmtInt(wholeDepts.size)} área(s) inteira(s) · ` : ""}{fmtInt(selected.size)} centro(s) de custo · gestor de {fmtInt(manager.size)}
           </span>
           <button className="btn" onClick={onClose} disabled={busy}>Cancelar</button>
           <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? "Salvando…" : creating ? "Criar usuário" : "Salvar"}</button>
@@ -235,20 +240,31 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
             <div className="muted">Nenhum centro de custo encontrado.</div>
           ) : (
             <div className="cc-picker">
-              {groups.map(([area, list]) => {
-                const all = list.every((c) => selected.has(c.id));
+              {groups.map(([area, list, deptId]) => {
+                const whole = deptId !== null && wholeDepts.has(deptId);
+                const all = whole || list.every((c) => selected.has(c.id));
                 const some = list.some((c) => selected.has(c.id));
                 return (
                   <div key={area} className="cc-group">
                     <label className="cc-group-head">
-                      <input type="checkbox" checked={all} ref={(el) => { if (el) el.indeterminate = some && !all; }} onChange={() => toggleGroup(list)} />
+                      <input type="checkbox" checked={all} disabled={whole} ref={(el) => { if (el) el.indeterminate = !whole && some && !all; }} onChange={() => toggleGroup(list)} />
                       <strong>{area}</strong>
-                      <span className="muted small">{fmtInt(list.filter((c) => selected.has(c.id)).length)} de {fmtInt(list.length)}</span>
+                      <span className="muted small">{whole ? "área inteira" : `${fmtInt(list.filter((c) => selected.has(c.id)).length)} de ${fmtInt(list.length)}`}</span>
+                      {deptId !== null && (
+                        <label className="cc-manager" title="Todos os CCs da área, inclusive os criados depois" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={whole}
+                            onChange={() => setWholeDepts((d) => { const n = new Set(d); if (n.has(deptId)) n.delete(deptId); else { n.add(deptId); setSelected((s) => { const k = new Set(s); list.forEach((c) => k.add(c.id)); return k; }); } return n; })}
+                          />
+                          Área inteira (Tributos, Controladoria…)
+                        </label>
+                      )}
                     </label>
                     {list.map((cc) => (
                       <div key={cc.id} className={`cc-row ${selected.has(cc.id) ? "on" : ""}`}>
                         <label className="cc-main">
-                          <input type="checkbox" checked={selected.has(cc.id)} onChange={() => toggleCc(cc.id)} />
+                          <input type="checkbox" checked={selected.has(cc.id)} disabled={whole} onChange={() => toggleCc(cc.id)} />
                           <span>
                             <strong>{cc.code}</strong> · {cc.name}
                             <span className="muted small">

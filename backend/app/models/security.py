@@ -47,3 +47,5 @@ class UserScope(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"))
     cost_center_id: Mapped[int | None] = mapped_column(ForeignKey("cost_centers.id"))
+    # área inteira (Tributos, Controladoria…): todos os CCs da área, inclusive os criados depois (08/10/2026)
+    department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"))

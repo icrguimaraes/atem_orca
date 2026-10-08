@@ -40,6 +40,14 @@ def summaries(db: Session, users: list[User]) -> dict[int, dict]:
         rows = db.execute(select(CostCenter.company_id, CostCenter.id).where(CostCenter.company_id.in_(companies)))
         for company_id, cc_id in rows:
             by_company[company_id].add(cc_id)
+    dept_ids = {s.department_id for s in scopes if s.department_id}
+    by_dept: dict[int, set[int]] = defaultdict(set)
+    if dept_ids:
+        rows = db.execute(select(CostCenter.department_id, CostCenter.id).where(CostCenter.department_id.in_(dept_ids)))
+        for dept_id, cc_id in rows:
+            by_dept[dept_id].add(cc_id)
+    dept_names = {d.id: d.name for d in db.scalars(select(Department))}
+    user_depts: dict[int, list[str]] = defaultdict(list)
     scoped: dict[int, set[int]] = defaultdict(set)
     count: dict[int, int] = defaultdict(int)
     for s in scopes:
@@ -48,6 +56,9 @@ def summaries(db: Session, users: list[User]) -> dict[int, dict]:
             scoped[s.user_id].add(s.cost_center_id)
         elif s.company_id:
             scoped[s.user_id] |= by_company[s.company_id]
+        elif s.department_id:
+            scoped[s.user_id] |= by_dept[s.department_id]
+            user_depts[s.user_id].append(dept_names.get(s.department_id, "?"))
     # CCs com área e setor (lista de usuários agrupada por área, 08/10/2026)
     all_ids = set().union(*managed.values(), *scoped.values()) if (managed or scoped) else set()
     ccs = {c.id: c for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(all_ids or {-1})))}
@@ -79,13 +90,30 @@ def summaries(db: Session, users: list[User]) -> dict[int, dict]:
             "managed": len(managed[u.id]),
             "scopes": count[u.id],
             "items": items(u.id),
+            "departments": sorted(user_depts[u.id]),
         }
         for u in users
     }
 
 
 def _scope_out(db: Session, scope: UserScope) -> dict:
-    base = {"id": scope.id, "cost_center_id": scope.cost_center_id, "company_id": scope.company_id}
+    base = {
+        "id": scope.id,
+        "cost_center_id": scope.cost_center_id,
+        "company_id": scope.company_id,
+        "department_id": scope.department_id,
+    }
+    if scope.department_id:
+        dept = db.get(Department, scope.department_id)
+        total = db.scalar(select(func.count(CostCenter.id)).where(CostCenter.department_id == dept.id)) or 0
+        return base | {
+            "kind": "DEPARTMENT",
+            "code": None,
+            "name": dept.name,
+            "company": None,
+            "is_active": True,
+            "cost_centers": total,
+        }
     if scope.cost_center_id:  # mesma precedência de visible_cost_center_ids
         cc = db.get(CostCenter, scope.cost_center_id)
         return base | {
@@ -145,7 +173,7 @@ def snapshot(db: Session, user: User) -> list[dict]:
     out = []
     for s in sorted(user.scopes, key=lambda s: s.id or 0):
         row = _scope_out(db, s)
-        label = {"COST_CENTER": "CC", "COMPANY": "Empresa"}.get(row["kind"])
+        label = {"COST_CENTER": "CC", "COMPANY": "Empresa", "DEPARTMENT": "Área"}.get(row["kind"])
         out.append(
             {
                 "id": s.id,
@@ -157,11 +185,23 @@ def snapshot(db: Session, user: User) -> list[dict]:
     return out
 
 
-def add_scope(db: Session, user: User, *, cost_center_id: int | None, company_id: int | None) -> UserScope:
+def add_scope(
+    db: Session, user: User, *, cost_center_id: int | None, company_id: int | None, department_id: int | None = None
+) -> UserScope:
     """Libera um CC ou uma empresa inteira; recusa o que o usuário já acessa pelo mesmo caminho."""
-    if bool(cost_center_id) == bool(company_id):
-        raise AccessError("Informe um centro de custo ou uma empresa inteira (apenas um dos dois).", 422)
+    if sum(1 for x in (cost_center_id, company_id, department_id) if x) != 1:
+        raise AccessError("Informe um centro de custo, uma área ou uma empresa inteira (apenas um).", 422)
     company_scopes = {s.company_id for s in user.scopes if s.company_id and not s.cost_center_id}
+    if department_id:
+        dept = db.get(Department, department_id)
+        if dept is None:
+            raise AccessError("Área não encontrada.", 404)
+        if any(s.department_id == dept.id for s in user.scopes):
+            raise AccessError(f"A área {dept.name} já está liberada para {user.name}.")
+        scope = UserScope(user_id=user.id, department_id=dept.id)
+        user.scopes.append(scope)
+        db.flush()
+        return scope
     if cost_center_id:
         cc = db.get(CostCenter, cost_center_id)
         if cc is None:
@@ -185,7 +225,9 @@ def add_scope(db: Session, user: User, *, cost_center_id: int | None, company_id
     return scope
 
 
-def set_cost_centers(db: Session, user: User, cost_center_ids: list[int], manager_of: list[int]) -> dict:
+def set_cost_centers(
+    db: Session, user: User, cost_center_ids: list[int], manager_of: list[int], department_ids: list[int] | None = None
+) -> dict:
     """Define em lote os CCs do usuário: escopos por CC (substitui; empresas inteiras ficam) e de quais CCs ele é o
     gestor. CC em que ele é gestor não precisa de escopo. Devolve o que mudou de gestor para a auditoria."""
     wanted_mgr = set(manager_of)
@@ -194,9 +236,15 @@ def set_cost_centers(db: Session, user: User, cost_center_ids: list[int], manage
     missing = (wanted | wanted_mgr) - known
     if missing:
         raise AccessError(f"Centro(s) de custo não encontrado(s): {sorted(missing)}", 404)
-    user.scopes = [s for s in user.scopes if not s.cost_center_id] + [
-        UserScope(user_id=user.id, cost_center_id=cc_id) for cc_id in sorted(wanted)
-    ]
+    depts = set(department_ids or [])
+    known_depts = set(db.scalars(select(Department.id).where(Department.id.in_(depts or {-1}))))
+    if depts - known_depts:
+        raise AccessError(f"Área(s) não encontrada(s): {sorted(depts - known_depts)}", 404)
+    user.scopes = (
+        [s for s in user.scopes if not s.cost_center_id and not s.department_id]
+        + [UserScope(user_id=user.id, department_id=d) for d in sorted(depts)]
+        + [UserScope(user_id=user.id, cost_center_id=cc_id) for cc_id in sorted(wanted)]
+    )
     changed = []
     for cc in db.scalars(
         select(CostCenter).where((CostCenter.manager_user_id == user.id) | CostCenter.id.in_(wanted_mgr or {-1}))

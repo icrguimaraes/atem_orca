@@ -114,7 +114,10 @@ export default function Users() {
                           ) : group === NONE_GROUP ? (
                             <span className="muted">Nenhum</span>
                           ) : (
-                            <Sectors items={items} />
+                            <>
+                              {u.access.departments.includes(group) && <Badge tone="info">área inteira</Badge>}
+                              <Sectors items={items} />
+                            </>
                           )}
                         </td>
                         <td>{u.is_active ? <Badge tone="good">Ativo</Badge> : <Badge tone="neutral">Inativo</Badge>}</td>
