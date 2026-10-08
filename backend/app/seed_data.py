@@ -317,6 +317,7 @@ TRAVEL_RATES = [
 ]
 
 CYCLE_PARAMETERS = {
+    "review.justification_blocks": (False, "Justificativa faltando bloqueia o envio (OPEX, Pessoal e CAPEX)"),
     "alert.growth_pct": (0.20, "Alerta: crescimento 2027 vs realizado 2026 anualizado acima de X"),
     "alert.reduction_pct": (0.30, "Alerta: redução 2027 vs realizado 2026 anualizado acima de X"),
     "alert.history_band_pct": (0.25, "Banda aceitável em torno da média histórica (2025 e 2026)"),

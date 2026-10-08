@@ -613,7 +613,7 @@ def save_hire(
 def blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[str]:
     """Contratações e desligamentos precisam de justificativa para o envio (análise da Controladoria/RH)."""
     out = []
-    missing = [label for _, label in missing_reasons(db, sub)]
+    missing = [label for _, label in missing_reasons(db, sub)] if ctx.justification_blocks else []
     if missing:
         extra = f" e mais {len(missing) - 5}" if len(missing) > 5 else ""
         out.append(f"justificativa obrigatória: {', '.join(missing[:5])}{extra}")

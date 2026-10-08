@@ -344,7 +344,7 @@ def budget_workbook(db: Session, ctx: Context, version: BudgetVersion, scope: se
                 acc = accounts.get(item.account_id)
                 values = {v.month: v.amount for v in item.values}
                 issues = "; ".join(
-                    i["message"] for i in capex_svc.item_issues(vctx, item) + capex_svc.project_issues(p)
+                    i["message"] for i in capex_svc.item_issues(vctx, item) + capex_svc.project_issues(p, vctx)
                 )
                 capex_rows.append(
                     [

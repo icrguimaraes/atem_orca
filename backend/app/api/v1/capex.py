@@ -137,7 +137,7 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
         critical = 0
         n_items = 0
         for p in found:
-            critical += sum(1 for i in svc.project_issues(p) if i["severity"] == "CRITICAL")
+            critical += sum(1 for i in svc.project_issues(p, ctx) if i["severity"] == "CRITICAL")
             kind = (p.project_type_code or "Projeto sem tipo") if p.is_project else "Aquisição avulsa"
             for item in p.items:
                 n_items += 1

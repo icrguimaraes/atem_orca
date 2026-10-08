@@ -80,11 +80,16 @@ def _classification_issues(item: CapexItem) -> list[rules.Issue]:
     )
 
 
-def project_issues(project: CapexProject) -> list[dict]:
+def project_issues(project: CapexProject, ctx: Context | None = None) -> list[dict]:
+    """Pendências da solicitação; a justificativa faltando é crítica só se o ciclo bloqueia por justificativa."""
     issues = [
         {"code": i.code, "severity": i.severity, "message": i.message}
         for i in rules.check_project(project.is_project, project.project_type_code, project.justification)
     ]
+    if ctx is not None and not ctx.justification_blocks:
+        for i in issues:
+            if i["code"] == "CAPEX_NO_JUSTIFICATION":
+                i["severity"] = "WARNING"
     if not project.items:
         issues.append({"code": "CAPEX_NO_ITEMS", "severity": "CRITICAL", "message": "Solicitação sem itens"})
     return issues
@@ -148,7 +153,7 @@ def project_out(ctx: Context, project: CapexProject, accounts: dict[int, Account
         "source": (project.attributes or {}).get("source", "SYSTEM"),
         "items": items,
         "total": str(money(sum((i.total_value for i in project.items), ZERO))),
-        "issues": project_issues(project),
+        "issues": project_issues(project, ctx),
         "updated_at": project.updated_at.isoformat() if project.updated_at else None,
     }
 
@@ -243,7 +248,7 @@ def blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[str]:
         return ["nenhum item de CAPEX lançado"]
     out = []
     for p in found:
-        for issue in project_issues(p):
+        for issue in project_issues(p, ctx):
             if issue["severity"] == "CRITICAL":
                 out.append(f"{p.code} {p.title}: {_lower_first(issue['message'])}")
         for item in p.items:

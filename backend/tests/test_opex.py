@@ -92,6 +92,11 @@ def test_opex_full_flow(client, admin, run_worker):
     # "justificar tudo": toda conta orçada (ou com histórico relevante zerado) precisa de justificativa
     pending = [code for code, r in rows.items() if r["needs_justification"] and not r["justification"]]
     assert view["pending_justifications"] == len(pending) == 5
+    # por padrão a justificativa não bloqueia (review.justification_blocks=False); ligando o parâmetro, bloqueia
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+    assert client.put(
+        f"/api/v1/cycles/{cycle_id}/parameters/review.justification_blocks", headers=admin, json={"value": True}
+    ).status_code in (200, 201)
     blocked = client.post(f"/api/v1/opex/submissions/{sub}/actions/submit", headers=mgr, json={})
     assert blocked.status_code == 409 and "sem justificativa" in blocked.json()["detail"]
     for code in pending:

@@ -55,6 +55,13 @@ class Context:
         """Versão congelada (consolidada): só leitura; alterações exigem uma revisão (nova versão)."""
         return self.version.status != "WORKING"
 
+    @property
+    def justification_blocks(self) -> bool:
+        """Justificativa faltando bloqueia o envio? Parâmetro `review.justification_blocks` (padrão: não — tudo
+        continua obrigatório em Apontamentos/Justificativas, mas por enquanto nada bloqueia)."""
+        value = self.params.get("review.justification_blocks", False)
+        return value is True or str(value).strip().lower() in ("true", "1", "sim")
+
     def param(self, key: str, default):
         value = self.params.get(key, default)
         return Decimal(str(value)) if isinstance(value, (int, float, str)) else value
@@ -328,9 +335,10 @@ def submit_blockers(db: Session, ctx: Context, sub: BudgetSubmission) -> list[st
     if not db.scalar(select(func.count()).select_from(BudgetLine).where(BudgetLine.submission_id == sub.id)):
         blockers.append("nenhuma linha orçada")
     # "justificar tudo" (08/10/2026): toda conta orçada ou zerada com histórico relevante precisa de justificativa
-    missing = account_view(db, ctx, sub)["pending_justifications"]
-    if missing:
-        blockers.append(f"{missing} conta(s) sem justificativa")
+    if ctx.justification_blocks:
+        missing = account_view(db, ctx, sub)["pending_justifications"]
+        if missing:
+            blockers.append(f"{missing} conta(s) sem justificativa")
     return blockers
 
 

@@ -73,9 +73,14 @@ def test_personnel_projection_workflow_and_transfer(client, admin, run_worker):
     )
     assert {b["code"] for b in view["benefits"]} == {"AUX_CRECHE", "VALE_TRANSPORTE"}
 
-    # desligamento e contratação exigem justificativa para enviar
+    # desligamento e contratação exigem justificativa para enviar quando o ciclo bloqueia por justificativa
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+    client.put(f"/api/v1/cycles/{cycle_id}/parameters/review.justification_blocks", headers=admin, json={"value": True})
     resp = client.post(f"/api/v1/personnel/submissions/{sub}/actions/submit", headers=mgr, json={})
     assert resp.status_code == 409 and "justificativa" in resp.json()["detail"]
+    client.put(
+        f"/api/v1/cycles/{cycle_id}/parameters/review.justification_blocks", headers=admin, json={"value": False}
+    )
     carla = rows["CARLA"]["employee_id"]
     v = client.put(
         f"/api/v1/personnel/submissions/{sub}/employees/{carla}/movement",
@@ -116,8 +121,6 @@ def test_personnel_projection_workflow_and_transfer(client, admin, run_worker):
     assert incoming["from_cost_center"].startswith(CC1)
 
     # "justificar tudo": promoções e reajustes também pedem justificativa — preenchidas na tela de Justificativas
-    blocked = client.post(f"/api/v1/personnel/submissions/{sub}/actions/submit", headers=mgr, json={})
-    assert blocked.status_code == 409
     items = client.get(f"/api/v1/justifications?cost_center_id={ccs[CC1]['id']}", headers=mgr).json()["items"]
     missing = [i for i in items if i["module"] == "PERSONNEL" and not i["justified"]]
     assert missing and all(i["editable"] for i in missing)

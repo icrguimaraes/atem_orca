@@ -27,9 +27,9 @@ def test_findings_fix_travel_fare_and_account_justification(client, admin, run_w
     assert not any(i["kind"] == "TRAVEL_NO_FARE" for i in after["items"])
     assert after["reviews"][0]["note"] == "Passagem incluída: R$ 1.500,00"
 
-    # "justificar tudo": conta sem justificativa é crítica (bloqueia o envio) e não dá para só manter
+    # "justificar tudo": conta sem justificativa aparece sempre; por padrão é aviso (não bloqueia o envio)
     account = next(i for i in after["items"] if i["kind"] == "OPEX_JUSTIFICATION")
-    assert account["severity"] == "CRITICAL" and account["can_keep"] is False
+    assert account["severity"] == "WARNING"
     ok = client.post("/api/v1/findings/fix", headers=admin, json={"key": account["key"], "text": "Auditorias em 2027"})
     assert ok.status_code == 200, ok.text
     assert account["key"] not in {i["key"] for i in client.get("/api/v1/findings", headers=admin).json()["items"]}

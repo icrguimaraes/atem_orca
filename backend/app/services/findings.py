@@ -126,11 +126,11 @@ def collect(
         elif sub.module == "PERSONNEL":
             for mv, label in personnel_svc.missing_reasons(db, sub):
                 add(
-                    "CRITICAL",
+                    "CRITICAL" if ctx.justification_blocks else "WARNING",
                     "PERSONNEL_JUSTIFICATION",
                     ("PERSONNEL_MOVEMENT", mv.id),
                     label[0].upper() + label[1:],
-                    "Justificativa obrigatória para enviar (análise da Controladoria e do RH)",
+                    "Justificativa obrigatória (análise da Controladoria e do RH); por enquanto não bloqueia o envio",
                     fix={"type": "text", "label": "Justificativa da movimentação"},
                 )
             for mv, label in personnel_svc.pending_salaries(db, sub):
@@ -379,12 +379,12 @@ def _opex(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, add) -> Non
             continue
         flag = FLAG_TEXT.get(row["flags"][0], row["flags"][0]) if row["flags"] else "Conta orçada"
         add(
-            "CRITICAL",
+            "CRITICAL" if ctx.justification_blocks else "WARNING",
             "OPEX_JUSTIFICATION",
             ("OPEX_ACCOUNT", row["account_id"]),
             f"{row['code']} {row['name']}",
             f"{flag}: proposto {brl(Decimal(row['proposed']))} × referência {brl(Decimal(row['variation_base']))}"
-            f"{_pct(row['variation_pct'])}. Justificativa obrigatória para enviar",
+            f"{_pct(row['variation_pct'])}. Justificativa obrigatória (por enquanto não bloqueia o envio)",
             row["proposed"],
             fix={"type": "text", "label": "Justificativa da conta"},
         )
@@ -417,7 +417,7 @@ def _opex(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, add) -> Non
 
 def _capex(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, add) -> None:
     for project in capex_svc.projects(db, sub):
-        for issue in capex_svc.project_issues(project):
+        for issue in capex_svc.project_issues(project, ctx):
             fix = None
             if issue["code"] == "CAPEX_NO_JUSTIFICATION":
                 fix = {"type": "text", "label": "Justificativa da solicitação"}
