@@ -25,9 +25,11 @@ interface Options {
   departments: { id: number; name: string }[];
   accounts: { code: string; name: string; nature: string; package_id: number | null }[];
   versions: { id: number; label: string; status: string; current: boolean }[];
+  series: { key: string; label: string }[];
+  default_series: { prev: string; ref: string };
 }
-type Filters = { company_id: string; department_id: string; cost_center_id: string; account: string; module: string; package_id: string; version_id: string };
-const EMPTY: Filters = { company_id: "", department_id: "", cost_center_id: "", account: "", module: "", package_id: "", version_id: "" };
+type Filters = { company_id: string; department_id: string; cost_center_id: string; account: string; module: string; package_id: string; version_id: string; prev: string; ref: string };
+const EMPTY: Filters = { company_id: "", department_id: "", cost_center_id: "", account: "", module: "", package_id: "", version_id: "", prev: "", ref: "" };
 const MODULE_LABEL: Record<string, string> = { OPEX: "OPEX", CAPEX: "CAPEX", PERSONNEL: "Pessoal" };
 // drill-down: Empresa → Diretoria → Centro de custo → Conta → Mês
 const NEXT: Record<string, string> = { company: "department", department: "cost_center", cost_center: "account", account: "month" };
@@ -183,6 +185,31 @@ export default function Analytics() {
             : []),
         ]}
       />
+      {(opts.data?.series.length ?? 0) > 0 && (
+        <div className="chip-groups">
+          <div className="chip-group">
+            <span className="chip-label">Realizado</span>
+            <div className="month-chips" role="group" aria-label="Série de realizado para comparar">
+              {opts.data!.series.filter((o) => o.key.startsWith("actual")).map((o) => {
+                const cur = filters.prev || opts.data!.default_series.prev;
+                return <button key={o.key} type="button" className={cur === o.key ? "active" : ""} aria-pressed={cur === o.key} onClick={() => set({ prev: o.key })}>{o.label}</button>;
+              })}
+              <button type="button" className={filters.prev === "none" ? "active" : ""} aria-pressed={filters.prev === "none"} onClick={() => set({ prev: "none" })}>Nenhum</button>
+            </div>
+          </div>
+          <div className="chip-group">
+            <span className="chip-label">Referência</span>
+            <div className="month-chips" role="group" aria-label="Série de referência para comparar">
+              {opts.data!.series.map((o) => {
+                const cur = filters.ref || opts.data!.default_series.ref;
+                return <button key={o.key} type="button" className={cur === o.key ? "active" : ""} aria-pressed={cur === o.key} onClick={() => set({ ref: o.key })}>{o.label}</button>;
+              })}
+              <button type="button" className={filters.ref === "none" ? "active" : ""} aria-pressed={filters.ref === "none"} onClick={() => set({ ref: "none" })}>Nenhuma</button>
+            </div>
+          </div>
+          <span className="muted small">Orçamento {y.target} é sempre a série principal; os cards e os gráficos seguem a escolha.</span>
+        </div>
+      )}
       {trail.length > 0 && (
         <nav className="breadcrumb" aria-label="Drill-down">
           <button className="btn-link link" onClick={clear}>Visão geral</button>

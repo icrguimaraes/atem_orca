@@ -78,3 +78,23 @@ def test_dashboard_matches_process_numbers_and_filters(client, admin, run_worker
     dg = client.get("/api/v1/analytics/dashboard", headers=mgr).json()
     assert dg["kpis"]["target"]["value"] == "0.00" and dg["status"]["total"] == 1
     assert client.get("/api/v1/analytics/options", headers=mgr).json()["cost_centers"][0]["id"] == other["id"]
+
+
+def test_analytics_series_selection(client, admin, run_worker):
+    """Análise: o usuário escolhe o que comparar (realizado de qual ano, anualizado, orçado); cards e figuras seguem."""
+    from tests import builders
+    from tests.test_imports import import_and_load
+
+    import_and_load(client, admin, run_worker, builders.opex_template_filled(), "t-series.xlsx")
+    opts = client.get("/api/v1/analytics/options", headers=admin).json()
+    assert opts["series"] and opts["default_series"]["prev"].startswith("actual:")
+    d = client.get("/api/v1/analytics/dashboard", headers=admin).json()
+    assert d["kpis"]["prev_actual"]["label"].startswith("Realizado")
+    ann = next((o["key"] for o in opts["series"] if o["key"].startswith("actual_ann")), None)
+    if ann:
+        d2 = client.get(f"/api/v1/analytics/dashboard?prev={ann}", headers=admin).json()
+        assert "anualizado" in d2["kpis"]["prev_actual"]["label"]
+        assert float(d2["kpis"]["prev_actual"]["value"]) >= float(d["kpis"]["prev_actual"]["value"])
+    none = client.get("/api/v1/analytics/dashboard?prev=none&ref=none", headers=admin).json()
+    assert none["kpis"]["prev_actual"]["value"] == "0.00" and none["has"]["prev"] is False
+    assert len(none["figures"]["monthly"]["data"]) == 1  # só o orçamento

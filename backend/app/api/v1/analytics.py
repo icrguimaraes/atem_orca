@@ -31,6 +31,8 @@ def dashboard(
     account: str | None = Query(None, description="Código da conta contábil"),
     module: Literal["OPEX", "CAPEX", "PERSONNEL"] | None = None,
     package_id: int | None = None,
+    prev: str | None = Query(None, description="Série Realizado: actual:ANO | actual_ann:ANO | none"),
+    ref: str | None = Query(None, description="Série Referência: budget:ANO | actual:ANO | actual_ann:ANO | none"),
     dimension: Literal["company", "department", "cost_center", "account", "module", "month"] = "cost_center",
     variation_by: Literal["account", "cost_center"] = "account",
     variation_mode: Literal["abs", "pct"] = "abs",
@@ -44,7 +46,7 @@ def dashboard(
         version = db.get(BudgetVersion, version_id)
         if version is None or version.cycle_id != ctx.cycle.id:
             raise HTTPException(404, "Versão não encontrada")
-    f = svc.Filters(company_id, department_id, cost_center_id, account, module, package_id)
+    f = svc.Filters(company_id, department_id, cost_center_id, account, module, package_id, prev, ref)
     return svc.dashboard(
         db,
         ctx,
@@ -75,6 +77,8 @@ def options(db: Session = Depends(get_db), user: User = Depends(get_current_user
             for c in ccs
         ],
         "departments": [{"id": d.id, "name": d.name} for d in departments],
+        "series": svc.series_options(db, ctx),
+        "default_series": {"prev": f"actual:{ctx.prev_year}", "ref": f"budget:{ctx.ref_year}"},
         "accounts": [
             {"code": a.code, "name": a.name, "nature": a.nature, "package_id": a.package_id} for a in accounts
         ],
