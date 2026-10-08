@@ -7,6 +7,7 @@ from app.models.budget import (
     AssetItem,
     BudgetLine,
     BudgetLineValue,
+    BudgetQuestion,
     BudgetSnapshotLine,
     BudgetSubmission,
     CapexItem,

@@ -104,6 +104,7 @@ def _opex_items(db: Session, ctx, sub: BudgetSubmission, cc: dict) -> list[dict]
             cc
             | {
                 "key": key_for(sub, "OPEX_ACCOUNT", row["account_id"]),
+                "entity_id": row["account_id"],
                 "submission_id": sub.id,
                 "module": "OPEX",
                 "kind": "OPEX_ACCOUNT",
@@ -152,6 +153,8 @@ def _personnel_items(db: Session, sub: BudgetSubmission, cc: dict) -> list[dict]
             cc
             | {
                 "key": key_for(sub, "PERSONNEL_MOVEMENT", mv.id),
+                "entity_id": mv.id,
+                "movement_type": mv.movement_type,
                 "submission_id": sub.id,
                 "module": "PERSONNEL",
                 "kind": "PERSONNEL_MOVEMENT",
@@ -181,6 +184,7 @@ def _capex_items(db: Session, sub: BudgetSubmission, cc: dict) -> list[dict]:
             cc
             | {
                 "key": key_for(sub, "CAPEX_PROJECT", p.id),
+                "entity_id": p.id,
                 "submission_id": sub.id,
                 "module": "CAPEX",
                 "kind": "CAPEX_PROJECT",

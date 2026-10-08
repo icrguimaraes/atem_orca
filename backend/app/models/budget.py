@@ -108,6 +108,32 @@ class FindingReview(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 
+class BudgetQuestion(Base):
+    """Pergunta sobre o orçamento (defesa do orçamento): quem analisa (ex.: VP) questiona uma linha do Painel — área,
+    setor, pacote, conta ou CC — e o gestor da área responde. OPEN → ANSWERED → CLOSED (quem perguntou encerra ou
+    pergunta de novo). `scope` guarda o recorte do Painel (filtros e linha) para reabrir o "por quê?" no mesmo ponto."""
+
+    __tablename__ = "budget_questions"
+    __table_args__ = (Index("ix_budget_questions_version_status", "version_id", "status"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(ForeignKey("budget_versions.id", ondelete="CASCADE"))
+    cost_center_id: Mapped[int | None] = mapped_column(ForeignKey("cost_centers.id"), index=True)
+    department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"))
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))
+    subject: Mapped[str] = mapped_column(String(300))
+    scope: Mapped[dict | None] = mapped_column(JSONB)
+    question: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="OPEN")
+    asked_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    asked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    answer: Mapped[str | None] = mapped_column(Text)
+    answered_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class WorkflowEvent(Base):
     __tablename__ = "workflow_events"
 

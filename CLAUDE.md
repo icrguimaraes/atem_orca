@@ -48,6 +48,10 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   Tela `pages/Justifications.tsx` (`/justificativas`) sobre `services/justifications.py` + `api/v1/justifications.py` (salvar grava
   auditoria e, se faltava, a correção em Apontamentos; `export.xlsx`). O template OPEX exportado leva a justificativa da conta
   nas linhas sem justificativa própria.
+- Defesa do orçamento (08/10/2026): botão "por quê?" em cada linha da tabela do Painel (`components/WhyPanel.tsx`: resumo no
+  hover, painel lateral no clique) sobre `GET /dashboard/why` (`api/v1/defense.py`: orçamento do ciclo × realizado do ano anterior
+  anualizado, decomposição por conta/CC, justificativas, alertas). "Questionar o gestor" grava `BudgetQuestion` (migração 0007;
+  `/questions`, responde o gestor de algum CC do recorte ou a Controladoria; auditoria) — página `pages/Questions.tsx` (`/perguntas`).
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

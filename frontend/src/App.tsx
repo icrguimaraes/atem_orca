@@ -14,6 +14,7 @@ import Consolidation from "./pages/Consolidation";
 import CyclePage from "./pages/CyclePage";
 import Findings from "./pages/Findings";
 import Justifications from "./pages/Justifications";
+import Questions from "./pages/Questions";
 import Validation from "./pages/Validation";
 import ImportDetail from "./pages/ImportDetail";
 import Imports from "./pages/Imports";
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="consolidacao" element={<Consolidation />} />
             <Route path="apontamentos" element={<Findings />} />
             <Route path="justificativas" element={<Justifications />} />
+            <Route path="perguntas" element={<Questions />} />
             <Route path="base" element={<Protected roles={["CONTROLLER"]}><BaseStatus /></Protected>} />
             <Route path="validacao" element={<Protected roles={["CONTROLLER"]}><Validation /></Protected>} />
             <Route path="validacao/:id" element={<Protected roles={["CONTROLLER"]}><Validation /></Protected>} />

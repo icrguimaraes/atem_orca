@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Breakdown, type BreakdownRow } from "../api";
 import { fmtMoney, fmtPct, fmtShare } from "../labels";
 import { Empty, Loading } from "./ui";
+import { WhyButton } from "./WhyPanel";
 
 type Sort = "value_desc" | "value_asc" | "name" | "var";
 type Level = Breakdown["group_by"];
@@ -64,8 +65,9 @@ function ownParam(level: Level, row: BreakdownRow): string {
 /** Tabela do painel com drill-down (área → setor → pacote GMD → conta) e drill-up (recolher).
  * `query` traz os filtros da página (empresa, CC, pacote, anos, meses); cada nível é buscado ao expandir,
  * filtrado por toda a linha de cima (ex.: contas do pacote Viagens no setor Fiscal da área Tributos). */
-export function DrillTable({ query, refLabel, onSelect }: {
+export function DrillTable({ query, refLabel, onSelect, why = false }: {
   query: string; refLabel: string; onSelect?: (level: Level, row: BreakdownRow) => void;
+  why?: boolean;  // botão "por quê?" (defesa do orçamento) em cada linha
 }) {
   const [root, setRoot] = useState<Breakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +173,7 @@ export function DrillTable({ query, refLabel, onSelect }: {
               r.name
             )}
             {r.code && <span className="muted small mono"> {r.code}</span>}
+            {why && <WhyButton qs={[parentChain, ownParam(LEVELS[level], r), query].filter(Boolean).join("&")} label={r.name} />}
           </td>
           <td className="right nowrap">{fmtMoney(r.ref)}</td>
           <td className="right nowrap muted">{fmtShare(r.share_ref)}</td>

@@ -86,6 +86,22 @@ export function PainelBase() {
 
 
 
+interface QuestionsCount { counts: { to_answer: number; answered_mine: number; open: number } }
+
+/** Perguntas da defesa do orçamento: para o gestor responder e respostas que chegaram para quem perguntou. */
+export function QuestionsInbox() {
+  const q = useLoad(() => api<QuestionsCount>("/questions"));
+  const c = q.data?.counts;
+  if (!c || (!c.to_answer && !c.answered_mine)) return null;
+  return (
+    <Alert tone={c.to_answer ? "warn" : "info"}>
+      {c.to_answer > 0 && <>{c.to_answer} pergunta(s) sobre o orçamento aguardando a sua resposta. </>}
+      {c.answered_mine > 0 && <>{c.answered_mine} pergunta(s) sua(s) já respondida(s). </>}
+      <Link to="/perguntas" className="link">Abrir Perguntas</Link>
+    </Alert>
+  );
+}
+
 interface TaskRow { cost_center_id: number; code: string; name: string; status: string; status_label: string }
 interface TaskSummary { cycle: { deadline: string | null; status: string }; rows: TaskRow[] }
 

@@ -18,6 +18,7 @@ from app.api.v1 import (
     cycles,
     dashboard,
     datasets,
+    defense,
     findings,
     imports,
     integrations,
@@ -99,6 +100,7 @@ for module in (
     analytics,
     findings,
     justifications,
+    defense,
     validation,
     integrations,
 ):

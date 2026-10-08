@@ -4,7 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, type Breakdown, type BreakdownRow, type Company, type CostCenter, type Cycle, type Department, type Overview, type Package } from "../api";
 import { useAuth } from "../auth";
 import { BudgetProgressCard } from "../components/BudgetProgressCard";
-import { ManagerTasks, PackageReviews, PainelBase } from "../components/PainelBlocks";
+import { ManagerTasks, PackageReviews, PainelBase, QuestionsInbox } from "../components/PainelBlocks";
 import { FilterBar } from "../components/FilterBar";
 import { Heatmap } from "../components/charts";
 import { DrillTable } from "../components/DrillTable";
@@ -247,6 +247,7 @@ export default function Painel2() {
 
       {!isController && <ManagerTasks warnWhenEmpty={Boolean(user?.roles.includes("MANAGER"))} />}
       <PackageReviews />
+      <QuestionsInbox />
 
       <FilterBar
         onApply={(v) => setFilters({ ...filters, cost_center_id: v.cost_center_id })}
@@ -511,7 +512,7 @@ export default function Painel2() {
                   ? unpick("Desmarcar", () => { setFilters((cur) => ({ ...cur, package_id: "", cost_center_id: "" })); setAccount(null); })
                   : undefined}
               >
-                <DrillTable query={query} refLabel={mainLabel} onSelect={onTableRow} />
+                <DrillTable query={query} refLabel={mainLabel} onSelect={onTableRow} why />
               </Card>,
             )}
 

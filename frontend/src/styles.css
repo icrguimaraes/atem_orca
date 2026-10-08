@@ -150,6 +150,46 @@ a { color: inherit; }
 .link:hover { text-decoration-color: var(--text); }
 .error-text { color: var(--bad); font-size: 12px; }
 .good-text { color: var(--good); font-size: 12px; }
+/* defesa do orçamento: "por quê?" e perguntas */
+.why-wrap { position: relative; display: inline-block; margin-left: 8px; vertical-align: middle; }
+.why-btn { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); font: 500 11px/16px var(--font-body); padding: 1px 7px; cursor: pointer; }
+.why-btn:hover { color: var(--text); border-color: var(--text); }
+.why-tip { position: fixed; z-index: 70; width: 340px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-3); padding: 10px 12px; font-size: 12px; line-height: 1.55; font-weight: 400; white-space: normal; text-align: left; }
+.drawer-backdrop { position: fixed; inset: 0; background: rgba(34, 34, 34, 0.35); z-index: 60; display: flex; justify-content: flex-end; }
+.drawer { width: min(620px, 100vw); height: 100%; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; box-shadow: var(--shadow-3); }
+.drawer-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+.drawer-head h2 { font-size: 18px; margin: 0 0 4px; }
+.drawer-body { padding: 18px 22px; overflow-y: auto; flex: 1; display: grid; gap: 12px; align-content: start; }
+.drawer-foot { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 22px; border-top: 1px solid var(--border); }
+.why-total { font-size: 14px; }
+.why-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.why-card { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; }
+.why-card-value { font-size: 20px; font-weight: 700; }
+.why-alert { border-radius: var(--radius-sm); padding: 8px 10px; font-size: 13px; }
+.why-alert.warn { background: var(--warn-bg, #fff4e5); color: var(--text); }
+.why-alert.bad { background: var(--bad-bg, #fdecec); color: var(--bad); }
+.why-h { font-size: 14px; margin: 10px 0 0; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.why-toggle { display: inline-flex; gap: 4px; }
+.why-toggle button { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-sm); font-size: 12px; padding: 2px 8px; cursor: pointer; }
+.why-toggle button.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+.why-bars { display: grid; gap: 6px; }
+.why-bar-row { display: grid; grid-template-columns: minmax(0, 1fr) 120px 96px; gap: 8px; align-items: center; font-size: 13px; }
+.why-bar-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.why-bar-track { height: 10px; }
+.why-bar { display: block; height: 10px; border-radius: 3px; }
+.why-bar.up { background: var(--bad); }
+.why-bar.down { background: var(--good); }
+.why-bar-val { text-align: right; font-size: 12px; }
+.why-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.why-item { border-bottom: 1px solid var(--border); padding-bottom: 8px; display: grid; gap: 3px; }
+.why-item-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; font-size: 13px; }
+.why-quote { font-size: 13px; font-style: italic; }
+.question { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; display: grid; gap: 6px; }
+.question-text { font-size: 14px; }
+.answer { border-left: 3px solid var(--good); padding-left: 10px; font-size: 13px; }
+.question-form { display: grid; gap: 6px; }
+.question-form textarea { width: 100%; }
+@media (max-width: 860px) { .why-tip { display: none; } .why-bar-row { grid-template-columns: minmax(0, 1fr) 70px 84px; } }
 /* tela de Justificativas */
 .just-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .just-item { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; display: grid; gap: 8px; }
