@@ -99,34 +99,64 @@ export default function Analytics() {
         subtitle={`Realizado ${y.prev} × Orçado ${y.ref} × Orçamento ${y.target} (versão ${d.version.label}). Os números são os mesmos do processo: OPEX, CAPEX e Pessoal consolidados por centro de custo, conta e mês.`}
       />
       <FilterBar
-        onApply={(v) => { set({ ...v } as Partial<Filters>); setTrail([]); }}
+        onApply={(v) => { set({ ...v } as Partial<Filters>); setTrail([]); }}  // botões (empresa, área, tipo) aplicam na hora
         onReset={clear}
         resetCount={active}
+        lead={
+          <>
+            <div className="chip-group">
+              <span className="chip-label">Empresa</span>
+              <div className="month-chips" role="group" aria-label="Empresas">
+                <button type="button" className={!filters.company_id ? "active" : ""} aria-pressed={!filters.company_id} onClick={() => { set({ company_id: "", cost_center_id: "" }); setTrail([]); }}>Todas</button>
+                {(companies.data ?? []).map((c) => {
+                  const on = filters.company_id === String(c.id);
+                  return (
+                    <button key={c.id} type="button" className={on ? "active" : ""} aria-pressed={on} title={`${c.code} · ${c.name}`} onClick={() => { set({ company_id: on ? "" : String(c.id), cost_center_id: "" }); setTrail([]); }}>
+                      {c.short_name ?? c.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {(opts.data?.departments.length ?? 0) > 0 && (
+              <div className="chip-group">
+                <span className="chip-label">Área</span>
+                <div className="month-chips" role="group" aria-label="Áreas">
+                  <button type="button" className={!filters.department_id ? "active" : ""} aria-pressed={!filters.department_id} onClick={() => { set({ department_id: "", cost_center_id: "" }); setTrail([]); }}>Todas</button>
+                  {[...(opts.data?.departments ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((dp) => {
+                    const on = filters.department_id === String(dp.id);
+                    return (
+                      <button key={dp.id} type="button" className={on ? "active" : ""} aria-pressed={on} onClick={() => { set({ department_id: on ? "" : String(dp.id), cost_center_id: "" }); setTrail([]); }}>
+                        {dp.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        }
+        extra={
+          <div className="chip-group">
+            <span className="chip-label">Tipo</span>
+            <div className="month-chips" role="group" aria-label="Tipos de orçamento">
+              <button type="button" className={!filters.module ? "active" : ""} aria-pressed={!filters.module} onClick={() => set({ module: "", package_id: "" })}>Todos</button>
+              {Object.entries(MODULE_LABEL).map(([v, l]) => (
+                <button key={v} type="button" className={filters.module === v ? "active" : ""} aria-pressed={filters.module === v} onClick={() => set({ module: filters.module === v ? "" : v, package_id: "" })}>{l}</button>
+              ))}
+            </div>
+          </div>
+        }
         fields={[
-          {
-            key: "company_id", label: "Empresa", value: filters.company_id,
-            onChange: (v) => { set({ company_id: v, department_id: "", cost_center_id: "" }); setTrail([]); },
-            options: [{ value: "", label: "Todas as empresas" }, ...(companies.data ?? []).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.short_name ?? c.name}` }))],
-          },
-          {
-            key: "department_id", label: "Diretoria", value: filters.department_id,
-            onChange: (v) => { set({ department_id: v, cost_center_id: "" }); setTrail([]); },
-            options: [{ value: "", label: "Todas as diretorias" }, ...(opts.data?.departments ?? []).map((dp) => ({ value: String(dp.id), label: dp.name }))],
-          },
           {
             key: "cost_center_id", label: "Centro de custo", value: filters.cost_center_id, wide: true,
             onChange: (v) => { set({ cost_center_id: v }); setTrail([]); },
-            options: (d) => [
+            options: () => [
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
               ...(opts.data?.cost_centers ?? [])
-                .filter((c) => (!d.company_id || String(c.company_id) === d.company_id) && (!d.department_id || String(c.department_id) === d.department_id))
+                .filter((c) => (!filters.company_id || String(c.company_id) === filters.company_id) && (!filters.department_id || String(c.department_id) === filters.department_id))
                 .map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
             ],
-          },
-          {
-            key: "module", label: "Módulo", value: filters.module,
-            onChange: (v) => set({ module: v, package_id: "" }),
-            options: [{ value: "", label: "OPEX + CAPEX + Pessoal" }, ...Object.entries(MODULE_LABEL).map(([v, l]) => ({ value: v, label: l }))],
           },
           {
             key: "package_id", label: "Pacote GMD", value: filters.package_id,
