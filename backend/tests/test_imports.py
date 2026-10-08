@@ -589,3 +589,22 @@ def test_projection_fills_only_months_without_ksb1(client, admin, run_worker):
     )
     again = client.get("/api/v1/dashboard/overview?years=2026&compare=false", headers=admin).json()["kpis"]
     assert float(again["ref_ytd"]) == float(before) + 30
+
+
+def test_projection_cc_without_code_maps_csc_with_warning(client, admin, run_worker):
+    """Linha da projeção sem código de CC e com a descrição 'CSC' é associada ao CC 1050101012, com aviso na prévia."""
+    _seed_cc(client, admin, run_worker)
+    client.post(
+        "/api/v1/cost-centers",
+        headers=admin,
+        json={
+            "company_id": client.get("/api/v1/companies", headers=admin).json()[0]["id"],
+            "code": "1050101012",
+            "name": "CSC",
+        },
+    )
+    rows = [(None, 10, "6010301001", "Hospedagem", 25500)]
+    batch_id = upload(client, admin, builders.projecao_base(rows), "PROJETADO csc.xlsx", dataset_type="PROJECTION")
+    run_worker()
+    b = status(client, admin, batch_id)
+    assert b["status"] == "VALIDATED" and b["valid_rows"] == 1 and b["warning_rows"] == 1, b

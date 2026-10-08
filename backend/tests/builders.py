@@ -629,6 +629,22 @@ def projecao_base(rows: list[tuple]) -> bytes:
     ws.append(header)
     for cc, month, acc, acc_name, amount in rows:
         ws.append(
-            [None, _dt(2026, month, 1), 1001, None, None, cc, "CC", None, acc, acc_name, None, None, None, amount]
+            # cc None + descrição "CSC": linha sem código de CC (o gestor escreveu só o nome)
+            [
+                None,
+                _dt(2026, month, 1),
+                1001,
+                None,
+                None,
+                cc,
+                "CSC" if cc is None else "CC",
+                None,
+                acc,
+                acc_name,
+                None,
+                None,
+                None,
+                amount,
+            ]
         )
     return _bytes(wb)

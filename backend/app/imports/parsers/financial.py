@@ -157,6 +157,10 @@ PROJECTION_ALIASES = {
 }
 
 
+# projeção com o CC escrito por extenso (sem código): descrição na planilha → CC do sistema (sempre com aviso)
+PROJECTION_CC_BY_NAME = {"CSC": "1050101012"}
+
+
 def parse_projection(sheets: list[Sheet], options: dict) -> ParseResult:
     """Projeção do gestor (planilha 'Base'): CC × conta × mês, usando a 3ª projeção (é a 'Projeção Atual' do
     resumo). Cada linha vira um lançamento mensal; a carga só mantém os meses sem realizado (KSB1)."""
@@ -202,6 +206,11 @@ def parse_projection(sheets: list[Sheet], options: dict) -> ParseResult:
                 ignored += 1  # mês com realizado (KSB1): a projeção não entra
                 continue
             cc = clean_code(table.value(row, "cost_center"))
+            cc_name = clean_str(table.value(row, "cost_center_name"))
+            by_name: str | None = None
+            if cc is None and cc_name and cc_name.strip().upper() in PROJECTION_CC_BY_NAME:
+                cc = PROJECTION_CC_BY_NAME[cc_name.strip().upper()]
+                by_name = cc_name.strip()
             account = clean_code(table.value(row, "account"))
             key = (company, cc, account, year, month)
             if key in merged:
@@ -224,6 +233,14 @@ def parse_projection(sheets: list[Sheet], options: dict) -> ParseResult:
                 }
             )
             rec.natural_key = f"{company}|{cc}|{account}|{month}"
+            if by_name:
+                rec.warn(
+                    "CC_BY_NAME",
+                    f"Linha sem código de CC na planilha ('{by_name}'): associada ao CC {cc} pela descrição. "
+                    "Confirmar com o gestor (conta e valor)",
+                    "Cód CC",
+                    by_name,
+                )
             merged[key] = rec
         result.records.extend(merged.values())
         result.meta["ignored_months_with_actual"] = ignored
