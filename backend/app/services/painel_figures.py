@@ -100,6 +100,8 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
     opacity = [1.0 if (not picked or m in picked) else 0.3 for m in range(1, 13)]
     values_by = {key: [_num(r[key]) for r in rows] for key, _, _ in series}
     zeros = [0.0] * 12
+    # rótulo no tamanho fixo (sem o Plotly encolher para a largura da coluna): maior com menos colunas por mês
+    label_size = {1: 14, 2: 12}.get(len(series), 11)
     data, everything = [], []
     for key, name, color in series:
         values = values_by[key]
@@ -124,9 +126,10 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
                 marker={"color": color, "cornerradius": 4, "opacity": opacity},
                 text=[_short(v) if v > 0 else "" for v in values],
                 textposition="outside",
+                constraintext="none",
                 cliponaxis=False,
                 textfont={
-                    "size": 13,
+                    "size": label_size,
                     # sem seleção, uma cor só; com meses escolhidos, os rótulos dos outros meses esmaecem
                     "color": [INK[color] if a == 1.0 else _rgba(INK[color], 0.4) for a in opacity]
                     if picked
@@ -138,10 +141,9 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
         )
     layout = _layout(
         barmode="group",
-        bargap=0.22,
-        bargroupgap=0.06,
+        bargap=0.16,
+        bargroupgap=0.04,
         hovermode="x unified",
-        uniformtext={"minsize": 9, "mode": "hide"},  # rótulo só quando cabe na coluna
         showlegend=True,
         legend=LEGEND,
         # sem eixo de valores: cada coluna traz o rótulo; folga no topo para o rótulo de fora da coluna
@@ -191,7 +193,8 @@ def fig_monthly_total(o: dict) -> dict:
                 text=[_short(v) if v > 0 else ""],
                 textposition="outside",
                 cliponaxis=False,
-                textfont={"size": 13, "color": INK[color]},
+                constraintext="none",
+                textfont={"size": 14, "color": INK[color]},
                 customdata=[[fmt_money(v), lines]],
                 hovertemplate=name + ": <b>%{customdata[0]}</b><extra></extra>",
             )
@@ -247,7 +250,7 @@ def fig_cumulative(o: dict) -> dict:
                 fillcolor=_rgba(base_color, 0.14),
                 text=[_short(v) for v in base],
                 textposition=pos,
-                textfont={"size": 12, "color": INK[base_color]},
+                textfont={"size": 13, "color": INK[base_color]},
                 cliponaxis=False,
                 customdata=[
                     [fmt_money(v), m, [[f"{base_tip}: {fmt_money(v)}", base_color]]] for m, v in enumerate(base, 1)
@@ -277,7 +280,7 @@ def fig_cumulative(o: dict) -> dict:
                 fillcolor=_rgba(REALIZADO, 0.12),
                 text=[_short(v) for v in ref],
                 textposition=pos,
-                textfont={"size": 12, "color": INK[REALIZADO]},
+                textfont={"size": 13, "color": INK[REALIZADO]},
                 cliponaxis=False,
                 customdata=[[fmt_money(v), m, t] for m, (v, t) in enumerate(zip(ref, tips, strict=True), start=1)],
                 hovertemplate=lb["actual"] + ": <b>%{customdata[0]}</b><extra></extra>",
