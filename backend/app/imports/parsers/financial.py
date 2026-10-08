@@ -1,5 +1,6 @@
 """Fatos financeiros: realizado (layout largo do template ou SAP KSB1) e orçamento de referência."""
 
+import re
 from decimal import Decimal
 
 from app.imports.base import (
@@ -244,6 +245,112 @@ def parse_projection(sheets: list[Sheet], options: dict) -> ParseResult:
             merged[key] = rec
         result.records.extend(merged.values())
         result.meta["ignored_months_with_actual"] = ignored
+        return result
+    return result
+
+
+CAPEX_ACUM_ALIASES = {
+    "company": ("EMPRESA",),
+    "cost_center": ("CENTRO DE CUSTO",),
+    "item": ("CENTRO FINANC./ ITEM", "Centro financ./item orçamento"),
+    "period": ("PERIODO", "PERÍODO"),
+    "actual": ("REALIZADO",),
+    "projection": ("PROJEÇÃO", "PROJECAO"),
+}
+_TEN_DIGITS = re.compile(r"(\d{10})")
+
+
+def parse_capex_acum(sheets: list[Sheet], options: dict, dataset_type: str) -> ParseResult:
+    """CAPEX acumulado (aba 'Base Capex': CC × projeto × item × mês). Como "ACTUAL": realizado do ano do ciclo
+    anterior (jan–set); como "PROJECTION": coluna Projeção dos meses sem realizado. Meses de outro ano ficam de fora
+    (aviso na prévia); linhas repetidas do mesmo CC × conta × mês somam."""
+    result = ParseResult(dataset_type, "CAPEX_ACUM")
+    for sheet in sheets:
+        if "capex" not in norm(sheet.name):
+            continue
+        table = find_table(sheet, CAPEX_ACUM_ALIASES, ("cost_center", "item", "period", "actual", "projection"))
+        if table is None:
+            continue
+        result.meta["sheet"] = sheet.name
+        closed = options.get("projection_closed") or {}
+        year_target = int(
+            options.get("reference_year") or max((int(k.split(":")[0]) for k in closed), default=0) or 2026
+        )
+        merged: dict[tuple, Record] = {}
+        other_year = Decimal("0")
+        other_year_rows = 0
+        for row_no, row in table.rows():
+            if is_blank(row):
+                continue
+            period = table.value(row, "period")
+            cc_match = _TEN_DIGITS.search(str(table.value(row, "cost_center") or ""))
+            acc_match = _TEN_DIGITS.search(str(table.value(row, "item") or ""))
+            if not hasattr(period, "month") or cc_match is None or acc_match is None:
+                continue  # linha de total/em branco
+            company = clean_code(table.value(row, "company")) or options.get("company_code")
+            year, month = int(period.year), int(period.month)
+            try:
+                actual = to_decimal(table.value(row, "actual")) or Decimal("0")
+                projection = to_decimal(table.value(row, "projection")) or Decimal("0")
+            except ValueError:
+                rec = Record("FACT", sheet.name, row_no, {})
+                rec.error("INVALID_NUMBER", "Valor inválido", "Realizado/Projeção", None)
+                result.records.append(rec)
+                continue
+            cut = int(
+                closed.get(f"{year}:{company}")
+                or max((int(v or 0) for k, v in closed.items() if k.startswith(f"{year}:")), default=0)
+            )
+            if year != year_target:
+                other = actual if dataset_type == "ACTUAL" else projection
+                if other:
+                    other_year += other
+                    other_year_rows += 1
+                continue
+            if dataset_type == "ACTUAL":
+                if cut and month > cut:
+                    continue  # realizado de mês ainda não fechado (compromissos): fica de fora
+                amount = actual
+            else:
+                if month <= cut:
+                    continue  # mês com realizado: a projeção não entra
+                amount = projection
+            if not amount:
+                continue
+            cc, account = cc_match.group(1), acc_match.group(1)
+            key = (company, cc, account, year, month)
+            if key in merged:
+                prev = merged[key]
+                prev.data["values"][month] = str(Decimal(prev.data["values"][month]) + amount)
+                continue
+            rec = Record("FACT", sheet.name, row_no, {})
+            rec.data.update(
+                {
+                    "company": company,
+                    "branch": None,
+                    "branch_name": None,
+                    "cost_center": cc,
+                    "cost_center_name": None,
+                    "manager": None,
+                    "account": account,
+                    "account_name": clean_str(str(table.value(row, "item") or "").split("  ", 1)[-1]),
+                    "package": None,
+                    "year": year,
+                    "values": {month: str(amount)},
+                }
+            )
+            rec.natural_key = f"{company}|{cc}|{account}|{year}|{month}"
+            merged[key] = rec
+        result.records.extend(merged.values())
+        if other_year_rows:
+            result.structural.append(
+                Issue(
+                    "OTHER_YEAR_IGNORED",
+                    f"{other_year_rows} linha(s) de outro ano (ex.: dez/2025, R$ {other_year:,.2f}) "
+                    "ficaram fora desta carga",
+                    severity="WARNING",
+                )
+            )
         return result
     return result
 

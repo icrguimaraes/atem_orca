@@ -396,6 +396,23 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
                     payload.append(entry)
                     max_period = max(max_period, int(month))
         carried = 0
+        if dataset == "PROJECTION" and previous is not None:
+            # a projeção só substitui as naturezas de conta que o arquivo cobre: a do CAPEX não apaga a do OPEX
+            file_natures = set(
+                db.scalars(
+                    select(Account.nature).where(Account.id.in_({p["account_id"] for p in payload} or {-1})).distinct()
+                )
+            )
+            columns = [c for c in model.__table__.columns if c.name not in ("id", "dataset_version_id")]
+            old = db.execute(
+                select(*[getattr(model, c.name) for c in columns])
+                .join(Account, Account.id == model.account_id)
+                .where(model.dataset_version_id == previous.id, Account.nature.not_in(file_natures or {"-"}))
+            ).mappings()
+            for row in old:
+                payload.append(dict(row) | {"dataset_version_id": version.id})
+                max_period = max(max_period, int(row["period"]))
+                carried += 1
         if mode == "MERGE" and previous is not None:
             # mantém as combinações filial × CC × conta que não vieram neste arquivo
             columns = [c for c in model.__table__.columns if c.name not in ("id", "dataset_version_id")]

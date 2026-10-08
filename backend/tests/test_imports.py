@@ -616,3 +616,77 @@ def test_projection_cc_without_code_maps_csc_with_warning(client, admin, run_wor
     run_worker()
     b = status(client, admin, batch_id)
     assert b["status"] == "VALIDATED" and b["valid_rows"] == 1 and b["warning_rows"] == 1, b
+
+
+def test_capex_acum_actual_and_projection(client, admin, run_worker):
+    """CAPEX acumulado: realizado jan–set entra como Realizado (sem tocar o KSB1) e a projeção out–dez entra como
+    Projeção sem apagar a do OPEX; dez/2025 e meses futuros do realizado ficam de fora."""
+    _seed_cc(client, admin, run_worker)
+    lines = [
+        (
+            "1001",
+            "1050101011",
+            "6010301001",
+            "Hospedagem",
+            "2026",
+            "3",
+            "2026-03-15",
+            "1",
+            "100",
+            "BRL",
+            "t",
+            None,
+            None,
+        ),
+        (
+            "1001",
+            "1050101011",
+            "6010301001",
+            "Hospedagem",
+            "2026",
+            "9",
+            "2026-09-15",
+            "2",
+            "200",
+            "BRL",
+            "t",
+            None,
+            None,
+        ),
+    ]
+    import_and_load(client, admin, run_worker, builders.ksb1_csv(lines), "ksb1.csv", dataset_type="ACTUAL")
+    import_and_load(
+        client,
+        admin,
+        run_worker,
+        builders.projecao_base([("1050101011", 10, "6010301001", "Hospedagem", 40)]),
+        "proj.xlsx",
+        dataset_type="PROJECTION",
+    )
+    base = float(
+        client.get("/api/v1/dashboard/overview?years=2026&compare=false", headers=admin).json()["kpis"]["ref_ytd"]
+    )
+    assert base == 340
+    rows = [
+        (2025, 12, "1050101011", "1020601005", 900, 900),  # dez/2025: fora
+        (2026, 4, "1050101011", "1020601005", 50, 50),
+        (2026, 9, "1050101011", "1020601005", 5, 77),
+        (2026, 11, "1050101011", "1020601005", 7, 60),  # realizado de mês futuro: fora; projeção 60 entra
+    ]
+    import_and_load(client, admin, run_worker, builders.capex_acum(rows), "Capex Acum.xlsx", dataset_type="ACTUAL")
+    after_actual = float(
+        client.get("/api/v1/dashboard/overview?years=2026&compare=false", headers=admin).json()["kpis"]["ref_ytd"]
+    )
+    assert after_actual == base + 55  # 50 (abr) + 5 (set); KSB1 e projeção do OPEX intactos
+    import_and_load(
+        client,
+        admin,
+        run_worker,
+        builders.capex_acum(rows),
+        "Capex Acum proj.xlsx",
+        force=True,
+        dataset_type="PROJECTION",
+    )
+    final = client.get("/api/v1/dashboard/overview?years=2026&compare=false&figures=true", headers=admin)
+    assert final.status_code == 200, final.text
+    assert float(final.json()["kpis"]["ref_ytd"]) == base + 55 + 60  # projeção do CAPEX soma sem apagar a do OPEX (40)

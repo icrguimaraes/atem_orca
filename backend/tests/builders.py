@@ -648,3 +648,36 @@ def projecao_base(rows: list[tuple]) -> bytes:
             ]
         )
     return _bytes(wb)
+
+
+def capex_acum(rows: list[tuple]) -> bytes:
+    """Arquivo 'Capex Acum': aba Base Capex (PERIODO, EMPRESA, CENTRO DE CUSTO, ..., REALIZADO, PROJEÇÃO)."""
+    from datetime import datetime as _dt
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Base Capex"
+    ws.append(
+        [
+            "PERIODO", "EMPREsa", "CENTRO DE CUSTO", "AREA", "PROJETO", "CENTRO FINANC./ ITEM",
+            "ORÇAMENTO ORIGINAL", "ORÇAMENTO ATUAL", "COMPROMISSO", "REALIZADO", "ORÇ. DISPONÍVEL", "PROJEÇÃO",
+        ]
+    )  # fmt: skip
+    for year, month, cc, acc, real, proj in rows:
+        ws.append(
+            [
+                _dt(year, month, 1),
+                "1001",
+                f"*      01-{cc}  ",
+                "Area",
+                None,
+                f"       {acc}  Item",
+                None,
+                None,
+                None,
+                real,
+                None,
+                proj,
+            ]
+        )
+    return _bytes(wb)

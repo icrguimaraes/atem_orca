@@ -82,7 +82,7 @@ def validate_batch(db: Session, batch: ImportBatch, storage: LocalStorage) -> Im
     options = batch.options or {}
     try:
         sheets = load_sheets(storage.read(batch.storage_path), batch.file_name)
-        if batch.dataset_type == "PROJECTION":
+        if batch.dataset_type in ("PROJECTION", "ACTUAL"):
             # meses que já têm realizado (KSB1) ficam de fora da projeção, por empresa × ano
             options = dict(options) | {
                 "projection_closed": {
