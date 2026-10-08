@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { clearPersistedFilters } from "./persist";
 import { api, getToken, setToken, type User } from "./api";
 
 interface AuthState {
@@ -28,11 +29,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
+    clearPersistedFilters();
     setToken(access_token);
     setUser(await api<User>("/auth/me"));
   }, []);
 
   const logout = useCallback(() => {
+    clearPersistedFilters();
     setToken(null);
     setUser(null);
   }, []);

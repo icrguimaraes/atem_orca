@@ -468,6 +468,8 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 .filters select { max-width: 320px; }
 /* Painel: grupos de botões (Empresa, Área, Tipo) na mesma linha do select de CC, com o respiro das linhas de chips */
 .filters:has(> .chip-group) { gap: 10px 24px; }
+.filter-reset { margin-left: auto; }
+.filter-reset:disabled { opacity: 0.45; cursor: default; }
 .chip-group > select { max-width: 280px; }
 .filter-summary { display: none; }
 .inline-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

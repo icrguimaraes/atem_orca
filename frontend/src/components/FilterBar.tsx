@@ -17,11 +17,13 @@ export interface FilterField {
  * (um toque em qualquer campo abre a folha inferior com todos os filtros, "Limpar" e "Aplicar").
  * `onApply` recebe todos os valores de uma vez (evita setState em cascata); sem ele, aplica campo a campo.
  */
-export function FilterBar({ fields, lead, extra, onApply }: {
+export function FilterBar({ fields, lead, extra, onApply, onReset, resetCount }: {
   fields: FilterField[];
   lead?: ReactNode;         // controles antes dos selects (ex.: botões de empresa no Painel)
   extra?: ReactNode;
   onApply?: (values: Record<string, string>) => void;
+  onReset?: () => void;     // botão "Resetar filtros" (sempre visível; desabilitado sem filtro ativo)
+  resetCount?: number;      // filtros ativos além dos selects (botões, busca…); sem ele, conta os selects
 }) {
   const [open, setOpen] = useState(false);
   const current = Object.fromEntries(fields.map((f) => [f.key, f.value]));
@@ -34,6 +36,12 @@ export function FilterBar({ fields, lead, extra, onApply }: {
   };
   const active = fields.filter((f) => f.value !== "").length;
   const draftActive = fields.filter((f) => (draft[f.key] ?? "") !== "").length;
+  const resetN = resetCount ?? active;
+  const reset = onReset && (
+    <button type="button" className="btn btn-ghost btn-sm filter-reset" disabled={!resetN} onClick={onReset}>
+      Resetar filtros{resetN ? ` (${resetN})` : ""}
+    </button>
+  );
 
   function apply() {
     if (onApply) onApply(draft);
@@ -61,6 +69,7 @@ export function FilterBar({ fields, lead, extra, onApply }: {
           </select>
         ))}
         {extra}
+        {reset}
       </div>
 
       <div className="filter-summary" role="group" aria-label="Filtros">
@@ -72,6 +81,7 @@ export function FilterBar({ fields, lead, extra, onApply }: {
           </button>
         ))}
         {extra && <div className="filter-extra">{extra}</div>}
+        {reset && <div className="filter-extra">{reset}</div>}
       </div>
 
       {open && createPortal(

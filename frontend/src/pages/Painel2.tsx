@@ -1,4 +1,5 @@
 import { useCallback, useState, type ReactNode } from "react";
+import { usePersistentState } from "../persist";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, type Breakdown, type BreakdownRow, type Company, type CostCenter, type Cycle, type Department, type Overview, type Package } from "../api";
 import { useAuth } from "../auth";
@@ -93,27 +94,27 @@ export default function Painel2() {
   const isController = can("CONTROLLER");
   const isPlanner = can("CONTROLLER", "HR");
   const [searchParams] = useSearchParams();
-  const [filters, setFilters] = useState({ company_id: "", cost_center_id: "", package_id: "" });
-  const [years, setYears] = useState<number[]>([]);
+  const [filters, setFilters] = usePersistentState("painel.filters", { company_id: "", cost_center_id: "", package_id: "" });
+  const [years, setYears] = usePersistentState<number[]>("painel.years", []);
   function toggleYear(y: number, current: number[]) {
     const base = years.length ? years : current;
     const next = base.includes(y) ? base.filter((x) => x !== y) : [...base, y];
     if (next.length) setYears(next.sort((a, b) => a - b));
   }
-  const [compare, setCompare] = useState(false); // desmarcado por padrão (pedido de 08/10/2026)
-  const [samePeriod, setSamePeriod] = useState(true);
-  const [modules, setModules] = useState<string[]>(() => {
-    const t = (searchParams.get("tipo") ?? "").toUpperCase();
-    return BUDGET_TYPES.some((b) => b.key === t) ? [t] : [];
-  });
+  const [compare, setCompare] = usePersistentState("painel.compare", false); // desmarcado por padrão (pedido de 08/10/2026)
+  const [samePeriod, setSamePeriod] = usePersistentState("painel.samePeriod", true);
+  const tipo = (searchParams.get("tipo") ?? "").toUpperCase();
+  const tipoFromUrl = BUDGET_TYPES.some((b) => b.key === tipo);
+  // ?tipo= (links de outras páginas) vale sobre o filtro guardado
+  const [modules, setModules] = usePersistentState<string[]>("painel.modules", tipoFromUrl ? [tipo] : [], tipoFromUrl);
   function toggleModule(m: string) {
     setModules((cur) => {
       const next = cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m];
       return next.length === BUDGET_TYPES.length ? [] : BUDGET_TYPES.map((b) => b.key).filter((k) => next.includes(k));
     });
   }
-  const [months, setMonths] = useState<number[]>([]);
-  const [department, setDepartment] = useState(""); // área (Controladoria, Tributos…); vazio = todas
+  const [months, setMonths] = usePersistentState<number[]>("painel.months", []);
+  const [department, setDepartment] = usePersistentState("painel.department", ""); // área (Controladoria, Tributos…); vazio = todas
   const toggleMonth = useCallback((m: number) => {
     setMonths((cur) => {
       const next = cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m].sort((a, b) => a - b);
@@ -151,7 +152,7 @@ export default function Painel2() {
   );
 
   // filtro por conta: só existe por clique (nos rankings ou na tabela); aparece como etiqueta removível
-  const [account, setAccount] = useState<{ id: number; label: string } | null>(null);
+  const [account, setAccount] = usePersistentState<{ id: number; label: string } | null>("painel.account", null);
 
   // cliques nos visuais filtram o painel, como no Power BI
   const onMonth = useCallback((cd: unknown) => {
@@ -180,6 +181,8 @@ export default function Painel2() {
     setMonths([]);
     setModules([]);
     setDepartment("");
+    setCompare(false);
+    setSamePeriod(true);
   }
   const activeFilters =
     [filters.company_id, filters.cost_center_id, filters.package_id].filter(Boolean).length +
@@ -237,11 +240,6 @@ export default function Painel2() {
         subtitle={<p className="greeting">{greeting()}, {user?.name.split(" ")[0]}!</p>}
         actions={
           <>
-            {activeFilters > 0 && (
-              <button type="button" className="btn btn-ghost" onClick={clearAll}>
-                Limpar filtros ({activeFilters})
-              </button>
-            )}
             {isPlanner && <Link to="/pessoal/simulacao" className="btn btn-ghost">Simular cenário de pessoal</Link>}
           </>
         }
@@ -252,6 +250,8 @@ export default function Painel2() {
 
       <FilterBar
         onApply={(v) => setFilters({ ...filters, cost_center_id: v.cost_center_id })}
+        onReset={clearAll}
+        resetCount={activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1)}
         lead={
           <>
             <div className="chip-group">

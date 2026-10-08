@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { usePersistentState } from "../persist";
 import { Link } from "react-router-dom";
 import { api, download, type AttentionPoint, type Company, type ConsolidationOverview, type VersionCompare, type VersionInfo } from "../api";
 import { useAuth } from "../auth";
@@ -88,10 +89,11 @@ export default function Consolidation() {
   const { can } = useAuth();
   const isController = can("CONTROLLER");
   const [versionId, setVersionId] = useState<number | null>(null);
-  const [companyId, setCompanyId] = useState("");
-  const [q, setQ] = useState("");
-  const [flag, setFlag] = useState("");
-  const [moduleFilter, setModuleFilter] = useState("");
+  const [companyId, setCompanyId] = usePersistentState("consolidacao.company", "");
+  const [q, setQ] = usePersistentState("consolidacao.q", "");
+  const [flag, setFlag] = usePersistentState("consolidacao.flag", "");
+  const [moduleFilter, setModuleFilter] = usePersistentState("consolidacao.module", "");
+  const resetFilters = () => { setVersionId(null); setCompanyId(""); setQ(""); setFlag(""); setModuleFilter(""); };
   const [action, setAction] = useState<"freeze" | "revise" | null>(null);
   const [reason, setReason] = useState("");
   const [major, setMajor] = useState(false);
@@ -169,6 +171,8 @@ export default function Consolidation() {
         }
       />
       <FilterBar
+        onReset={resetFilters}
+        resetCount={[versionId, companyId, q, flag, moduleFilter].filter(Boolean).length}
         fields={[
           {
             key: "version_id", label: "Versão", value: versionId ? String(versionId) : "",

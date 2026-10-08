@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePersistentState } from "../persist";
 import { api, type Company, type Package } from "../api";
 import { useAuth } from "../auth";
 import { FilterBar } from "../components/FilterBar";
@@ -35,12 +36,12 @@ const FILTER_OF: Record<string, keyof Filters> = { company: "company_id", depart
 export default function Analytics() {
   const { can } = useAuth();
   const isController = can("CONTROLLER");
-  const [filters, setFilters] = useState<Filters>(EMPTY);
-  const [dimension, setDimension] = useState("cost_center");
-  const [variationBy, setVariationBy] = useState<"account" | "cost_center">("account");
-  const [variationMode, setVariationMode] = useState<"abs" | "pct">("abs");
-  const [top, setTop] = useState(10);
-  const [trail, setTrail] = useState<{ level: string; label: string; filters: Filters; dimension: string }[]>([]);
+  const [filters, setFilters] = usePersistentState<Filters>("analise.filters", EMPTY);
+  const [dimension, setDimension] = usePersistentState("analise.dimension", "cost_center");
+  const [variationBy, setVariationBy] = usePersistentState<"account" | "cost_center">("analise.variationBy", "account");
+  const [variationMode, setVariationMode] = usePersistentState<"abs" | "pct">("analise.variationMode", "abs");
+  const [top, setTop] = usePersistentState("analise.top", 10);
+  const [trail, setTrail] = usePersistentState<{ level: string; label: string; filters: Filters; dimension: string }[]>("analise.trail", []);
   const companies = useLoad(() => api<Company[]>("/companies"));
   const packages = useLoad(() => api<Package[]>("/packages"));
   const opts = useLoad(() => api<Options>("/analytics/options"));
@@ -96,10 +97,11 @@ export default function Analytics() {
       <PageHeader
         title="Análise orçamentária"
         subtitle={`Realizado ${y.prev} × Orçado ${y.ref} × Orçamento ${y.target} (versão ${d.version.label}). Os números são os mesmos do processo: OPEX, CAPEX e Pessoal consolidados por centro de custo, conta e mês.`}
-        actions={active > 0 && <button className="btn btn-ghost" onClick={clear}>Limpar filtros ({active})</button>}
       />
       <FilterBar
         onApply={(v) => { set({ ...v } as Partial<Filters>); setTrail([]); }}
+        onReset={clear}
+        resetCount={active}
         fields={[
           {
             key: "company_id", label: "Empresa", value: filters.company_id,

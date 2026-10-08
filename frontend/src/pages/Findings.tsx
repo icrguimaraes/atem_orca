@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { usePersistentState } from "../persist";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, download, type Finding, type Findings as FindingsData } from "../api";
 import { FilterBar } from "../components/FilterBar";
@@ -41,11 +42,12 @@ interface CcRow { id: number; label: string; sector: string | null; critical: nu
 export default function Findings() {
   const { data, error, reload } = useLoad(() => api<FindingsData>("/findings"));
   const [tab, setTab] = useState<Tab>("open");
-  const [module, setModule] = useState("");
-  const [severity, setSeverity] = useState("");
+  const [module, setModule] = usePersistentState("apontamentos.module", "");
+  const [severity, setSeverity] = usePersistentState("apontamentos.severity", "");
   const [params] = useSearchParams();
-  const [cc, setCc] = useState(params.get("cc") ?? ""); // ?cc= vem da Validação ("Corrigir em Apontamentos")
-  const [search, setSearch] = useState("");
+  // ?cc= vem da Validação ("Corrigir em Apontamentos") e vale sobre o filtro guardado
+  const [cc, setCc] = usePersistentState("apontamentos.cc", params.get("cc") ?? "", params.has("cc"));
+  const [search, setSearch] = usePersistentState("apontamentos.search", "");
   const [schedule, setSchedule] = useState<Finding | null>(null);
   const [keeping, setKeeping] = useState<Finding[] | null>(null);
   const [msg, setMsg] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
@@ -132,7 +134,6 @@ export default function Findings() {
         subtitle="Fila de correção dos orçamentos em aberto: escolha o centro de custo e resolva por tipo, na própria linha ou em lote. Críticos bloqueiam o envio; avisos podem ser mantidos com justificativa."
         actions={
           <>
-            {filtered && <button type="button" className="btn" onClick={clear}>Limpar filtros</button>}
             <button type="button" className="btn" onClick={() => save("/findings/export.xlsx", `Apontamentos_${tag}.xlsx`)}>Relatório (Excel)</button>
           </>
         }
@@ -164,6 +165,8 @@ export default function Findings() {
       </div>
 
       <FilterBar
+        onReset={clear}
+        resetCount={[module, severity, cc, search].filter(Boolean).length}
         fields={[
           { key: "module", label: "Módulo", value: module, onChange: setModule, options: MODULE_OPTIONS },
           {
