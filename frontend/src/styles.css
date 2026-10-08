@@ -559,8 +559,8 @@ input:disabled, select:disabled { opacity: 0.6; }
 .btn-ghost[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
 /* ferramentas de seção e modo "organizar" (ordem dos blocos escolhida pelo usuário, via CSS order) */
 .section-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.section-stack { display: grid; gap: 28px; }
-.panel-body { display: grid; gap: 28px; } /* KPIs + blocos: mesmo respiro do resto da página */
+.section-stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; }
+.panel-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; } /* KPIs + blocos: mesmo respiro do resto da página */
 .section-organize { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; margin-bottom: 8px; border: 1px dashed var(--border); border-radius: var(--radius-sm); font-size: 13px; color: var(--muted); }
 .section-organize strong { color: var(--text); font-weight: 600; }
 .section-organize .inline-controls { gap: 4px; }
