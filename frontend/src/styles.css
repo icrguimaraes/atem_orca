@@ -150,6 +150,8 @@ a { color: inherit; }
 .link:hover { text-decoration-color: var(--text); }
 .error-text { color: var(--bad); font-size: 12px; }
 .good-text { color: var(--good); font-size: 12px; }
+.blur-name { filter: blur(5px); transition: filter 0.15s; cursor: help; }
+.blur-name:hover { filter: none; }
 /* defesa do orçamento: "por quê?" e perguntas */
 .why-wrap { position: relative; display: inline-block; margin-left: 8px; vertical-align: middle; }
 .why-btn { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); font: 500 11px/16px var(--font-body); padding: 1px 7px; cursor: pointer; }

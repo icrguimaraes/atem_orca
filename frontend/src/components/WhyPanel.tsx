@@ -31,6 +31,15 @@ export interface WhyData {
   scope: { cost_center_ids: number[]; single_cost_center: { id: number; code: string; name: string } | null; account_id: number | null; department_id: number | null };
 }
 
+
+/** Desligamento: o nome fica embaçado e só aparece ao passar o mouse (dado sensível na defesa do orçamento). */
+export function Subject({ text, movementType }: { text: string; movementType?: string }) {
+  if (movementType !== "TERMINATION") return <>{text}</>;
+  const i = text.indexOf(" de ");
+  if (i < 0) return <span className="blur-name" title="Passe o mouse para ver o nome">{text}</span>;
+  return <>{text.slice(0, i + 4)}<span className="blur-name" title="Passe o mouse para ver o nome">{text.slice(i + 4)}</span></>;
+}
+
 const cache = new Map<string, Promise<WhyData>>();
 function loadWhy(qs: string, fresh = false): Promise<WhyData> {
   if (fresh) cache.delete(qs);
@@ -121,7 +130,7 @@ function ItemLine({ i, showCc }: { i: WhyItem; showCc: boolean }) {
     <li className="why-item">
       <div className="why-item-head">
         <span>
-          <strong>{i.subject}</strong>
+          <strong><Subject text={i.subject} movementType={i.movement_type} /></strong>
           {showCc && <span className="muted small"> · {i.cost_center}</span>}
         </span>
         {i.justified ? <Badge tone="good">justificado</Badge> : <Badge tone="bad">sem justificativa</Badge>}

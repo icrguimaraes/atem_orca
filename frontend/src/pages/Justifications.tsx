@@ -5,6 +5,7 @@ import { FilterBar } from "../components/FilterBar";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, SearchBox, Stat, useLoad } from "../components/ui";
 import { fmtInt, fmtMoney, fmtPct } from "../labels";
 import { usePersistentState } from "../persist";
+import { Subject } from "../components/WhyPanel";
 
 /* Justificativas do orçamento numa tela só (regra de 08/10/2026: "justificar tudo" — quem defende o número é o
    gestor da área). Cada item mostra o contexto (referência × 2027, linhas, cargo e salário) e salva na hora, com
@@ -15,7 +16,7 @@ interface JustItem {
   key: string; submission_id: number; module: "OPEX" | "PERSONNEL" | "CAPEX"; kind: string;
   cost_center_id: number; cost_center: string; department: string | null; sector: string | null; status: string;
   subject: string; group: string; base: string | null; proposed: string | null; flags: string[];
-  details: string[]; line_texts: string[]; text: string; justified: boolean; editable: boolean;
+  details: string[]; line_texts: string[]; text: string; justified: boolean; editable: boolean; movement_type?: string;
 }
 interface JustData {
   version: string; target_year: number; ref_year: number; items: JustItem[];
@@ -89,7 +90,7 @@ function ItemRow({ item, refYear, target, onSaved }: { item: JustItem; refYear: 
     <li className={`just-item ${item.justified ? "" : "missing"}`}>
       <div className="just-head">
         <div>
-          <div className="just-subject">{item.subject}</div>
+          <div className="just-subject"><Subject text={item.subject} movementType={item.movement_type} /></div>
           <div className="muted small">
             {MODULE_LABEL[item.module]} · {item.group}
             {item.flags.map((f) => <span key={f}> · {FLAG_LABEL[f] ?? f}</span>)}
