@@ -89,6 +89,7 @@ def _labels(o: dict) -> dict:
             "prev": f"Realizado {o['previous_year']}" if o.get("previous_year") else _tip_label(p["base_label"]),
             "ref": _tip_label(p["actual_label"]) or "Realizado",
             "budget": p["budget_label"] or "Orçado",
+            "proj": "Projeção do gestor",
         },
     }
 

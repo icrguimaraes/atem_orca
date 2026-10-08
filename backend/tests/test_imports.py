@@ -578,6 +578,14 @@ def test_projection_fills_only_months_without_ksb1(client, admin, run_worker):
     assert float(after["kpis"]["ref_ytd"]) == float(before) + 120
     proj_months = sorted(round(float(r["proj"])) for r in after["monthly"] if float(r["proj"]) > 0)
     assert proj_months == [50, 70]
+    # os gráficos (figures=true) também precisam montar com a série da projeção
+    figs = client.get("/api/v1/dashboard/overview?years=2026&compare=false&figures=true", headers=admin)
+    assert figs.status_code == 200, figs.text
+    for extra in ("&compare=true", "&modules=PERSONNEL", "&modules=OPEX&months=10,11", "&same_period=false"):
+        again_figs = client.get(f"/api/v1/dashboard/overview?years=2026&figures=true{extra}", headers=admin)
+        assert again_figs.status_code == 200, (extra, again_figs.text[:200])
+    names = [t["name"] for t in figs.json()["figures"]["monthly"]["data"]]
+    assert any("Projeção" in n for n in names), names
     # projeção substitui a anterior inteira (não soma)
     import_and_load(
         client,
