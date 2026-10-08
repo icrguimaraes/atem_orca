@@ -79,6 +79,7 @@ class AccessSummary(BaseModel):
     cost_centers: int  # CCs distintos que acessa como gestor ou por escopo
     managed: int
     scopes: int
+    items: list[dict] = []  # CCs com área e setor: {id, code, name, department, sector, manager}
 
 
 class UserListOut(UserOut):

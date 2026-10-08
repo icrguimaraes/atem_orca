@@ -52,7 +52,14 @@ def test_assign_and_remove_cost_center_access(client, admin):
     scope = resp.json()["scopes"][0]
     assert scope["kind"] == "COST_CENTER" and scope["code"] == "3001002" and resp.json()["cost_centers"] == 2
     assert _visible(client, mgr) == ["3001001", "3001002"]
-    assert _summary(client, ctrl, mgr_id) == {"is_global": False, "cost_centers": 2, "managed": 1, "scopes": 1}
+    summary = _summary(client, ctrl, mgr_id)
+    assert {k: v for k, v in summary.items() if k != "items"} == {
+        "is_global": False,
+        "cost_centers": 2,
+        "managed": 1,
+        "scopes": 1,
+    }
+    assert [(i["code"], i["manager"]) for i in summary["items"]] == [("3001001", True), ("3001002", False)]
     assert _summary(client, ctrl, client.get("/api/v1/auth/me", headers=admin).json()["id"])["is_global"] is True
 
     # recusas: repetido, CC de que já é gestor, nenhum alvo, CC inexistente

@@ -84,7 +84,9 @@ export interface User {
 
 // acesso a centros de custo (Usuários → Acessos; GET /users traz o resumo, /users/{id}/access o detalhe)
 /** Resumo da lista: perfil global (todos os CCs) ou CCs distintos como gestor + escopos. */
-export interface AccessSummary { is_global: boolean; cost_centers: number; managed: number; scopes: number }
+/** CC que o usuário acessa, com área e setor (lista de usuários por área). */
+export interface AccessItem { id: number; code: string; name: string; department: string | null; sector: string | null; manager: boolean }
+export interface AccessSummary { is_global: boolean; cost_centers: number; managed: number; scopes: number; items: AccessItem[] }
 export interface UserListItem extends User { access: AccessSummary }
 export interface AccessCostCenter { id: number; code: string; name: string; company: string; is_active: boolean }
 /** Escopo atribuído: um CC ou a empresa inteira (`cost_centers` = quantos CCs a linha libera). */

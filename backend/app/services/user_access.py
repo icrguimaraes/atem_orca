@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.deps import is_global
-from app.models import Company, CostCenter, User, UserScope
+from app.models import Area, Company, CostCenter, Department, User, UserScope
 
 
 class AccessError(Exception):
@@ -48,12 +48,37 @@ def summaries(db: Session, users: list[User]) -> dict[int, dict]:
             scoped[s.user_id].add(s.cost_center_id)
         elif s.company_id:
             scoped[s.user_id] |= by_company[s.company_id]
+    # CCs com área e setor (lista de usuários agrupada por área, 08/10/2026)
+    all_ids = set().union(*managed.values(), *scoped.values()) if (managed or scoped) else set()
+    ccs = {c.id: c for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(all_ids or {-1})))}
+    depts = {d.id: d.name for d in db.scalars(select(Department))}
+    sectors = {a.id: a.name for a in db.scalars(select(Area))}
+
+    def items(uid: int) -> list[dict]:
+        out = []
+        for cc_id in sorted(managed[uid] | scoped[uid], key=lambda i: ccs[i].code if i in ccs else ""):
+            c = ccs.get(cc_id)
+            if c is None:
+                continue
+            out.append(
+                {
+                    "id": c.id,
+                    "code": c.code,
+                    "name": c.name,
+                    "department": depts.get(c.department_id),
+                    "sector": sectors.get(c.area_id),
+                    "manager": cc_id in managed[uid],
+                }
+            )
+        return out
+
     return {
         u.id: {
             "is_global": is_global(u),
             "cost_centers": len(managed[u.id] | scoped[u.id]),
             "managed": len(managed[u.id]),
             "scopes": count[u.id],
+            "items": items(u.id),
         }
         for u in users
     }
