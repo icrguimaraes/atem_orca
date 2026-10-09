@@ -67,6 +67,8 @@ export const PARAM_LABELS: Record<string, string> = {
   "personnel.salary_account": "Conta de salários (consolidação de Pessoal)",
   "personnel.charges_account": "Conta de encargos e benefícios (Pessoal)",
   "personnel.severance_account": "Conta de verbas rescisórias (Pessoal)",
+  "personnel.annual_bonus_clt": "Abono anual por colaborador CLT (R$/ano, em 12 parcelas)",
+  "personnel.annual_bonus_account": "Conta do abono anual do CLT (Pessoal)",
   "personnel.charges_split": "Rateio de encargos e benefícios por conta (Pessoal)",
   "review.justification_blocks": "Justificativa faltando bloqueia o envio",
   "travel.route_estimates": "Passagem estimada por rota (ida e volta)",

@@ -38,7 +38,36 @@ def _setup(client, admin, run_worker):
     client.patch(f"/api/v1/cost-centers/{ccs[CC1]['id']}", headers=admin, json={"manager_user_id": mgr_id})
     cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
     client.post(f"/api/v1/cycles/{cycle_id}/open", headers=admin)
+    # valores exatos sem o abono anual do CLT (ele tem teste próprio em test_personnel)
+    client.put(f"/api/v1/cycles/{cycle_id}/parameters/personnel.annual_bonus_clt", headers=admin, json={"value": 0})
     return ccs, mgr, final
+
+
+def test_annual_bonus_clt_in_gratification_account(client, admin, run_worker):
+    """Abono anual do CLT (09/10/2026): R$ 2.500 por colaborador no ano, 1/12 por mês ativo, sem multiplicador,
+    na conta de gratificação (6010101009); PJ não recebe."""
+    ccs, _mgr, _final = _setup(client, admin, run_worker)
+    head = client.get(f"/api/v1/personnel/cost-centers/{ccs[CC1]['id']}", headers=admin).json()
+    url = f"/api/v1/personnel/submissions/{head['submission_id']}/view"
+    before = client.get(url, headers=admin).json()
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+    r = client.put(
+        f"/api/v1/cycles/{cycle_id}/parameters/personnel.annual_bonus_clt", headers=admin, json={"value": 2500}
+    )
+    assert r.status_code == 200, r.text
+    after = client.get(url, headers=admin).json()
+    clt_months = sum(sum(p["headcount"]) for p in after["positions"] if p["contract_type_code"] == "CLT")
+    expected = Decimal(2500) * clt_months / 12
+    assert abs(Decimal(after["totals"]["bonus_total"]) - expected) < Decimal("0.05"), after["totals"]["bonus_total"]
+    diff = Decimal(after["totals"]["annual"]) - Decimal(before["totals"]["annual"])
+    assert diff == Decimal(after["totals"]["bonus_total"])  # o abono não passa pelo multiplicador
+    assert after["totals"]["charges_total"] == before["totals"]["charges_total"]
+    pj = [p for p in after["positions"] if p["contract_type_code"] == "PJ"]
+    for p in pj:
+        old = next(q for q in before["positions"] if q["key"] == p["key"])
+        assert p["annual"] == old["annual"]
+    rows = client.get("/api/v1/consolidation/overview", headers=admin).json()
+    assert "6010101009" in str(rows)
 
 
 def _by_name(view):

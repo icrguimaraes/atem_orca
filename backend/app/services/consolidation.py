@@ -50,6 +50,7 @@ PERSONNEL_ACCOUNTS = (
     ("salary", "personnel.salary_account", 6010101001, "Salários e ordenados"),
     ("charges", "personnel.charges_account", 6010102001, "Encargos e benefícios (multiplicador)"),
     ("severance", "personnel.severance_account", 6010101010, "Verbas rescisórias"),
+    ("bonus", "personnel.annual_bonus_account", 6010101009, "Gratificações/Premiações (abono anual CLT)"),
 )
 CHARGES_SPLIT_KEY = "personnel.charges_split"
 
@@ -239,14 +240,14 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
     scenario = personnel_svc.baseline(db, ctx)
     for cc_id, positions in personnel_svc.build_positions(db, ctx, cc_ids).items():
         t = personnel_svc.totals_for(positions, scenario)
-        for kind, series in (("salary", t.salary), ("severance", t.severance)):
+        for kind, series in (("salary", t.salary), ("severance", t.severance), ("bonus", t.bonus)):
             code, name = pacc[kind]
             for m, amount in enumerate(series, start=1):
                 if amount:
                     add("PERSONNEL", None, None, cc_id, code, name, "Pessoas", m, money(amount))
         # parte do multiplicador, mês a mês, rateada entre as contas (soma exata em centavos)
         for m in range(1, 13):
-            charges = t.monthly[m - 1] - t.salary[m - 1] - t.severance[m - 1]
+            charges = t.monthly[m - 1] - t.salary[m - 1] - t.severance[m - 1] - t.bonus[m - 1]
             if not charges:
                 continue
             for code, amount in split_amount(charges, split_weights).items():

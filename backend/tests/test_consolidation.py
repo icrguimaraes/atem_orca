@@ -15,6 +15,8 @@ def _setup(client, admin, run_worker):
     import_and_load(client, admin, run_worker, builders.quadro_funcionarios(QUADRO), "quadro.xlsx")
     cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
     client.post(f"/api/v1/cycles/{cycle_id}/open", headers=admin)
+    # valores exatos sem o abono anual do CLT (ele tem teste próprio em test_personnel)
+    client.put(f"/api/v1/cycles/{cycle_id}/parameters/personnel.annual_bonus_clt", headers=admin, json={"value": 0})
     cc = next(c for c in client.get("/api/v1/cost-centers", headers=admin).json() if c["code"] == CC)
     opex = client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=admin).json()["submission_id"]
     acc = {a["code"]: a["id"] for a in client.get("/api/v1/opex/options", headers=admin).json()["accounts"]}

@@ -350,6 +350,9 @@ CYCLE_PARAMETERS = {
     "personnel.salary_account": (6010101001, "Conta do salário (com reajuste) na consolidação e na carga SAP"),
     "personnel.charges_account": (6010102001, "Conta de encargos e benefícios (parte do multiplicador)"),
     "personnel.severance_account": (6010101010, "Conta das verbas rescisórias"),
+    # abono anual do CLT (09/10/2026): ~R$ 2.500 por colaborador no ano, em 12 parcelas, sem multiplicador
+    "personnel.annual_bonus_clt": (2500, "Abono anual por colaborador CLT (R$/ano, diluído em 12 parcelas)"),
+    "personnel.annual_bonus_account": (6010101009, "Conta do abono anual do CLT (Gratificações/Premiações)"),
     "personnel.charges_split": (
         {
             # mix do realizado 2026 (KSB1, empresa 1001, 8 CCs da Controladoria, jan-set), % do custo de pessoal

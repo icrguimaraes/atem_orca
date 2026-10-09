@@ -24,7 +24,12 @@ from app.services import personnel as personnel_svc
 router = APIRouter(prefix="/consolidation", tags=["Consolidação"])
 ZERO = Decimal("0")
 controller = require_roles(Role.CONTROLLER)
-KIND_LABELS = {"salary": "salários", "charges": "encargos e benefícios", "severance": "verbas rescisórias"}
+KIND_LABELS = {
+    "salary": "salários",
+    "charges": "encargos e benefícios",
+    "severance": "verbas rescisórias",
+    "bonus": "abono anual do CLT",
+}
 
 
 def _ctx(db: Session) -> opex_svc.Context:

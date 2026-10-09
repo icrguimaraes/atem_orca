@@ -798,6 +798,7 @@ def what_if(payload: WhatIfIn, db: Session = Depends(get_db), user: User = Depen
             adjustment_month=payload.adjustment_month,
             name=payload.name or "Simulação",
         )
+        sim = svc.with_cycle_bonus(sim, ctx)  # o abono do CLT vale nos dois cenários
     except svc.PersonnelError as exc:
         raise HTTPException(422, str(exc)) from exc
     positions = svc.build_positions(db, ctx, ids)

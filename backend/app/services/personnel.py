@@ -11,6 +11,7 @@ Custo mensal = salário × (1 + reajuste do cenário a partir da data-base) × m
 (CLT 1,8 como proxy de encargos e benefícios; PJ sem multiplicador). Ver domain/rules/personnel.py.
 """
 
+import dataclasses
 from collections import defaultdict
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -71,6 +72,9 @@ class ScenarioInfo:
     adjustment_month: int
     multipliers: dict[str, Decimal]
     rules: pr.Scenario
+    # abono anual por colaborador (R$/ano em 12 parcelas, sem multiplicador) nos tipos de contrato listados
+    annual_bonus: Decimal = ZERO
+    bonus_contracts: tuple[str, ...] = ("CLT",)
 
 
 def contract_types(db: Session, *, active_only: bool = False) -> dict[str, ContractType]:
@@ -122,7 +126,17 @@ def baseline(db: Session, ctx: Context) -> ScenarioInfo:
     row = db.scalar(
         select(PersonnelScenario).where(PersonnelScenario.cycle_id == ctx.cycle.id, PersonnelScenario.is_baseline)
     )
-    return scenario_info(db, row)
+    return with_cycle_bonus(scenario_info(db, row), ctx)
+
+
+def with_cycle_bonus(info: ScenarioInfo, ctx: Context) -> ScenarioInfo:
+    """Abono anual do CLT (parâmetro `personnel.annual_bonus_clt`) no cenário."""
+    raw = ctx.params.get("personnel.annual_bonus_clt", 0)
+    try:
+        bonus = Decimal(str(raw or 0))
+    except ArithmeticError:
+        bonus = ZERO
+    return dataclasses.replace(info, annual_bonus=max(bonus, ZERO))
 
 
 # ------------------------------------------------------------------ quadro e projeção
@@ -251,6 +265,7 @@ class Totals:
     salary: list[Decimal] = field(default_factory=lambda: [ZERO] * 12)
     headcount: list[int] = field(default_factory=lambda: [0] * 12)
     severance: list[Decimal] = field(default_factory=lambda: [ZERO] * 12)
+    bonus: list[Decimal] = field(default_factory=lambda: [ZERO] * 12)  # abono anual do CLT, por mês
     hires: int = 0
     terminations: int = 0
     transfers_out: int = 0
@@ -267,16 +282,34 @@ class Totals:
             self.salary[i] += other.salary[i]
             self.headcount[i] += other.headcount[i]
             self.severance[i] += other.severance[i]
+            self.bonus[i] += other.bonus[i]
         for key in ("hires", "terminations", "transfers_out", "transfers_in", "promotions"):
             setattr(self, key, getattr(self, key) + getattr(other, key))
 
 
+def position_bonus(pos: Position, scenario: ScenarioInfo) -> list[Decimal]:
+    """Abono anual da posição por mês: 1/12 do valor anual por pessoa ativa no mês (só nos contratos elegíveis)."""
+    if not scenario.annual_bonus or pos.plan.contract_type not in scenario.bonus_contracts:
+        return [ZERO] * 12
+    hc = pr.headcount(pos.plan)
+    # parcelas pelo acumulado (12 meses ativos somam exatamente o valor anual, sem sobra de centavos)
+    out, cum, paid = [], 0, ZERO
+    for m in MONTHS:
+        cum += hc[m]
+        due = money(scenario.annual_bonus * cum / 12)
+        out.append(due - paid)
+        paid = due
+    return out
+
+
 def position_cost(pos: Position, scenario: ScenarioInfo) -> tuple[list[Decimal], list[Decimal], list[int]]:
-    """Custo mensal (com verba rescisória no mês do desligamento), salário mensal (com reajuste, sem
-    multiplicador) e headcount da posição."""
+    """Custo mensal (com verba rescisória no mês do desligamento e o abono anual do CLT), salário mensal (com
+    reajuste, sem multiplicador) e headcount da posição."""
     cost = dict(pr.monthly_cost(pos.plan, scenario.rules))
     if pos.severance:
         cost[pos.plan.effective_month] += pos.severance
+    for m, bonus in zip(MONTHS, position_bonus(pos, scenario), strict=True):
+        cost[m] += bonus
     salary = pr.monthly_salary(pos.plan)
     adj = scenario.salary_adjustment_pct
     salary_adj = [money(salary[m] * (1 + adj) if adj and m >= scenario.adjustment_month else salary[m]) for m in MONTHS]
@@ -294,6 +327,8 @@ def totals_for(positions: list[Position], scenario: ScenarioInfo) -> Totals:
             t.headcount[i] += hc[i]
         if pos.severance:
             t.severance[pos.plan.effective_month - 1] += pos.severance
+        for i, bonus in enumerate(position_bonus(pos, scenario)):
+            t.bonus[i] += bonus
         move = pos.movement.movement_type if pos.movement else "KEEP"
         if pos.kind == "HIRE":
             t.hires += pos.plan.quantity
@@ -311,7 +346,7 @@ def totals_for(positions: list[Position], scenario: ScenarioInfo) -> Totals:
 
 
 def totals_out(t: Totals) -> dict:
-    charges = [money(t.monthly[i] - t.salary[i] - t.severance[i]) for i in range(12)]
+    charges = [money(t.monthly[i] - t.salary[i] - t.severance[i] - t.bonus[i]) for i in range(12)]
     return {
         "monthly": [str(money(v)) for v in t.monthly],
         "salary_monthly": [str(money(v)) for v in t.salary],
@@ -321,6 +356,8 @@ def totals_out(t: Totals) -> dict:
         "salary_total": str(money(sum(t.salary, ZERO))),
         "charges_total": str(money(sum(charges, ZERO))),
         "severance_total": str(money(sum(t.severance, ZERO))),
+        "bonus_monthly": [str(money(v)) for v in t.bonus],
+        "bonus_total": str(money(sum(t.bonus, ZERO))),
         "headcount_start": t.headcount[0],
         "headcount_end": t.headcount[11],
         "hires": t.hires,
