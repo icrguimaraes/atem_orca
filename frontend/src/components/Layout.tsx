@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { BrandMark } from "./Brand";
+import { CommandPalette, type PaletteItem } from "./CommandPalette";
 import { Alert, Modal } from "./ui";
 import { useAuth } from "../auth";
 import { ROLE_LABELS } from "../labels";
@@ -32,7 +33,14 @@ const ICON = {
   senha: "M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4",
   sair: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   mais: "M5 12h.01M12 12h.01M19 12h.01",
+  recolher: "M4 4h16v16H4zM9 4v16M15 10l-2 2 2 2",
+  expandir: "M4 4h16v16H4zM9 4v16M13 10l2 2-2 2",
+  busca: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-3.5-3.5",
+  tema: "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z",
 };
+
+const RAIL_KEY = "atem.sidebar.collapsed"; // menu recolhido: preferência do navegador (não some no login)
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
 const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
@@ -117,17 +125,68 @@ export default function Layout() {
   const [more, setMore] = useState(false); // folha "Mais" da barra inferior (celular)
   const [theme, setTheme] = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
   useEffect(() => setMore(false), [location.pathname]);
+  // menu lateral retrátil (só ícones) para dar mais espaço às páginas
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(RAIL_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(RAIL_KEY, collapsed ? "1" : "0");
+    } catch {
+      /* ignora */
+    }
+  }, [collapsed]);
+  // busca rápida: Ctrl+K (⌘K no Mac) em qualquer página
+  const [search, setSearch] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearch((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  const paletteItems: PaletteItem[] = [
+    ...NAV_GROUPS.flatMap((g) =>
+      g.items.filter(allowed).map((n) => ({ key: n.to, group: "Páginas", label: n.label, icon: n.icon, hint: g.title, run: () => navigate(n.to) })),
+    ),
+    { key: "rail", group: "Ações", label: collapsed ? "Expandir o menu lateral" : "Recolher o menu lateral", icon: collapsed ? ICON.expandir : ICON.recolher, run: () => setCollapsed(!collapsed), keywords: "menu barra lateral" },
+    { key: "theme", group: "Ações", label: theme === "dark" ? "Usar tema claro" : "Usar tema escuro", icon: ICON.tema, run: () => setTheme(theme === "dark" ? "light" : "dark"), keywords: "tema escuro claro modo noturno" },
+    { key: "pwd", group: "Ações", label: "Alterar minha senha", icon: ICON.senha, run: () => setPwd(true), keywords: "senha conta" },
+    { key: "logout", group: "Ações", label: "Sair", icon: ICON.sair, run: logout, keywords: "logout sair" },
+  ];
   return (
-    <div className="shell">
+    <div className={`shell${collapsed ? " is-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="brand">
-          <BrandMark size={44} />
-          <div>
+          <BrandMark size={collapsed ? 30 : 44} />
+          <div className="brand-text">
             <strong>Orçamento</strong>
             <span>Controladoria e Tributos · Grupo Atem</span>
           </div>
+          <button type="button" className="mobile-only top-search-icon" onClick={() => setSearch(true)} aria-label="Buscar">
+            <Icon d={ICON.busca} size={20} />
+          </button>
         </div>
+        <button
+          type="button"
+          className="rail-toggle"
+          onClick={() => setCollapsed(!collapsed)}
+          aria-expanded={!collapsed}
+          aria-controls="main-nav"
+          title={collapsed ? "Expandir o menu" : "Recolher o menu"}
+        >
+          <Icon d={collapsed ? ICON.expandir : ICON.recolher} size={18} />
+          <span>Recolher menu</span>
+        </button>
         <nav id="main-nav" aria-label="Navegação principal">
           {NAV_GROUPS.map((g) => {
             const items = g.items.filter(allowed);
@@ -136,7 +195,7 @@ export default function Layout() {
               <div className="nav-group" key={g.title}>
                 <div className="nav-section">{g.title}</div>
                 {items.map((n) => (
-                  <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")}>
+                  <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")} title={collapsed ? n.label : undefined}>
                     <Icon d={n.icon} size={18} />
                     <span>{n.label}</span>
                   </NavLink>
@@ -156,9 +215,19 @@ export default function Layout() {
           />
         </div>
       </aside>
-      <main className="content">
-        <Outlet />
-      </main>
+      <div className="main-col">
+        <header className="topbar">
+          <button type="button" className="top-search" onClick={() => setSearch(true)}>
+            <Icon d={ICON.busca} size={17} />
+            <span>Buscar páginas, centros de custo e ações…</span>
+            <kbd>{isMac ? "⌘" : "Ctrl"} K</kbd>
+          </button>
+        </header>
+        <main className="content">
+          <Outlet />
+        </main>
+      </div>
+      {search && <CommandPalette items={paletteItems} onClose={() => setSearch(false)} />}
       {pwd && <PasswordModal onClose={() => setPwd(false)} />}
       <MobileTabs allowed={allowed} more={more} setMore={setMore} onPassword={() => setPwd(true)} onLogout={logout} userName={user?.name} theme={theme} setTheme={setTheme} />
     </div>
