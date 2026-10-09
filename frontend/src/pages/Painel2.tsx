@@ -538,26 +538,36 @@ export default function Painel2() {
             {shell("top",
               <Card
                 title={`Maiores centros de custo · ${mainLabel}`}
-                actions={
-                  <>
-                    {o.top_cost_centers_total && (
-                      <span className="rank-total">
-                        Total <strong>{fmtCompact(o.top_cost_centers_total.main)}</strong>
-                        {o.top_cost_centers_total.base !== null && (
-                          <>
-                            {" "}· {baseLabel} <strong>{fmtCompact(o.top_cost_centers_total.base)}</strong>{" "}
-                            <Delta pct={o.top_cost_centers_total.var_pct} />
-                          </>
-                        )}
-                      </span>
-                    )}
-                    {filters.cost_center_id && unpick("Desmarcar", () => setFilters((cur) => ({ ...cur, cost_center_id: "" })))}
-                  </>
-                }
+                actions={filters.cost_center_id ? unpick("Desmarcar", () => setFilters((cur) => ({ ...cur, cost_center_id: "" }))) : undefined}
               >
+                {o.top_cost_centers_total && (
+                  <div className="stats rank-stats">
+                    <Stat label={`Total · ${mainLabel}`} value={fmtCompact(o.top_cost_centers_total.main)} hint={lines(fmtMoney(o.top_cost_centers_total.main), "todos os centros de custo")} />
+                    {o.top_cost_centers_total.base !== null && (
+                      <>
+                        <Stat label={`Total · ${baseLabel}`} value={fmtCompact(o.top_cost_centers_total.base)} hint={fmtMoney(o.top_cost_centers_total.base)} />
+                        <div className="stat stat-inline-delta">
+                          <span className="stat-label">Variação</span>
+                          <span className="stat-value"><Delta pct={o.top_cost_centers_total.var_pct} /></span>
+                          <span className="stat-hint">
+                            <span className="stat-line"><strong>{fmtSignedMoney(Number(o.top_cost_centers_total.main) - Number(o.top_cost_centers_total.base))}</strong></span>
+                            <span className="stat-line">vs {baseLabel}</span>
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 <p className="muted small">Clique num centro de custo para filtrar; de novo para desmarcar.</p>
                 {o.top_cost_centers.length ? (
-                  <PlotlyChart figure={f.top_cost_centers} onClick={onCostCenter} ariaLabel="Maiores centros de custo" />
+                  <div className="monthly-split">
+                    <PlotlyChart figure={f.top_cost_centers} onClick={onCostCenter} ariaLabel="Maiores centros de custo" />
+                    {f.top_cost_centers_total && (
+                      <div className="monthly-total">
+                        <PlotlyChart figure={f.top_cost_centers_total} height={360} ariaLabel="Total de todos os centros de custo" />
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <Empty>Sem dados.</Empty>
                 )}

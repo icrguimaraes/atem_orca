@@ -369,12 +369,14 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
             x=values,
             y=cats,
             name=lb["main"],
-            width=0.52 if show_base else 0.6,
-            offset=-0.42 if show_base else -0.3,
+            # com base, as duas barras do mesmo tamanho, lado a lado (pedido de 09/10/2026)
+            width=0.38 if show_base else 0.6,
+            offset=-0.4 if show_base else -0.3,
             marker={"color": lb["main_color"], "cornerradius": 4, "opacity": opacity},
             text=[text(v, r.get("var_pct")) for v, r in zip(values, rows, strict=True)],
             textposition="outside",
             cliponaxis=False,
+            constraintext="none",
             textfont={"size": 12},
             customdata=customdata,
             hovertemplate=hover + "<extra></extra>",
@@ -387,14 +389,15 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
                 x=bases,
                 y=cats,
                 name=lb["base"],
-                width=0.2,
-                offset=0.14,
+                width=0.38,
+                offset=0.0,
                 marker={"color": lb["base_color"], "cornerradius": 3, "opacity": opacity},
                 # rótulo também na base (pedido de 09/10/2026), menor e na cor da série
-                text=[fmt_compact(b) if b else "" for b in bases],
+                text=[f"<b>{fmt_compact(b)}</b>" if b else "" for b in bases],
                 textposition="outside",
                 cliponaxis=False,
-                textfont={"size": 11, "color": INK.get(lb["base_color"], lb["base_color"])},
+                constraintext="none",
+                textfont={"size": 12, "color": INK.get(lb["base_color"], lb["base_color"])},
                 customdata=customdata,
                 hovertemplate=hover + "<extra></extra>",
             )
@@ -404,7 +407,7 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
         barmode="overlay",
         showlegend=True,
         legend=LEGEND,
-        height=max(150, 44 * len(rows) + 58),
+        height=max(150, (60 if show_base else 44) * len(rows) + 58),
         xaxis={
             "showticklabels": False,
             "showgrid": False,
@@ -416,6 +419,51 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
         margin={"l": 8, "r": 150 if show_base else 96, "t": 36, "b": 8},
     )
     return _fig(data, layout) | {"meta": {"tooltip": "point"}}
+
+
+def fig_rank_total(total: dict | None, lb: dict) -> dict | None:
+    """Coluna "Total" ao lado dos maiores CCs: todos os centros de custo na série principal e na base, com a variação
+    no tooltip. customdata = [valor, linhas do tooltip]."""
+    if not total:
+        return None
+    series = [("main", lb["main"], lb["main_color"])]
+    if total.get("base") is not None:
+        series.append(("base", lb["base"], lb["base_color"]))
+    values = {k: _num(total.get(k)) for k, _, _ in series}
+    data = []
+    for key, name, color in series:
+        v = values[key]
+        lines = [[f"{name}: {fmt_money(v)}", color]]
+        if key == "main" and values.get("base"):
+            diff = v - values["base"]
+            lines.append([f"Variação: {fmt_pct(diff / values['base'])} ({_signed_money(diff)})", ""])
+        data.append(
+            go.Bar(
+                x=["TOTAL"],
+                y=[v],
+                name=name,
+                marker={"color": color, "cornerradius": 4},
+                text=[_short(v) if v > 0 else ""],
+                textposition="outside",
+                cliponaxis=False,
+                constraintext="none",
+                textfont={"size": 14, "color": INK.get(color, color)},
+                customdata=[[fmt_money(v), lines]],
+                hovertemplate=name + ": <b>%{customdata[0]}</b><extra></extra>",
+            )
+        )
+    top = max(list(values.values()) + [0.0])
+    layout = _layout(
+        barmode="group",
+        bargap=0.3,
+        bargroupgap=0.12,
+        hovermode="x unified",
+        showlegend=False,
+        yaxis={"visible": False, "range": [0, (top or 1) * 1.15], "fixedrange": True},
+        xaxis={"showgrid": False, "automargin": True, "fixedrange": True},
+        margin={"l": 8, "r": 8, "t": 36, "b": 8},
+    )
+    return _fig(data, layout) | {"meta": {"tooltip": "unified"}}
 
 
 def fig_people(rows: list[dict]) -> dict | None:
@@ -722,6 +770,7 @@ def build(
             selected.get("cost_center_id"),
             show_code=False,
         ),
+        "top_cost_centers_total": fig_rank_total(o.get("top_cost_centers_total"), lb),
         "top_accounts": fig_rank(
             ranked(o["top_accounts"] if top_accounts is None else top_accounts),
             lb,
