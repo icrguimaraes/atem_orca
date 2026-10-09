@@ -39,6 +39,7 @@ from app.models import (
     User,
 )
 from app.services import capex as capex_svc
+from app.services import consolidation as consolidation_svc
 from app.services import opex as opex_svc
 from app.services import personnel as personnel_svc
 from app.services.exports import _sheet
@@ -69,6 +70,7 @@ KIND_LABELS = {
     "OPEX_MOVED_CC": "Lançamento em CC de outra área",
     "PERSONNEL_CC_MOVED": "Colaborador movido de centro de custo",
     "PERSONNEL_EXCLUDED": "Colaborador retirado do orçamento",
+    "PERSONNEL_SPLIT_OVERLAP": "Rateio de encargos sobre abono/bônus",
 }
 FLAG_TEXT = {
     "NEW_ACCOUNT": "Conta nova, sem histórico",
@@ -190,6 +192,7 @@ def collect(
         i["sector"] = sectors.get(ccs[i["cost_center_id"]].area_id)
     if structure and cc_ids is None:
         items += employees_without_cost_center(db)
+        items += cycle_findings(db, ctx)
     items = [i for i in items if i["key"] not in kept]
     attach_sources(db, items)
     items.sort(key=lambda i: (SEVERITY_ORDER[i["severity"]], i["cost_center"], i["module"], i["kind"], i["subject"]))
@@ -322,6 +325,56 @@ def employees_without_cost_center(db: Session) -> list[dict]:
             }
         )
     return out
+
+
+PREMISES_LINK = "/premissas-pessoal"
+
+
+def cycle_findings(db: Session, ctx: opex_svc.Context) -> list[dict]:
+    """Apontamentos do ciclo (premissas, sem CC): só a Controladoria vê; chave "0:CYCLE:{ciclo}:{tipo}". Somem quando
+    a premissa é corrigida (na página Premissas de pessoal); não há "manter" (o registro da análise é por orçamento
+    de CC) — a correção fica na auditoria (SET_PARAMETER)."""
+    if ctx.frozen:
+        return []
+    overlap = consolidation_svc.split_overlap(db, ctx)
+    if not overlap:
+        return []
+    amounts = consolidation_svc.overlap_amounts(db, ctx, overlap)
+    total = sum(amounts.values(), ZERO)
+
+    def share(value: Decimal) -> str:
+        return f"{value * 100:.2f}".replace(".", ",") + "%"
+
+    parts = "; ".join(
+        f"{o['code']} ({o['label']}): {share(o['share'])} do rateio, {brl(amounts[o['code']])}" for o in overlap
+    )
+    return [
+        {
+            "key": f"0:CYCLE:{ctx.cycle.id}:PERSONNEL_SPLIT_OVERLAP",
+            "entity": "CYCLE",
+            "entity_id": str(ctx.cycle.id),
+            "submission_id": None,
+            "severity": "WARNING",
+            "module": "PERSONNEL",
+            "module_label": MODULE_LABELS["PERSONNEL"],
+            "kind": "PERSONNEL_SPLIT_OVERLAP",
+            "kind_label": KIND_LABELS["PERSONNEL_SPLIT_OVERLAP"],
+            "cost_center_id": -1,
+            "cost_center": "Premissas do ciclo",
+            "sector": None,
+            "status": "",
+            "subject": "Rateio de encargos inclui " + " e ".join(f"{o['code']} {o['name']}" for o in overlap),
+            "detail": parts,
+            "message": f"Essas contas já recebem o {' e o '.join(o['label'] for o in overlap)} como linha própria, e o "
+            f"rateio do multiplicador ainda manda {brl(total)} para elas em {ctx.target_year} (contagem em dobro). "
+            'Revise em Premissas de pessoal: "Retirar do rateio" redistribui esse valor entre as demais contas',
+            "amount": str(money(total)),
+            "link": PREMISES_LINK,
+            "link_label": "Abrir premissas",
+            "fix": None,
+            "can_keep": False,
+        }
+    ]
 
 
 def sector_options(db: Session) -> list[dict]:

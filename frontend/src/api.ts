@@ -506,7 +506,7 @@ export interface Finding {
   key: string; entity: string; entity_id: string; submission_id: number | null;
   severity: "CRITICAL" | "WARNING"; module: string; module_label: string; kind: string; kind_label: string;
   cost_center_id: number; cost_center: string; sector?: string | null; status: string; subject: string; detail: string | null;
-  message: string; amount: string | null; link: string | null;
+  message: string; amount: string | null; link: string | null; link_label?: string;  // rótulo do link (padrão: abrir o orçamento)
   fix: FindingFix | null; can_keep: boolean; editable: boolean;
   source?: { batch_id: number; sheet: string; row: number } | null;  // linha da planilha (Validação)
 }
@@ -521,6 +521,28 @@ export interface Findings {
   reviews: FindingReviewItem[];
   cost_centers: { id: number; code: string; label: string; opex_submission_id: number | null; capex_submission_id: number | null }[];
   can_review: boolean; project_types: { value: string; label: string }[]; sectors: { id: number; label: string }[];
+}
+/* Premissas de pessoal (Controladoria): dissídio, multiplicadores, abono, bônus por CC, rateio e total por conta */
+export interface PremisesAccount { code: string; name: string }
+export interface PersonnelPremises {
+  cycle_id: number; cycle_status: string; target_year: number; version: string; frozen: boolean;
+  scenario: { name: string; salary_adjustment_pct: string; adjustment_month: number };
+  multipliers: { code: string; name: string; multiplier: string; apply_multiplier: boolean; is_active: boolean }[];
+  salary: { account: PremisesAccount; total: string };
+  severance: { account: PremisesAccount; total: string };
+  abono: { value: string; contracts: string[]; account: PremisesAccount; total: string };
+  bonus_by_cc: {
+    rows: { cost_center_id: number | null; code: string; name: string | null; annual: string; booked: string }[];
+    total: string; booked: string; account: PremisesAccount;
+  };
+  charges: {
+    default_account: PremisesAccount; has_split: boolean; total: string;
+    rows: { code: string; name: string; weight: string; share: string; amount: string; overlap: boolean }[];
+  };
+  accounts: { code: string; name: string | null; total: string; components: Record<string, string> }[];
+  total: string;
+  overlap: { code: string; name: string; kind: "bonus" | "cc_bonus"; label: string; share: string; amount: string }[];
+  overlap_amount: string;
 }
 export interface VersionCompare {
   from: { id: number; label: string; status: string; total: string };

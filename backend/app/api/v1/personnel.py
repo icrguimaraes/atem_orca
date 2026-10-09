@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.v1.cycles import apply_parameter
 from app.core.deps import client_ip, get_current_user, require_roles, visible_cost_center_ids
 from app.db import get_db
 from app.domain.rules.common import money
@@ -29,6 +30,7 @@ from app.models import (
 )
 from app.models.base import Role
 from app.services import audit
+from app.services import consolidation as consolidation_svc
 from app.services import findings as findings_svc
 from app.services import opex as opex_svc
 from app.services import personnel as svc
@@ -992,3 +994,50 @@ def delete_scenario(scenario_id: int, request: Request, db: Session = Depends(ge
     db.delete(row)
     db.commit()
     return {"deleted": scenario_id}
+
+
+# ------------------------------------------------------------------ premissas de pessoal (Controladoria)
+
+controller = require_roles(Role.CONTROLLER)
+
+
+@router.get(
+    "/premises",
+    summary="Premissas do custo de pessoal: dissídio, multiplicadores, abono, bônus por CC, rateio e total por conta",
+)
+def premises(db: Session = Depends(get_db), _: User = Depends(controller)):
+    return consolidation_svc.personnel_premises(db, _ctx(db))
+
+
+@router.post(
+    "/premises/remove-overlap",
+    summary="Retira do rateio de encargos as contas que já recebem abono/bônus explícito (total não muda)",
+)
+def remove_overlap(request: Request, db: Session = Depends(get_db), user: User = Depends(controller)):
+    ctx = _ctx(db)
+    if ctx.frozen:
+        raise HTTPException(409, "Versão congelada: só leitura. Abra uma revisão para alterar o rateio")
+    if ctx.cycle.status == "CLOSED":
+        raise HTTPException(409, "Ciclo encerrado: parâmetros só leitura")
+    current, new, overlap = consolidation_svc.split_without_overlap(db, ctx)
+    if not overlap:
+        raise HTTPException(409, "O rateio não tem conta sobreposta ao abono ou ao bônus")
+    before_total = consolidation_svc.personnel_premises(db, ctx)["total"]
+    accounts = ", ".join(f"{o['code']} ({o['label']})" for o in overlap)
+    apply_parameter(
+        db,
+        ctx.cycle.id,
+        consolidation_svc.CHARGES_SPLIT_KEY,
+        new,
+        user_id=user.id,
+        ip=client_ip(request),
+        reason=f"Retirar do rateio de encargos as contas com valor explícito: {accounts} "
+        "(apontamento PERSONNEL_SPLIT_OVERLAP)",
+    )
+    db.flush()
+    after = consolidation_svc.personnel_premises(db, _ctx(db))
+    if after["total"] != before_total:  # salvaguarda: só redistribui entre contas
+        db.rollback()
+        raise HTTPException(409, "A retirada mudaria o total de pessoal; nada foi alterado")
+    db.commit()
+    return {"removed": [o["code"] for o in overlap], "before": current, "after": new, "premises": after}

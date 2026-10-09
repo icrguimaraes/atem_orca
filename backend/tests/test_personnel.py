@@ -582,3 +582,94 @@ def test_bonus_by_cc_spread_over_the_year(client, admin, run_worker):
     assert after["charges_total"] == before["charges_total"]  # não passa pelo multiplicador
     total_after = client.get("/api/v1/consolidation/overview", headers=admin).json()["modules"]["PERSONNEL"]["proposed"]
     assert Decimal(total_after) - Decimal(total_before) == Decimal("54600.01")  # o CC2 entra mesmo sem quadro
+
+
+def test_charges_split_overlap_finding_and_premises(client, admin, run_worker):
+    """Rateio de encargos com as contas do abono (6010101009) e do bônus por CC (6010101016): apontamento do ciclo
+    só para a Controladoria, página Premissas de pessoal e "Retirar do rateio" (total de pessoal não muda)."""
+    ccs, mgr, _final = _setup(client, admin, run_worker)
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+
+    def overlap_items(headers):
+        items = client.get("/api/v1/findings", headers=headers).json()["items"]
+        return [i for i in items if i["kind"] == "PERSONNEL_SPLIT_OVERLAP"]
+
+    # sem abono e sem bônus por CC (o _setup zera o abono): nada sobreposto
+    assert overlap_items(admin) == []
+    assert client.get("/api/v1/personnel/premises", headers=admin).json()["overlap"] == []
+
+    put = f"/api/v1/cycles/{cycle_id}/parameters"
+    client.put(f"{put}/personnel.annual_bonus_clt", headers=admin, json={"value": 2500})
+    client.put(f"{put}/personnel.bonus_by_cc", headers=admin, json={"value": {CC1: 12000}})
+    [item] = overlap_items(admin)
+    assert item["severity"] == "WARNING" and item["module"] == "PERSONNEL" and item["can_keep"] is False
+    assert item["key"] == f"0:CYCLE:{cycle_id}:PERSONNEL_SPLIT_OVERLAP" and item["link"] == "/premissas-pessoal"
+    assert "6010101009" in item["subject"] and "6010101016" in item["subject"] and Decimal(item["amount"]) > 0
+    assert overlap_items(mgr) == []  # só a Controladoria
+    keep = client.post("/api/v1/findings/keep", headers=admin, json={"key": item["key"], "note": "x"})
+    assert keep.status_code == 409
+    assert client.post("/api/v1/findings/fix", headers=admin, json={"key": item["key"]}).status_code == 409
+
+    # página: formato e coerência com a consolidação
+    assert client.get("/api/v1/personnel/premises", headers=mgr).status_code == 403
+    p = client.get("/api/v1/personnel/premises", headers=admin).json()
+    assert p["scenario"]["salary_adjustment_pct"] and p["scenario"]["adjustment_month"] == 1
+    assert {m["code"] for m in p["multipliers"]} >= {"CLT", "PJ"}
+    assert p["abono"]["value"] == "2500.00" and p["abono"]["account"]["code"] == "6010101009"
+    assert Decimal(p["abono"]["total"]) > 0
+    assert p["bonus_by_cc"]["account"]["code"] == "6010101016" and p["bonus_by_cc"]["total"] == "12000.00"
+    assert [(r["code"], r["annual"], r["booked"]) for r in p["bonus_by_cc"]["rows"]] == [(CC1, "12000.00", "12000.00")]
+    assert {o["code"] for o in p["overlap"]} == {"6010101009", "6010101016"}
+    assert Decimal(p["overlap_amount"]) == Decimal(item["amount"])
+    split = {r["code"]: r for r in p["charges"]["rows"]}
+    assert split["6010101009"]["overlap"] and not split["6010102001"]["overlap"]
+    assert sum(Decimal(r["amount"]) for r in p["charges"]["rows"]) == Decimal(p["charges"]["total"])
+    assert abs(sum(Decimal(r["share"]) for r in p["charges"]["rows"]) - 1) < Decimal("0.000001")
+    accounts = {a["code"]: a for a in p["accounts"]}
+    assert Decimal(accounts["6010101009"]["total"]) == Decimal(p["abono"]["total"]) + Decimal(
+        split["6010101009"]["amount"]
+    )
+    overview = client.get("/api/v1/consolidation/overview", headers=admin).json()
+    total_before = overview["modules"]["PERSONNEL"]["proposed"]
+    assert Decimal(p["total"]) == Decimal(total_before)
+
+    # retirar do rateio: só Controladoria; total de pessoal igual; contas ficam só com o valor explícito
+    assert client.post("/api/v1/personnel/premises/remove-overlap", headers=mgr).status_code == 403
+    r = client.post("/api/v1/personnel/premises/remove-overlap", headers=admin)
+    assert r.status_code == 200, r.text
+    assert set(r.json()["removed"]) == {"6010101009", "6010101016"}
+    after = r.json()["premises"]
+    assert after["overlap"] == [] and after["total"] == p["total"]
+    assert after["charges"]["total"] == p["charges"]["total"]
+    assert not {"6010101009", "6010101016"} & {r["code"] for r in after["charges"]["rows"]}
+    accounts = {a["code"]: a for a in after["accounts"]}
+    assert accounts["6010101009"]["total"] == after["abono"]["total"]
+    assert accounts["6010101016"]["total"] == "12000.00"
+    overview = client.get("/api/v1/consolidation/overview", headers=admin).json()
+    assert overview["modules"]["PERSONNEL"]["proposed"] == total_before
+    assert overlap_items(admin) == []
+    params = {x["key"]: x["value"] for x in client.get(f"{put}", headers=admin).json()}
+    assert "6010101009" not in params["personnel.charges_split"] and "6010102001" in params["personnel.charges_split"]
+    logs = client.get(
+        "/api/v1/audit-logs",
+        headers=admin,
+        params={"entity_id": f"{cycle_id}:personnel.charges_split", "action": "SET_PARAMETER"},
+    )
+    assert logs.status_code == 200 and "PERSONNEL_SPLIT_OVERLAP" in logs.text
+    again = client.post("/api/v1/personnel/premises/remove-overlap", headers=admin)
+    assert again.status_code == 409
+
+
+def test_premises_frozen_version_is_read_only(client, admin, run_worker):
+    """Versão congelada: Premissas de pessoal só leitura (total da fotografia) e sem apontamento do ciclo."""
+    _setup(client, admin, run_worker)
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+    client.put(f"/api/v1/cycles/{cycle_id}/parameters/personnel.annual_bonus_clt", headers=admin, json={"value": 2500})
+    live = client.get("/api/v1/personnel/premises", headers=admin).json()
+    assert live["overlap"] and not live["frozen"]
+    assert client.post("/api/v1/consolidation/freeze", headers=admin, json={"reason": "Fechamento"}).status_code == 200
+    frozen = client.get("/api/v1/personnel/premises", headers=admin).json()
+    assert frozen["frozen"] and frozen["total"] == live["total"]
+    assert client.post("/api/v1/personnel/premises/remove-overlap", headers=admin).status_code == 409
+    items = client.get("/api/v1/findings", headers=admin).json()["items"]
+    assert not any(i["kind"] == "PERSONNEL_SPLIT_OVERLAP" for i in items)

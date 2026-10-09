@@ -46,8 +46,8 @@ class _Finder:
         if key.startswith("0:"):  # sem orçamento de CC (colaborador sem CC): só a Controladoria
             if not is_global(self.user):
                 raise HTTPException(403, "Só a Controladoria corrige este apontamento")
-            if 0 not in self.cache:
-                self.cache[0] = svc.employees_without_cost_center(self.db)
+            if 0 not in self.cache:  # + apontamentos do ciclo (premissas)
+                self.cache[0] = svc.employees_without_cost_center(self.db) + svc.cycle_findings(self.db, self.ctx)
             finding = next((f for f in self.cache[0] if f["key"] == key), None)
             if finding is None:
                 raise HTTPException(404, "Apontamento não encontrado ou já resolvido")
@@ -81,8 +81,8 @@ def findings(db: Session = Depends(get_db), user: User = Depends(get_current_use
     items = svc.collect(db, ctx, scope, svc.kept_keys(db, ctx), structure=is_global(user))
     editable: dict[int, bool] = {}
     for i in items:
-        if i["kind"] in ("STRUCTURE_NO_SECTOR", "PERSONNEL_NO_CC"):
-            i["editable"] = is_global(user)  # estrutura e CC do colaborador: Controladoria
+        if i["submission_id"] is None or i["kind"] == "STRUCTURE_NO_SECTOR":
+            i["editable"] = is_global(user)  # estrutura, CC do colaborador e premissas do ciclo: Controladoria
             continue
         if i["submission_id"] not in editable:
             access, _ = _access(db, ctx, user, db.get(BudgetSubmission, i["submission_id"]))
@@ -137,6 +137,8 @@ def _fix_one(
     ip: str | None,
 ) -> str:
     """Aplica uma correção (mesma regra de edição das telas do CC) e registra na análise e na auditoria."""
+    if sub is None and finding["kind"] != "PERSONNEL_NO_CC":  # premissas do ciclo: corrige na página do link
+        raise HTTPException(409, "Este apontamento não tem correção direta: abra a página indicada")
     if finding["kind"] == "PERSONNEL_NO_CC":
         if not is_global(user):
             raise HTTPException(403, "Só a Controladoria define o centro de custo do colaborador")

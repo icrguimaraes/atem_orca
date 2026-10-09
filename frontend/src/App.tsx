@@ -23,6 +23,7 @@ import Login from "./pages/Login";
 import MasterData from "./pages/MasterData";
 import OpexCostCenter from "./pages/OpexCostCenter";
 import PersonnelCostCenter from "./pages/PersonnelCostCenter";
+import PersonnelPremises from "./pages/PersonnelPremises";
 import PersonnelSimulation from "./pages/PersonnelSimulation";
 import Structure from "./pages/Structure";
 import Users from "./pages/Users";
@@ -72,6 +73,7 @@ export default function App() {
             <Route path="cadastros" element={<MasterData />} />
             <Route path="estrutura" element={<Protected roles={["CONTROLLER"]}><Structure /></Protected>} />
             <Route path="ciclo" element={<CyclePage />} />
+            <Route path="premissas-pessoal" element={<Protected roles={["CONTROLLER"]}><PersonnelPremises /></Protected>} />
             <Route path="usuarios" element={<Protected roles={["CONTROLLER"]}><Users /></Protected>} />
             <Route path="auditoria" element={<Protected roles={["CONTROLLER"]}><Audit /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />

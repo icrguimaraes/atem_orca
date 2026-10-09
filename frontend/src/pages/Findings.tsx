@@ -32,6 +32,7 @@ const KIND_HINTS: Record<string, string> = {
   PERSONNEL_CC_GUESSED: "O CC veio vazio e o sistema definiu pelo cargo: confirme; se estiver errado, corrija na planilha e importe de novo.",
   STRUCTURE_NO_SECTOR: "O CC não tem área e setor e aparece em \"Sem setor\" no Painel: escolha o setor.",
   PERSONNEL_NO_CC: "Colaborador ativo sem centro de custo fica fora do orçamento: escolha o CC. Se a planilha trazia promoção, desligamento ou vaga, reimporte o quadro com o CC padrão.",
+  PERSONNEL_SPLIT_OVERLAP: "O rateio de encargos inclui contas que já recebem o abono ou o bônus como linha própria: revise em Premissas de pessoal (\"Retirar do rateio\" redistribui o valor; o total não muda).",
 };
 type Tab = "open" | "done" | "files";
 
@@ -284,7 +285,7 @@ export default function Findings() {
                             <InlineFix finding={i} projectTypes={data.project_types} sectors={data.sectors} onDone={(note) => done(`Corrigido: ${note}`)} onSchedule={() => setSchedule(i)} />
                           )}
                           {i.fix && !i.editable && <span className="muted small">Fora de edição: solicite ajuste para corrigir</span>}
-                          {!i.fix && i.link && <Link className="btn btn-sm" to={i.link}>Abrir o orçamento</Link>}
+                          {!i.fix && i.link && <Link className="btn btn-sm" to={i.link}>{i.link_label ?? "Abrir o orçamento"}</Link>}
                           {i.source && data.can_review && (
                             <Link className="btn btn-ghost btn-sm" to={`/validacao/${i.source.batch_id}?sheet=${encodeURIComponent(i.source.sheet)}&row=${i.source.row}`} title={`${i.source.sheet}, linha ${i.source.row}`}>
                               Ver no Excel

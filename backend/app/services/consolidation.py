@@ -234,6 +234,19 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
             acc = accounts.get(acc_id)
             add("CAPEX", company_id, branch_id, cc_id, acc.code, acc.name, "Capex", None, pending)
 
+    for cc_id, _kind, code, name, m, amount in personnel_amounts(db, ctx, cc_ids):
+        add("PERSONNEL", None, None, cc_id, code, name, "Pessoas", m, amount)
+    rows = [r for r in grouped.values() if any(r.values) or r.unscheduled]
+    for r in rows:
+        r.values = [money(v) for v in r.values]
+        r.unscheduled = money(r.unscheduled)
+    return sorted(rows, key=lambda r: (r.company_code, r.cost_center_code, r.module, r.account_code))
+
+
+def personnel_amounts(db: Session, ctx: Context, cc_ids: set[int] | None = None):
+    """Valores de pessoal por CC, componente, conta e mês (a parte de pessoal de `live_rows`):
+    gera (cc_id, componente, conta, nome da conta, mês, valor), componente em salary | severance | bonus |
+    cc_bonus | charges (parte do multiplicador, rateada por `personnel.charges_split`)."""
     pacc = personnel_accounts(db, ctx)
     split = charges_split(db, ctx)
     split_names = {code: name for code, name, _w in split}
@@ -259,7 +272,7 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
             code, name = pacc[kind]
             for m, amount in enumerate(series, start=1):
                 if amount:
-                    add("PERSONNEL", None, None, cc_id, code, name, "Pessoas", m, money(amount))
+                    yield cc_id, kind, code, name, m, money(amount)
         # parte do multiplicador, mês a mês, rateada entre as contas (soma exata em centavos)
         for m in range(1, 13):
             charges = t.monthly[m - 1] - t.salary[m - 1] - t.severance[m - 1] - t.bonus[m - 1] - t.cc_bonus[m - 1]
@@ -267,12 +280,199 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
                 continue
             for code, amount in split_amount(charges, split_weights).items():
                 if amount:
-                    add("PERSONNEL", None, None, cc_id, code, split_names[code], "Pessoas", m, amount)
-    rows = [r for r in grouped.values() if any(r.values) or r.unscheduled]
-    for r in rows:
-        r.values = [money(v) for v in r.values]
-        r.unscheduled = money(r.unscheduled)
-    return sorted(rows, key=lambda r: (r.company_code, r.cost_center_code, r.module, r.account_code))
+                    yield cc_id, "charges", code, split_names[code], m, amount
+
+
+# ------------------------------------------------------------------ premissas de pessoal (rateio × abono/bônus)
+
+OVERLAP_LABELS = {"bonus": "abono anual do CLT", "cc_bonus": "bônus CLT por CC"}
+
+
+def _positive(raw) -> Decimal:
+    try:
+        value = Decimal(str(raw or 0))
+    except ArithmeticError:
+        return ZERO
+    return value if value.is_finite() and value > 0 else ZERO
+
+
+def split_overlap(db: Session, ctx: Context) -> list[dict]:
+    """Contas do rateio de encargos (`personnel.charges_split`, peso > 0) que já recebem o abono anual do CLT
+    (`personnel.annual_bonus_account`, com `annual_bonus_clt` > 0) ou o bônus CLT por CC (`personnel.bonus_account`,
+    com algum valor em `bonus_by_cc`): o rateio manda parte do multiplicador para elas e conta em dobro.
+    → [{code, name, kind, label, share}] (sem cálculo do quadro; barato)."""
+    split = dict(normalize_split(ctx.params.get(CHARGES_SPLIT_KEY)))
+    if not split:
+        return []
+    pacc = personnel_accounts(db, ctx)
+    bonus_by_cc = ctx.params.get("personnel.bonus_by_cc") or {}
+    active = {
+        "bonus": _positive(ctx.params.get("personnel.annual_bonus_clt", 0)) > 0,
+        "cc_bonus": isinstance(bonus_by_cc, dict) and any(_positive(v) > 0 for v in bonus_by_cc.values()),
+    }
+    out = []
+    for kind in ("bonus", "cc_bonus"):
+        code, name = pacc[kind]
+        if active[kind] and code in split:
+            out.append({"code": code, "name": name, "kind": kind, "label": OVERLAP_LABELS[kind], "share": split[code]})
+    return out
+
+
+def overlap_amounts(db: Session, ctx: Context, overlap: list[dict]) -> dict[str, Decimal]:
+    """R$ do ano que o rateio do multiplicador manda para as contas sobrepostas (por conta)."""
+    codes = {o["code"] for o in overlap}
+    out: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    for _cc, kind, code, _name, _m, amount in personnel_amounts(db, ctx):
+        if kind == "charges" and code in codes:
+            out[code] += amount
+    return {c: money(out[c]) for c in codes}
+
+
+def personnel_premises(db: Session, ctx: Context) -> dict:
+    """Premissas do custo de pessoal do ciclo (página "Premissas de pessoal"): dissídio e multiplicadores do cenário
+    base, abono anual do CLT, bônus por CC, rateio da parte do multiplicador com o R$ do ano por conta, total de
+    pessoal por conta e as contas do rateio que já recebem abono/bônus explícito (contagem em dobro)."""
+    scenario = personnel_svc.baseline(db, ctx)
+    contracts = personnel_svc.contract_types(db)
+    pacc = personnel_accounts(db, ctx)
+    by_kind: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    by_account: dict[str, dict] = {}
+    charges_by_account: dict[str, Decimal] = defaultdict(lambda: ZERO)
+    bonus_by_cc_id: dict[int, Decimal] = defaultdict(lambda: ZERO)
+    for cc_id, kind, code, name, _m, amount in personnel_amounts(db, ctx):
+        by_kind[kind] += amount
+        acc = by_account.setdefault(
+            code, {"code": code, "name": name, "total": ZERO, "components": defaultdict(Decimal)}
+        )
+        acc["total"] += amount
+        acc["components"][kind] += amount
+        if kind == "charges":
+            charges_by_account[code] += amount
+        elif kind == "cc_bonus":
+            bonus_by_cc_id[cc_id] += amount
+    if ctx.version.status == "FROZEN":  # versão congelada: total por conta da fotografia
+        frozen: dict[str, dict] = {}
+        for r in snapshot_rows(db, ctx.version):
+            if r.module != "PERSONNEL":
+                continue
+            acc = frozen.setdefault(
+                r.account_code, {"code": r.account_code, "name": r.account_name, "total": ZERO, "components": {}}
+            )
+            acc["total"] += r.total
+        by_account = frozen
+    accounts = sorted(by_account.values(), key=lambda a: (-a["total"], a["code"]))
+    total = money(sum((a["total"] for a in accounts), ZERO))
+
+    overlap = split_overlap(db, ctx)
+    overlap_codes = {o["code"] for o in overlap}
+    raw_split = ctx.params.get(CHARGES_SPLIT_KEY)
+    raw_weights = {str(k).strip(): v for k, v in raw_split.items()} if isinstance(raw_split, dict) else {}
+    split_rows = [
+        {
+            "code": code,
+            "name": name,
+            "weight": str(raw_weights.get(code, "")),
+            "share": str(share),
+            "amount": str(money(charges_by_account[code])),
+            "overlap": code in overlap_codes,
+        }
+        for code, name, share in charges_split(db, ctx)
+    ]
+    overlap_out = [
+        {
+            "code": o["code"],
+            "name": o["name"],
+            "kind": o["kind"],
+            "label": o["label"],
+            "share": str(o["share"]),
+            "amount": str(money(charges_by_account[o["code"]])),
+        }
+        for o in overlap
+    ]
+
+    raw_cc = ctx.params.get("personnel.bonus_by_cc") or {}
+    raw_cc = raw_cc if isinstance(raw_cc, dict) else {}
+    ccs = {c.code: c for c in db.scalars(select(CostCenter).where(CostCenter.code.in_(set(raw_cc) or {"-"})))}
+    bonus_rows = []
+    for cc_code, value in sorted(raw_cc.items()):
+        cc = ccs.get(str(cc_code))
+        bonus_rows.append(
+            {
+                "cost_center_id": cc.id if cc else None,
+                "code": str(cc_code),
+                "name": cc.name if cc else None,
+                "annual": str(money(_positive(value))),
+                "booked": str(money(bonus_by_cc_id[cc.id])) if cc else "0.00",
+            }
+        )
+
+    def acc_out(kind: str) -> dict:
+        return {"code": pacc[kind][0], "name": pacc[kind][1]}
+
+    return {
+        "cycle_id": ctx.cycle.id,
+        "cycle_status": ctx.cycle.status,
+        "target_year": ctx.target_year,
+        "version": ctx.version.label,
+        "frozen": ctx.frozen,
+        "scenario": {
+            "name": scenario.name,
+            "salary_adjustment_pct": str(scenario.salary_adjustment_pct),
+            "adjustment_month": scenario.adjustment_month,
+        },
+        "multipliers": [
+            {
+                "code": code,
+                "name": c.name,
+                "multiplier": str(scenario.multipliers.get(code, Decimal(c.default_multiplier))),
+                "apply_multiplier": bool(c.apply_multiplier),
+                "is_active": bool(c.is_active),
+            }
+            for code, c in sorted(contracts.items())
+        ],
+        "salary": {"account": acc_out("salary"), "total": str(money(by_kind["salary"]))},
+        "severance": {"account": acc_out("severance"), "total": str(money(by_kind["severance"]))},
+        "abono": {
+            "value": str(money(scenario.annual_bonus)),
+            "contracts": list(scenario.bonus_contracts),
+            "account": acc_out("bonus"),
+            "total": str(money(by_kind["bonus"])),
+        },
+        "bonus_by_cc": {
+            "rows": bonus_rows,
+            "total": str(money(sum((_positive(v) for v in raw_cc.values()), ZERO))),
+            "booked": str(money(by_kind["cc_bonus"])),
+            "account": acc_out("cc_bonus"),
+        },
+        "charges": {
+            "default_account": acc_out("charges"),
+            "has_split": bool(normalize_split(raw_split)),
+            "total": str(money(by_kind["charges"])),
+            "rows": split_rows,
+        },
+        "accounts": [
+            {
+                "code": a["code"],
+                "name": a["name"],
+                "total": str(money(a["total"])),
+                "components": {k: str(money(v)) for k, v in a["components"].items()},
+            }
+            for a in accounts
+        ],
+        "total": str(total),
+        "overlap": overlap_out,
+        "overlap_amount": str(money(sum((charges_by_account[c] for c in overlap_codes), ZERO))),
+    }
+
+
+def split_without_overlap(db: Session, ctx: Context) -> tuple[dict, dict, list[dict]]:
+    """Rateio sem as contas sobrepostas → (rateio atual, novo rateio, sobreposição). Os pesos restantes ficam como
+    estão: `normalize_split` renormaliza no cálculo, então o total de encargos não muda."""
+    overlap = split_overlap(db, ctx)
+    codes = {o["code"] for o in overlap}
+    raw = ctx.params.get(CHARGES_SPLIT_KEY)
+    current = dict(raw) if isinstance(raw, dict) else {}
+    return current, {k: v for k, v in current.items() if str(k).strip() not in codes}, overlap
 
 
 def snapshot_rows(db: Session, version: BudgetVersion, cc_ids: set[int] | None = None) -> list[Row]:

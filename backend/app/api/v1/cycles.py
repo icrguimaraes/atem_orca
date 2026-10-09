@@ -147,27 +147,47 @@ def set_parameter(
     actor: User = Depends(require_roles(Role.CONTROLLER)),
 ):
     _cycle(db, cycle_id)
+    param = apply_parameter(
+        db, cycle_id, key, payload.value, user_id=actor.id, ip=client_ip(request), description=payload.description
+    )
+    db.commit()
+    return param
+
+
+def apply_parameter(
+    db: Session,
+    cycle_id: int,
+    key: str,
+    value: Any,
+    *,
+    user_id: int | None,
+    ip: str | None,
+    description: str | None = None,
+    reason: str | None = None,
+) -> CycleParameter:
+    """Grava um parâmetro do ciclo com a mesma validação e auditoria do PUT (usado também por "Retirar do rateio"
+    nas Premissas de pessoal). Não faz commit."""
     if key == "personnel.charges_split":
-        payload.value = _check_split(payload.value)
+        value = _check_split(value)
     param = db.get(CycleParameter, (cycle_id, key))
     before = None if param is None else {"value": param.value}
     if param is None:
         param = CycleParameter(cycle_id=cycle_id, key=key)
         db.add(param)
-    param.value = payload.value
-    if payload.description is not None:
-        param.description = payload.description
+    param.value = value
+    if description is not None:
+        param.description = description
     audit.record(
         db,
-        user_id=actor.id,
+        user_id=user_id,
         action="SET_PARAMETER",
         entity_type="cycle_parameter",
         entity_id=f"{cycle_id}:{key}",
         before=before,
-        after={"value": payload.value},
-        ip=client_ip(request),
+        after={"value": value},
+        reason=reason,
+        ip=ip,
     )
-    db.commit()
     return param
 
 
