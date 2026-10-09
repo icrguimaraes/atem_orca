@@ -557,3 +557,28 @@ def test_exclude_employee_from_budget(client, admin, run_worker):
         ).status_code
         == 409
     )
+
+
+def test_bonus_by_cc_spread_over_the_year(client, admin, run_worker):
+    """Bônus CLT por CC (planilha da Controladoria, valor já com dissídio): total do ano diluído de jan a dez na conta
+    6010101016, no quadro do CC e na consolidação."""
+    ccs, _mgr, _final = _setup(client, admin, run_worker)
+    head = client.get(f"/api/v1/personnel/cost-centers/{ccs[CC1]['id']}", headers=admin).json()
+    url = f"/api/v1/personnel/submissions/{head['submission_id']}/view"
+    before = client.get(url, headers=admin).json()["totals"]
+    total_before = client.get("/api/v1/consolidation/overview", headers=admin).json()["modules"]["PERSONNEL"][
+        "proposed"
+    ]
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+    r = client.put(
+        f"/api/v1/cycles/{cycle_id}/parameters/personnel.bonus_by_cc",
+        headers=admin,
+        json={"value": {CC1: 42000, CC2: 12600.01}},
+    )
+    assert r.status_code == 200, r.text
+    after = client.get(url, headers=admin).json()["totals"]
+    assert after["cc_bonus_total"] == "42000.00" and after["cc_bonus_monthly"] == ["3500.00"] * 12
+    assert Decimal(after["annual"]) - Decimal(before["annual"]) == Decimal("42000.00")
+    assert after["charges_total"] == before["charges_total"]  # não passa pelo multiplicador
+    total_after = client.get("/api/v1/consolidation/overview", headers=admin).json()["modules"]["PERSONNEL"]["proposed"]
+    assert Decimal(total_after) - Decimal(total_before) == Decimal("54600.01")  # o CC2 entra mesmo sem quadro

@@ -187,7 +187,7 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
     by_position: dict[str, int] = defaultdict(int)
     for cc in ccs:
         pos = positions.get(cc.id, [])
-        t = svc.totals_for(pos, scenario)
+        t = svc.add_cc_bonus(svc.totals_for(pos, scenario), svc.cc_bonus_series(ctx, cc.code))
         overall.add(t)
         for p in pos:
             mv = p.movement

@@ -51,6 +51,7 @@ PERSONNEL_ACCOUNTS = (
     ("charges", "personnel.charges_account", 6010102001, "Encargos e benefícios (multiplicador)"),
     ("severance", "personnel.severance_account", 6010101010, "Verbas rescisórias"),
     ("bonus", "personnel.annual_bonus_account", 6010101009, "Gratificações/Premiações (abono anual CLT)"),
+    ("cc_bonus", "personnel.bonus_account", 6010101016, "Prov. Gratificações/Premiações (bônus CLT)"),
 )
 CHARGES_SPLIT_KEY = "personnel.charges_split"
 
@@ -238,16 +239,30 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
     split_names = {code: name for code, name, _w in split}
     split_weights = [(code, w) for code, _name, w in split]
     scenario = personnel_svc.baseline(db, ctx)
-    for cc_id, positions in personnel_svc.build_positions(db, ctx, cc_ids).items():
-        t = personnel_svc.totals_for(positions, scenario)
-        for kind, series in (("salary", t.salary), ("severance", t.severance), ("bonus", t.bonus)):
+    by_cc = personnel_svc.build_positions(db, ctx, cc_ids)
+    # bônus CLT por CC (parâmetro): entra mesmo em CC sem quadro carregado
+    bonus_codes = set((ctx.params.get("personnel.bonus_by_cc") or {}).keys())
+    for cc in db.scalars(select(CostCenter).where(CostCenter.code.in_(bonus_codes or {"-"}))):
+        if cc_ids is None or cc.id in cc_ids:
+            by_cc.setdefault(cc.id, [])
+    cc_codes = {c.id: c.code for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(set(by_cc) or {-1})))}
+    for cc_id, positions in by_cc.items():
+        t = personnel_svc.add_cc_bonus(
+            personnel_svc.totals_for(positions, scenario), personnel_svc.cc_bonus_series(ctx, cc_codes.get(cc_id))
+        )
+        for kind, series in (
+            ("salary", t.salary),
+            ("severance", t.severance),
+            ("bonus", t.bonus),
+            ("cc_bonus", t.cc_bonus),
+        ):
             code, name = pacc[kind]
             for m, amount in enumerate(series, start=1):
                 if amount:
                     add("PERSONNEL", None, None, cc_id, code, name, "Pessoas", m, money(amount))
         # parte do multiplicador, mês a mês, rateada entre as contas (soma exata em centavos)
         for m in range(1, 13):
-            charges = t.monthly[m - 1] - t.salary[m - 1] - t.severance[m - 1] - t.bonus[m - 1]
+            charges = t.monthly[m - 1] - t.salary[m - 1] - t.severance[m - 1] - t.bonus[m - 1] - t.cc_bonus[m - 1]
             if not charges:
                 continue
             for code, amount in split_amount(charges, split_weights).items():

@@ -353,6 +353,9 @@ CYCLE_PARAMETERS = {
     # abono anual do CLT (09/10/2026): ~R$ 2.500 por colaborador no ano, em 12 parcelas, sem multiplicador
     "personnel.annual_bonus_clt": (2500, "Abono anual por colaborador CLT (R$/ano, diluído em 12 parcelas)"),
     "personnel.annual_bonus_account": (6010101009, "Conta do abono anual do CLT (Gratificações/Premiações)"),
+    # bônus do CLT por CC (planilha "Aprop. Bônus CLT", valor já com dissídio): total do ano diluído de jan a dez
+    "personnel.bonus_by_cc": ({}, "Bônus CLT por CC (R$/ano, já com dissídio; diluído jan–dez): {CC: valor}"),
+    "personnel.bonus_account": (6010101016, "Conta do bônus CLT por CC (Prov. Gratificações/Premiações)"),
     "personnel.charges_split": (
         {
             # mix do realizado 2026 (KSB1, empresa 1001, 8 CCs da Controladoria, jan-set), % do custo de pessoal

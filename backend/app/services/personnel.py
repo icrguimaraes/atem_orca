@@ -266,6 +266,7 @@ class Totals:
     headcount: list[int] = field(default_factory=lambda: [0] * 12)
     severance: list[Decimal] = field(default_factory=lambda: [ZERO] * 12)
     bonus: list[Decimal] = field(default_factory=lambda: [ZERO] * 12)  # abono anual do CLT, por mês
+    cc_bonus: list[Decimal] = field(default_factory=lambda: [ZERO] * 12)  # bônus CLT do CC (parâmetro), por mês
     hires: int = 0
     terminations: int = 0
     transfers_out: int = 0
@@ -283,6 +284,7 @@ class Totals:
             self.headcount[i] += other.headcount[i]
             self.severance[i] += other.severance[i]
             self.bonus[i] += other.bonus[i]
+            self.cc_bonus[i] += other.cc_bonus[i]
         for key in ("hires", "terminations", "transfers_out", "transfers_in", "promotions"):
             setattr(self, key, getattr(self, key) + getattr(other, key))
 
@@ -317,6 +319,32 @@ def position_cost(pos: Position, scenario: ScenarioInfo) -> tuple[list[Decimal],
     return [cost[m] for m in MONTHS], salary_adj, [hc[m] for m in MONTHS]
 
 
+def cc_bonus_series(ctx: Context, cc_code: str | None) -> list[Decimal]:
+    """Bônus CLT do CC (parâmetro `personnel.bonus_by_cc`, valor anual já com dissídio) diluído de jan a dez; as
+    parcelas seguem o acumulado, então os 12 meses somam o valor exato."""
+    raw = (ctx.params.get("personnel.bonus_by_cc") or {}) if cc_code else {}
+    try:
+        annual = Decimal(str(raw.get(str(cc_code), 0) or 0)) if isinstance(raw, dict) else ZERO
+    except ArithmeticError:
+        annual = ZERO
+    if annual <= 0:
+        return [ZERO] * 12
+    out, paid = [], ZERO
+    for m in MONTHS:
+        due = money(annual * m / 12)
+        out.append(due - paid)
+        paid = due
+    return out
+
+
+def add_cc_bonus(t: Totals, series: list[Decimal]) -> Totals:
+    """Soma o bônus do CC nos totais (custo mensal e série própria)."""
+    for i, v in enumerate(series):
+        t.cc_bonus[i] += v
+        t.monthly[i] += v
+    return t
+
+
 def totals_for(positions: list[Position], scenario: ScenarioInfo) -> Totals:
     t = Totals()
     for pos in positions:
@@ -346,7 +374,7 @@ def totals_for(positions: list[Position], scenario: ScenarioInfo) -> Totals:
 
 
 def totals_out(t: Totals) -> dict:
-    charges = [money(t.monthly[i] - t.salary[i] - t.severance[i] - t.bonus[i]) for i in range(12)]
+    charges = [money(t.monthly[i] - t.salary[i] - t.severance[i] - t.bonus[i] - t.cc_bonus[i]) for i in range(12)]
     return {
         "monthly": [str(money(v)) for v in t.monthly],
         "salary_monthly": [str(money(v)) for v in t.salary],
@@ -358,6 +386,8 @@ def totals_out(t: Totals) -> dict:
         "severance_total": str(money(sum(t.severance, ZERO))),
         "bonus_monthly": [str(money(v)) for v in t.bonus],
         "bonus_total": str(money(sum(t.bonus, ZERO))),
+        "cc_bonus_monthly": [str(money(v)) for v in t.cc_bonus],
+        "cc_bonus_total": str(money(sum(t.cc_bonus, ZERO))),
         "headcount_start": t.headcount[0],
         "headcount_end": t.headcount[11],
         "hires": t.hires,
@@ -450,7 +480,8 @@ def submission_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
     scenario = baseline(db, ctx)
     positions = build_positions(db, ctx, {sub.cost_center_id}).get(sub.cost_center_id, [])
     cc_names = {c.id: f"{c.code} · {c.name}" for c in db.scalars(select(CostCenter))}
-    totals = totals_for(positions, scenario)
+    cc = db.get(CostCenter, sub.cost_center_id)
+    totals = add_cc_bonus(totals_for(positions, scenario), cc_bonus_series(ctx, cc.code if cc else None))
     actual = personnel_actual(db, ctx, {sub.cost_center_id}).get(sub.cost_center_id) or {
         "prev": ZERO,
         "ref_ytd": ZERO,

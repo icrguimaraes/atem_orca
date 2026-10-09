@@ -29,6 +29,7 @@ KIND_LABELS = {
     "charges": "encargos e benefícios",
     "severance": "verbas rescisórias",
     "bonus": "abono anual do CLT",
+    "cc_bonus": "bônus CLT por CC",
 }
 
 
