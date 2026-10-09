@@ -21,6 +21,7 @@ from app.models import (
     Account,
     AccountJustification,
     ActualEntry,
+    Area,
     Branch,
     BudgetLine,
     BudgetLineValue,
@@ -36,6 +37,7 @@ from app.models import (
     DatasetVersion,
     PackageReview,
     PersonnelMovement,
+    PersonnelScenario,
     ReferenceBudgetEntry,
     WorkflowEvent,
 )
@@ -243,16 +245,32 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
     return sorted(rows, key=lambda r: (r.company_code, r.cost_center_code, r.module, r.account_code))
 
 
-def personnel_amounts(db: Session, ctx: Context, cc_ids: set[int] | None = None):
+def personnel_amounts(
+    db: Session,
+    ctx: Context,
+    cc_ids: set[int] | None = None,
+    *,
+    scenario: personnel_svc.ScenarioInfo | None = None,
+    positions: dict[int, list[personnel_svc.Position]] | None = None,
+    include_severance: bool = True,
+):
     """Valores de pessoal por CC, componente, conta e mês (a parte de pessoal de `live_rows`):
     gera (cc_id, componente, conta, nome da conta, mês, valor), componente em salary | severance | bonus |
-    cc_bonus | charges (parte do multiplicador, rateada por `personnel.charges_split`)."""
+    cc_bonus | charges (parte do multiplicador, rateada por `personnel.charges_split`).
+
+    Abono, bônus por CC e rateio vêm de `ctx.params`; o what-if passa um contexto com parâmetros simulados, outro
+    cenário (dissídio/multiplicadores), as posições já montadas (cache por request) e se entram as rescisórias."""
     pacc = personnel_accounts(db, ctx)
     split = charges_split(db, ctx)
     split_names = {code: name for code, name, _w in split}
     split_weights = [(code, w) for code, _name, w in split]
-    scenario = personnel_svc.baseline(db, ctx)
-    by_cc = personnel_svc.build_positions(db, ctx, cc_ids)
+    scenario = scenario or personnel_svc.baseline(db, ctx)
+    by_cc = dict(positions) if positions is not None else personnel_svc.build_positions(db, ctx, cc_ids)
+    if not include_severance:
+        by_cc = {
+            cc: [dataclasses.replace(p, severance=ZERO) if p.severance else p for p in items]
+            for cc, items in by_cc.items()
+        }
     # bônus CLT por CC (parâmetro): entra mesmo em CC sem quadro carregado
     # (um código em duas empresas fica com um só CC: personnel.bonus_owners)
     owners = personnel_svc.bonus_owners(db, ctx)
@@ -328,6 +346,48 @@ def overlap_amounts(db: Session, ctx: Context, overlap: list[dict]) -> dict[str,
     return {c: money(out[c]) for c in codes}
 
 
+@dataclass
+class PersonnelBreakdown:
+    """Pessoal do ano agregado a partir de `personnel_amounts` (mesmo caminho da consolidação)."""
+
+    by_kind: dict[str, Decimal] = field(default_factory=lambda: defaultdict(lambda: ZERO))
+    # conta → {code, name, total, components: {componente: valor}}
+    by_account: dict[str, dict] = field(default_factory=dict)
+    # CC → {total, components}
+    by_cc: dict[int, dict] = field(default_factory=dict)
+    monthly: list[Decimal] = field(default_factory=lambda: [ZERO] * 12)
+
+    @property
+    def total(self) -> Decimal:
+        return money(sum(self.monthly, ZERO))
+
+
+def personnel_breakdown(
+    db: Session,
+    ctx: Context,
+    *,
+    scenario: personnel_svc.ScenarioInfo | None = None,
+    positions: dict[int, list[personnel_svc.Position]] | None = None,
+    include_severance: bool = True,
+) -> PersonnelBreakdown:
+    """Totais de pessoal por componente, conta, CC e mês. Sem argumentos é exatamente o que a consolidação mostra."""
+    out = PersonnelBreakdown()
+    for cc_id, kind, code, name, m, amount in personnel_amounts(
+        db, ctx, scenario=scenario, positions=positions, include_severance=include_severance
+    ):
+        out.by_kind[kind] += amount
+        acc = out.by_account.setdefault(
+            code, {"code": code, "name": name, "total": ZERO, "components": defaultdict(lambda: ZERO)}
+        )
+        acc["total"] += amount
+        acc["components"][kind] += amount
+        cc = out.by_cc.setdefault(cc_id, {"total": ZERO, "components": defaultdict(lambda: ZERO)})
+        cc["total"] += amount
+        cc["components"][kind] += amount
+        out.monthly[m - 1] += amount
+    return out
+
+
 def personnel_premises(db: Session, ctx: Context) -> dict:
     """Premissas do custo de pessoal do ciclo (página "Premissas de pessoal"): dissídio e multiplicadores do cenário
     base, abono anual do CLT, bônus por CC, rateio da parte do multiplicador com o R$ do ano por conta, total de
@@ -335,21 +395,15 @@ def personnel_premises(db: Session, ctx: Context) -> dict:
     scenario = personnel_svc.baseline(db, ctx)
     contracts = personnel_svc.contract_types(db)
     pacc = personnel_accounts(db, ctx)
-    by_kind: dict[str, Decimal] = defaultdict(lambda: ZERO)
-    by_account: dict[str, dict] = {}
-    charges_by_account: dict[str, Decimal] = defaultdict(lambda: ZERO)
-    bonus_by_cc_id: dict[int, Decimal] = defaultdict(lambda: ZERO)
-    for cc_id, kind, code, name, _m, amount in personnel_amounts(db, ctx):
-        by_kind[kind] += amount
-        acc = by_account.setdefault(
-            code, {"code": code, "name": name, "total": ZERO, "components": defaultdict(Decimal)}
-        )
-        acc["total"] += amount
-        acc["components"][kind] += amount
-        if kind == "charges":
-            charges_by_account[code] += amount
-        elif kind == "cc_bonus":
-            bonus_by_cc_id[cc_id] += amount
+    breakdown = personnel_breakdown(db, ctx, scenario=scenario)
+    by_kind = breakdown.by_kind
+    by_account = breakdown.by_account
+    charges_by_account: dict[str, Decimal] = defaultdict(
+        lambda: ZERO, {code: a["components"].get("charges", ZERO) for code, a in by_account.items()}
+    )
+    bonus_by_cc_id: dict[int, Decimal] = defaultdict(
+        lambda: ZERO, {cc: c["components"].get("cc_bonus", ZERO) for cc, c in breakdown.by_cc.items()}
+    )
     if ctx.version.status == "FROZEN":  # versão congelada: total por conta da fotografia
         frozen: dict[str, dict] = {}
         for r in snapshot_rows(db, ctx.version):
@@ -474,6 +528,176 @@ def split_without_overlap(db: Session, ctx: Context) -> tuple[dict, dict, list[d
     raw = ctx.params.get(CHARGES_SPLIT_KEY)
     current = dict(raw) if isinstance(raw, dict) else {}
     return current, {k: v for k, v in current.items() if str(k).strip() not in codes}, overlap
+
+
+# ------------------------------------------------------------------ what-if das premissas (nada é gravado)
+
+WHAT_IF_TOP_CC = 15
+WHAT_IF_SUMMARY = (
+    ("total", "Total de pessoal"),
+    ("salary", "Salários (com dissídio)"),
+    ("charges", "Parte do multiplicador"),
+    ("bonus", "Abono anual do CLT"),
+    ("cc_bonus", "Bônus CLT por CC"),
+    ("severance", "Verbas rescisórias"),
+)
+
+
+@dataclass
+class PremisesWhatIf:
+    """Premissas simuladas; None/False/0 = como está no ciclo."""
+
+    salary_adjustment_pct: Decimal | None = None  # fração (0,05 = 5%)
+    adjustment_month: int | None = None
+    multipliers: dict[str, Decimal] = field(default_factory=dict)
+    annual_bonus: Decimal | None = None  # abono anual do CLT, R$ por pessoa no ano
+    cc_bonus_pct: Decimal = ZERO  # ajuste sobre o bônus por CC do parâmetro (fração: 0,05 = +5%)
+    include_cc_bonus: bool = True
+    remove_overlap: bool = False  # simula "Retirar do rateio"
+    include_severance: bool = True
+
+
+def what_if_context(db: Session, ctx: Context, w: PremisesWhatIf) -> tuple[Context, list[str]]:
+    """Contexto com os parâmetros simulados (abono, bônus por CC, rateio) → (contexto, contas retiradas do rateio).
+    Cópia de `ctx.params`: nada é gravado."""
+    params = dict(ctx.params)
+    if w.annual_bonus is not None:
+        params["personnel.annual_bonus_clt"] = str(money(w.annual_bonus))
+    raw_cc = params.get("personnel.bonus_by_cc") or {}
+    raw_cc = raw_cc if isinstance(raw_cc, dict) else {}
+    if not w.include_cc_bonus:
+        params["personnel.bonus_by_cc"] = {}
+    elif w.cc_bonus_pct:
+        params["personnel.bonus_by_cc"] = {
+            k: str(money(_positive(v) * (1 + w.cc_bonus_pct))) for k, v in raw_cc.items()
+        }
+    sim = dataclasses.replace(ctx, params=params)
+    removed: list[str] = []
+    if w.remove_overlap:
+        # as contas sobrepostas hoje e as que a simulação sobrepõe (ex.: abono que passa a existir)
+        _current, new_split, overlap = split_without_overlap(db, ctx)
+        codes = {o["code"] for o in overlap} | {o["code"] for o in split_overlap(db, sim)}
+        new_split = {k: v for k, v in new_split.items() if str(k).strip() not in codes}
+        removed = sorted(codes & {str(k).strip() for k in (_current or {})})
+        params[CHARGES_SPLIT_KEY] = new_split
+    return sim, removed
+
+
+def _cmp(current: Decimal, simulated: Decimal) -> dict:
+    current, simulated = money(current), money(simulated)
+    diff = simulated - current
+    return {
+        "current": str(current),
+        "simulated": str(simulated),
+        "difference": str(diff),
+        "difference_pct": str((diff / abs(current)).quantize(Decimal("0.0001"))) if current else None,
+    }
+
+
+def _ranked(rows: list[dict]) -> list[dict]:
+    """Maior diferença primeiro (em módulo); empate (ex.: sem simulação) pelo maior valor atual."""
+    return sorted(rows, key=lambda r: (-abs(Decimal(r["difference"])), -Decimal(r["current"]), str(r.get("label"))))
+
+
+def _top(rows: list[dict], n: int, cur: Decimal, sim: Decimal) -> dict:
+    top, rest = rows[:n], rows[n:]
+    others = None
+    if rest:
+        others = {
+            "label": f"Demais ({len(rest)})",
+            **_cmp(
+                sum((Decimal(r["current"]) for r in rest), ZERO), sum((Decimal(r["simulated"]) for r in rest), ZERO)
+            ),
+        }
+    return {"rows": top, "others": others, "count": len(rows), "total": {"label": "Total", **_cmp(cur, sim)}}
+
+
+def premises_what_if(db: Session, ctx: Context, w: PremisesWhatIf) -> dict:
+    """Atual × simulado do custo de pessoal do ano (página Premissas de pessoal, Controladoria: todos os CCs). Os dois
+    lados passam por `personnel_amounts` — o atual é exatamente o da consolidação; o quadro é montado uma vez só
+    (cache do request). Só leitura: parâmetros e cenário simulados vivem em memória."""
+    base = personnel_svc.baseline(db, ctx)
+    row = db.get(PersonnelScenario, base.id) if base.id else None
+    sim_ctx, removed = what_if_context(db, ctx, w)
+    sim = personnel_svc.with_cycle_bonus(
+        personnel_svc.scenario_info(
+            db,
+            row,
+            multipliers=w.multipliers,
+            salary_adjustment_pct=w.salary_adjustment_pct,
+            adjustment_month=w.adjustment_month,
+            name="Simulação",
+        ),
+        sim_ctx,
+    )
+    positions = personnel_svc.build_positions(db, ctx)
+    cur = personnel_breakdown(db, ctx, scenario=base, positions=positions)
+    simb = personnel_breakdown(db, sim_ctx, scenario=sim, positions=positions, include_severance=w.include_severance)
+
+    summary = []
+    for key, label in WHAT_IF_SUMMARY:
+        a = cur.total if key == "total" else cur.by_kind.get(key, ZERO)
+        b = simb.total if key == "total" else simb.by_kind.get(key, ZERO)
+        summary.append({"key": key, "label": f"{label} {ctx.target_year}" if key == "total" else label, **_cmp(a, b)})
+
+    accounts = []
+    for code in set(cur.by_account) | set(simb.by_account):
+        a, b = cur.by_account.get(code), simb.by_account.get(code)
+        accounts.append(
+            {
+                "code": code,
+                "label": (a or b)["name"],
+                **_cmp(a["total"] if a else ZERO, b["total"] if b else ZERO),
+            }
+        )
+    accounts.sort(key=lambda r: (-max(Decimal(r["current"]), Decimal(r["simulated"])), r["code"]))
+
+    ccs = {c.id: c for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(set(cur.by_cc) | set(simb.by_cc))))}
+    areas = {a.id: a.name for a in db.scalars(select(Area))}
+    cc_rows = []
+    by_area: dict[str, list[Decimal]] = defaultdict(lambda: [ZERO, ZERO])
+    for cc_id in set(cur.by_cc) | set(simb.by_cc):
+        a = cur.by_cc.get(cc_id, {}).get("total", ZERO)
+        b = simb.by_cc.get(cc_id, {}).get("total", ZERO)
+        if not a and not b:
+            continue
+        cc = ccs.get(cc_id)
+        cc_rows.append(
+            {"cost_center_id": cc_id, "code": cc.code if cc else None, "label": cc.name if cc else "—", **_cmp(a, b)}
+        )
+        area = areas.get(cc.area_id) if cc and cc.area_id else None
+        by_area[area or "Sem área"][0] += a
+        by_area[area or "Sem área"][1] += b
+    area_rows = [{"label": name, **_cmp(v[0], v[1])} for name, v in by_area.items()]
+
+    monthly = [{"month": m, **_cmp(cur.monthly[m - 1], simb.monthly[m - 1])} for m in range(1, 13)]
+    return {
+        "target_year": ctx.target_year,
+        "version": ctx.version.label,
+        "frozen": ctx.frozen,
+        "current_premises": {
+            "salary_adjustment_pct": str(base.salary_adjustment_pct),
+            "adjustment_month": base.adjustment_month,
+            "multipliers": {k: str(v) for k, v in base.multipliers.items()},
+            "annual_bonus": str(money(base.annual_bonus)),
+        },
+        "simulated_premises": {
+            "salary_adjustment_pct": str(sim.salary_adjustment_pct),
+            "adjustment_month": sim.adjustment_month,
+            "multipliers": {k: str(v) for k, v in sim.multipliers.items()},
+            "annual_bonus": str(money(sim.annual_bonus)),
+            "cc_bonus_pct": str(w.cc_bonus_pct),
+            "include_cc_bonus": w.include_cc_bonus,
+            "remove_overlap": w.remove_overlap,
+            "include_severance": w.include_severance,
+        },
+        "removed_from_split": removed,
+        "summary": summary,
+        "accounts": accounts,
+        "cost_centers": _top(_ranked(cc_rows), WHAT_IF_TOP_CC, cur.total, simb.total),
+        "areas": _top(_ranked(area_rows), 50, cur.total, simb.total),
+        "monthly": monthly,
+    }
 
 
 def snapshot_rows(db: Session, version: BudgetVersion, cc_ids: set[int] | None = None) -> list[Row]:

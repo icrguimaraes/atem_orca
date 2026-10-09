@@ -2,7 +2,7 @@
 
 from collections import defaultdict
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -29,7 +29,7 @@ from app.models import (
     WorkflowEvent,
 )
 from app.models.base import Role
-from app.services import audit
+from app.services import audit, painel_figures
 from app.services import consolidation as consolidation_svc
 from app.services import findings as findings_svc
 from app.services import opex as opex_svc
@@ -1008,6 +1008,36 @@ controller = require_roles(Role.CONTROLLER)
 )
 def premises(db: Session = Depends(get_db), _: User = Depends(controller)):
     return consolidation_svc.personnel_premises(db, _ctx(db))
+
+
+class PremisesWhatIfIn(BaseModel):
+    """Premissas simuladas (frações: 0.05 = 5%). Campo ausente = como está no ciclo."""
+
+    salary_adjustment_pct: Decimal | None = Field(None, ge=0, le=Decimal("0.5"), description="Dissídio, 0 a 50%")
+    adjustment_month: int | None = Field(None, ge=1, le=12)
+    multipliers: dict[str, Annotated[Decimal, Field(gt=0, le=5)]] = Field(
+        default_factory=dict, description="Ex.: {'CLT': 1.9}"
+    )
+    annual_bonus: Decimal | None = Field(None, ge=0, description="Abono anual do CLT, R$ por pessoa no ano")
+    cc_bonus_pct: Decimal = Field(Decimal(0), ge=-1, le=2, description="Ajuste do bônus por CC, -100% a +200%")
+    include_cc_bonus: bool = True
+    remove_overlap: bool = False
+    include_severance: bool = True
+
+
+@router.post(
+    "/premises/what-if",
+    summary="What-if das premissas de pessoal: atual × simulado (nada é gravado)",
+)
+def premises_what_if(payload: PremisesWhatIfIn, db: Session = Depends(get_db), _: User = Depends(controller)):
+    ctx = _ctx(db)
+    try:
+        out = consolidation_svc.premises_what_if(db, ctx, consolidation_svc.PremisesWhatIf(**payload.model_dump()))
+    except svc.PersonnelError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    finally:
+        db.rollback()  # só leitura: nada do cálculo pode ser gravado
+    return out | {"figure": painel_figures.fig_personnel_what_if(out["monthly"], ctx.target_year)}
 
 
 @router.post(

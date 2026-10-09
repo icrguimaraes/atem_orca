@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type PersonnelPremises as Premises } from "../api";
+import { PersonnelWhatIf } from "../components/PersonnelWhatIf";
 import { Alert, Badge, Card, Empty, Loading, Modal, PageHeader, Stat, useLoad } from "../components/ui";
 import { MONTHS, fmtMoney, fmtShare } from "../labels";
 
 /* Premissas do custo de pessoal do ciclo (Controladoria): dissídio, multiplicadores, abono anual do CLT, bônus por
    CC, rateio da parte do multiplicador entre contas e total por conta. Aponta (e corrige) as contas do rateio que já
    recebem abono/bônus como linha própria — contagem em dobro (apontamento PERSONNEL_SPLIT_OVERLAP). Os valores são
-   editados em "Ciclo e parâmetros". */
+   editados em "Ciclo e parâmetros". No fim, o what-if (components/PersonnelWhatIf) simula as premissas sem gravar. */
 
 const COMPONENTS: Record<string, string> = {
   salary: "salário",
@@ -51,7 +52,14 @@ export default function PersonnelPremises() {
       <PageHeader
         title="Premissas de pessoal"
         subtitle={`Orçamento ${p.target_year} · versão ${p.version} · cenário base "${p.scenario.name}": o que forma o custo de pessoal e em que contas ele cai.`}
-        actions={<Link className="btn btn-sm" to="/ciclo">Ciclo e parâmetros</Link>}
+        actions={
+          <>
+            <button type="button" className="btn btn-sm" onClick={() => document.getElementById("what-if")?.scrollIntoView({ behavior: "smooth" })}>
+              Simular (what-if)
+            </button>
+            <Link className="btn btn-sm" to="/ciclo">Ciclo e parâmetros</Link>
+          </>
+        }
       />
       <div className="section-stack">
         {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
@@ -209,6 +217,10 @@ export default function PersonnelPremises() {
             </table>
           </div>
         </Card>
+
+        <div id="what-if" style={{ scrollMarginTop: 80 }}>
+          <PersonnelWhatIf premises={p} />
+        </div>
       </div>
 
       {confirm && (

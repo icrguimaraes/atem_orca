@@ -516,6 +516,51 @@ def fig_people(rows: list[dict]) -> dict | None:
     return _fig(data, layout) | {"meta": {"tooltip": "point"}}
 
 
+def fig_personnel_what_if(monthly: list[dict], year: int) -> dict:
+    """What-if de pessoal (Premissas de pessoal): custo mensal atual (verde, é orçamento) × simulado (areia), lado a
+    lado, com a diferença no tooltip. `monthly` = [{month, current, simulated, difference, difference_pct}]."""
+    series = (("current", f"Atual {year}", ORCADO), ("simulated", "Simulado", VARIACAO))
+    tips = []
+    for r in monthly:
+        diff = _num(r["difference"])
+        pct = f" ({fmt_pct(r['difference_pct'])})" if r.get("difference_pct") else ""
+        tips.append(
+            [
+                [f"Atual: {fmt_money(_num(r['current']))}", ORCADO],
+                [f"Simulado: {fmt_money(_num(r['simulated']))}", VARIACAO],
+                [f"Diferença: {_signed_money(diff)}{pct}", ""],
+            ]
+        )
+    data, everything = [], []
+    for key, name, color in series:
+        values = [_num(r[key]) for r in monthly]
+        everything += values
+        data.append(
+            go.Bar(
+                x=list(MONTHS),
+                y=values,
+                name=name,
+                offsetgroup=key,
+                marker={"color": color, "cornerradius": 4},
+                customdata=[[fmt_money(v), t] for v, t in zip(values, tips, strict=True)],
+                hovertemplate=name + ": <b>%{customdata[0]}</b><extra></extra>",
+            )
+        )
+    layout = _layout(
+        barmode="group",
+        bargap=0.2,
+        bargroupgap=0.06,
+        hovermode="x unified",
+        showlegend=True,
+        legend=LEGEND,
+        height=240,
+        yaxis={"visible": False, "range": [0, (max(everything + [0.0]) or 1) * 1.08], "fixedrange": True},
+        xaxis={"showgrid": False, "automargin": True, "fixedrange": True},
+        margin={"l": 8, "r": 8, "t": 36, "b": 8},
+    )
+    return _fig(data, layout) | {"meta": {"tooltip": "unified"}}
+
+
 def _unit(top: float) -> tuple[float, str, int]:
     """Uma escala só para todos os rótulos da cascata (como no slide: tudo em R$ mi com 1 casa)."""
     for div, unit in ((1e9, " bi"), (1e6, " mi"), (1e3, " mil")):

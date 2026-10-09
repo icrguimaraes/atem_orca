@@ -695,3 +695,146 @@ def test_bonus_by_cc_counts_once_when_code_exists_in_two_companies(client, admin
     )
     after = client.get("/api/v1/consolidation/overview", headers=admin).json()["modules"]["PERSONNEL"]["proposed"]
     assert Decimal(after) - Decimal(before) == Decimal("1200.00")
+
+
+WHAT_IF = "/api/v1/personnel/premises/what-if"
+
+
+def _what_if_setup(client, admin, run_worker):
+    """Quadro + abono de R$ 2.500 + bônus de R$ 12.000 no CC1 (o rateio do seed sobrepõe as duas contas)."""
+    ccs, mgr, _final = _setup(client, admin, run_worker)
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+    put = f"/api/v1/cycles/{cycle_id}/parameters"
+    client.put(f"{put}/personnel.annual_bonus_clt", headers=admin, json={"value": 2500})
+    client.put(f"{put}/personnel.bonus_by_cc", headers=admin, json={"value": {CC1: 12000}})
+    return ccs, mgr, put
+
+
+def _summary(out):
+    return {s["key"]: s for s in out["summary"]}
+
+
+def test_premises_what_if_current_equals_consolidation(client, admin, run_worker):
+    """What-if das premissas (Controladoria): o lado "atual" é exatamente o da consolidação e das Premissas; sem
+    alteração, diferença zero em tudo; nada é gravado."""
+    _ccs, mgr, put = _what_if_setup(client, admin, run_worker)
+    assert client.post(WHAT_IF, headers=mgr, json={}).status_code == 403
+    params_before = client.get(put, headers=admin).json()
+    r = client.post(WHAT_IF, headers=admin, json={})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    s = _summary(out)
+    overview = client.get("/api/v1/consolidation/overview", headers=admin).json()
+    premises = client.get("/api/v1/personnel/premises", headers=admin).json()
+    assert Decimal(s["total"]["current"]) == Decimal(overview["modules"]["PERSONNEL"]["proposed"])
+    assert s["total"]["current"] == premises["total"]
+    assert s["salary"]["current"] == premises["salary"]["total"]
+    assert s["charges"]["current"] == premises["charges"]["total"]
+    assert s["bonus"]["current"] == premises["abono"]["total"]
+    assert s["cc_bonus"]["current"] == premises["bonus_by_cc"]["booked"] == "12000.00"
+    assert {a["code"]: a["total"] for a in premises["accounts"]} == {a["code"]: a["current"] for a in out["accounts"]}
+    # sem alteração: zero em todos os quadros
+    assert all(x["difference"] == "0.00" for x in out["summary"] + out["accounts"] + out["monthly"])
+    assert all(x["difference"] == "0.00" for x in out["cost_centers"]["rows"] + out["areas"]["rows"])
+    assert out["cost_centers"]["total"]["current"] == s["total"]["current"]
+    assert sum(Decimal(m["current"]) for m in out["monthly"]) == Decimal(s["total"]["current"])
+    assert out["figure"]["data"] and out["removed_from_split"] == []
+    # nada gravado, mesmo simulando tudo
+    everything = {
+        "salary_adjustment_pct": 0.1,
+        "adjustment_month": 3,
+        "multipliers": {"CLT": 2.2},
+        "annual_bonus": 9000,
+        "cc_bonus_pct": 0.5,
+        "remove_overlap": True,
+        "include_severance": False,
+    }
+    assert client.post(WHAT_IF, headers=admin, json=everything).status_code == 200
+    assert client.get(put, headers=admin).json() == params_before
+    assert client.get("/api/v1/personnel/premises", headers=admin).json()["total"] == premises["total"]
+    assert client.get("/api/v1/personnel/options", headers=admin).json()["scenario"]["multipliers"]["CLT"] != "2.2"
+
+
+def test_premises_what_if_dissidio_and_multiplier(client, admin, run_worker):
+    _what_if_setup(client, admin, run_worker)
+    current = _summary(client.post(WHAT_IF, headers=admin, json={}).json())
+    base = client.get("/api/v1/personnel/premises", headers=admin).json()["scenario"]
+    pct = Decimal(base["salary_adjustment_pct"])
+    # mesmo dissídio e mês do cenário base: nada muda
+    same = {"salary_adjustment_pct": str(pct), "adjustment_month": base["adjustment_month"]}
+    assert _summary(client.post(WHAT_IF, headers=admin, json=same).json())["total"]["difference"] == "0.00"
+    out = client.post(WHAT_IF, headers=admin, json={"salary_adjustment_pct": str(pct + Decimal("0.05"))}).json()
+    s = _summary(out)
+    assert Decimal(s["salary"]["difference"]) > 0 and Decimal(s["charges"]["difference"]) > 0
+    assert s["bonus"]["difference"] == s["cc_bonus"]["difference"] == s["severance"]["difference"] == "0.00"
+    assert Decimal(s["total"]["difference"]) == Decimal(s["salary"]["difference"]) + Decimal(s["charges"]["difference"])
+    assert Decimal(out["simulated_premises"]["salary_adjustment_pct"]) == pct + Decimal("0.05")
+    # dissídio só a partir de julho custa menos que a partir de janeiro
+    later = _summary(
+        client.post(
+            WHAT_IF, headers=admin, json={"salary_adjustment_pct": str(pct + Decimal("0.05")), "adjustment_month": 7}
+        ).json()
+    )
+    assert Decimal(later["total"]["simulated"]) < Decimal(s["total"]["simulated"])
+    # multiplicador do CLT: só a parte do multiplicador muda
+    mult = _summary(client.post(WHAT_IF, headers=admin, json={"multipliers": {"CLT": 2.0}}).json())
+    assert mult["salary"]["difference"] == "0.00" and Decimal(mult["charges"]["difference"]) > 0
+    assert mult["total"]["current"] == current["total"]["current"]
+
+
+def test_premises_what_if_abono_bonus_split_and_severance(client, admin, run_worker):
+    _ccs, _mgr, put = _what_if_setup(client, admin, run_worker)
+    # abono: só a conta do abono muda
+    out = client.post(WHAT_IF, headers=admin, json={"annual_bonus": 5000}).json()
+    s = _summary(out)
+    assert Decimal(s["bonus"]["difference"]) > 0 and s["charges"]["difference"] == "0.00"
+    assert s["total"]["difference"] == s["bonus"]["difference"]
+
+    # bônus por CC: +5% e excluído
+    plus = _summary(client.post(WHAT_IF, headers=admin, json={"cc_bonus_pct": 0.05}).json())
+    assert plus["cc_bonus"]["simulated"] == "12600.00" and plus["total"]["difference"] == "600.00"
+    off = _summary(client.post(WHAT_IF, headers=admin, json={"include_cc_bonus": False}).json())
+    assert off["cc_bonus"]["simulated"] == "0.00" and off["total"]["difference"] == "-12000.00"
+
+    # retirar do rateio: só redistribui entre contas (total igual)
+    split = client.post(WHAT_IF, headers=admin, json={"remove_overlap": True}).json()
+    assert set(split["removed_from_split"]) == {"6010101009", "6010101016"}
+    ss = _summary(split)
+    assert ss["total"]["difference"] == "0.00" and ss["charges"]["difference"] == "0.00"
+    accounts = {a["code"]: a for a in split["accounts"]}
+    assert accounts["6010101016"]["simulated"] == "12000.00"
+    assert accounts["6010101009"]["simulated"] == ss["bonus"]["simulated"]
+    assert Decimal(accounts["6010101009"]["difference"]) < 0
+    assert all(m["difference"] == "0.00" for m in split["monthly"])
+
+    # rescisórias fora
+    sev = _summary(client.post(WHAT_IF, headers=admin, json={"include_severance": False}).json())
+    assert sev["severance"]["simulated"] == "0.00"
+    assert Decimal(sev["total"]["difference"]) == -Decimal(sev["severance"]["current"])
+
+    # gravando os mesmos valores, as Premissas batem com o simulado (mesmo caminho de cálculo)
+    client.put(f"{put}/personnel.annual_bonus_clt", headers=admin, json={"value": 5000})
+    assert client.get("/api/v1/personnel/premises", headers=admin).json()["total"] == s["total"]["simulated"]
+    split5000 = client.post(WHAT_IF, headers=admin, json={"remove_overlap": True}).json()
+    assert client.post("/api/v1/personnel/premises/remove-overlap", headers=admin).status_code == 200
+    applied = client.post(WHAT_IF, headers=admin, json={}).json()
+    assert {a["code"]: a["current"] for a in applied["accounts"]} == {
+        a["code"]: a["simulated"] for a in split5000["accounts"]
+    }
+
+
+def test_premises_what_if_validation(client, admin, run_worker):
+    _what_if_setup(client, admin, run_worker)
+    for body in (
+        {"salary_adjustment_pct": 0.6},
+        {"salary_adjustment_pct": -0.01},
+        {"adjustment_month": 13},
+        {"adjustment_month": 0},
+        {"multipliers": {"CLT": 0}},
+        {"multipliers": {"CLT": 5.5}},
+        {"multipliers": {"XYZ": 1.5}},
+        {"annual_bonus": -1},
+        {"cc_bonus_pct": -1.5},
+        {"cc_bonus_pct": 2.5},
+    ):
+        assert client.post(WHAT_IF, headers=admin, json=body).status_code == 422, body

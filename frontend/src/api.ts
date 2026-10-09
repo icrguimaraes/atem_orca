@@ -546,6 +546,24 @@ export interface PersonnelPremises {
   overlap: { code: string; name: string; kind: "bonus" | "cc_bonus"; label: string; share: string; amount: string }[];
   overlap_amount: string;
 }
+/* What-if das premissas de pessoal: atual × simulado (nada é gravado) */
+export interface WhatIfCompare { current: string; simulated: string; difference: string; difference_pct: string | null }
+export interface WhatIfRanked { rows: (WhatIfCompare & { label: string; code?: string | null; cost_center_id?: number })[]; others: (WhatIfCompare & { label: string }) | null; count: number; total: WhatIfCompare & { label: string } }
+export interface PremisesWhatIf {
+  target_year: number; version: string; frozen: boolean;
+  current_premises: { salary_adjustment_pct: string; adjustment_month: number; multipliers: Record<string, string>; annual_bonus: string };
+  simulated_premises: {
+    salary_adjustment_pct: string; adjustment_month: number; multipliers: Record<string, string>; annual_bonus: string;
+    cc_bonus_pct: string; include_cc_bonus: boolean; remove_overlap: boolean; include_severance: boolean;
+  };
+  removed_from_split: string[];
+  summary: (WhatIfCompare & { key: string; label: string })[];
+  accounts: (WhatIfCompare & { code: string; label: string | null })[];
+  cost_centers: WhatIfRanked;
+  areas: WhatIfRanked;
+  monthly: (WhatIfCompare & { month: number })[];
+  figure: { data: unknown[]; layout: Record<string, unknown>; meta?: Record<string, string> };
+}
 export interface VersionCompare {
   from: { id: number; label: string; status: string; total: string };
   to: { id: number; label: string; status: string; total: string };
