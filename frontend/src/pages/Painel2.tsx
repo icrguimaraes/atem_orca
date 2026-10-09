@@ -6,7 +6,6 @@ import { useAuth } from "../auth";
 import { BudgetProgressCard } from "../components/BudgetProgressCard";
 import { ManagerTasks, PackageReviews, PainelBase, QuestionsInbox } from "../components/PainelBlocks";
 import { FilterBar } from "../components/FilterBar";
-import { Heatmap } from "../components/charts";
 import { DrillTable } from "../components/DrillTable";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
@@ -17,10 +16,8 @@ import { MONTHS, fmtCompact, fmtMoney, fmtPct, fmtSignedMoney } from "../labels"
  * (`services/painel_figures.py`, a partir de `/dashboard/overview?figures=true`). Existe para comparação com o
  * Painel em SVG; depois da escolha, uma das duas versões sai. Clique nos gráficos e na tabela filtra; "Limpar filtros" volta ao início.
  */
-// heatmap_all: mapa sem o filtro de CC e mês (o próprio visual destaca a seleção em vez de se filtrar)
 type OverviewWithFigures = Overview & {
   figures: Record<string, Figure>;
-  heatmap_all?: Overview["heatmap"];
   top_cost_centers_total?: { main: string; base: string | null; var_pct: string | null };
 };
 
@@ -36,7 +33,6 @@ const SECTIONS = [
   { key: "table", label: "Tabela por pacote, conta e centro de custo" },
   { key: "cumulative", label: "Total acumulado" },
   { key: "top", label: "Maiores centros de custo" },
-  { key: "heatmap", label: "Mapa de calor" },
 ];
 
 function Delta({ pct }: { pct: string | null }) {
@@ -224,8 +220,6 @@ export default function Painel2() {
   const hasData = Boolean(o && (o.has_actual || o.has_budget));
   const shownYears = years.length ? years : (o?.selected_years ?? []);
   const filtered = Boolean(filters.company_id || filters.cost_center_id || filters.package_id || account || modules.length);
-  const heat = o?.heatmap_all ?? o?.heatmap;
-  const heatSelected = heat && filters.cost_center_id ? heat.rows.findIndex((r) => String(r.id) === filters.cost_center_id) : -1;
   const unpick = (label: string, clear: () => void) => (
     <button type="button" className="btn btn-ghost btn-sm" onClick={clear}>{label}</button>
   );
@@ -571,32 +565,6 @@ export default function Painel2() {
                 ) : (
                   <Empty>Sem dados.</Empty>
                 )}
-              </Card>,
-            )}
-
-            {heat && heat.rows.length > 0 && shell("heatmap",
-              <Card
-                title={`Mapa de calor · maiores centros de custo × mês (${mainLabel})`}
-                actions={filters.cost_center_id || months.length
-                  ? unpick("Desmarcar", () => { setFilters((cur) => ({ ...cur, cost_center_id: "" })); setMonths([]); })
-                  : undefined}
-              >
-                <p className="muted small">Clique numa célula para filtrar por centro de custo e mês; no nome, só pelo centro de custo. De novo para desmarcar.</p>
-                <Heatmap
-                  budget={isBudgetMain}
-                  rows={heat.rows.map((r) => ({ label: r.name, sub: heat.rows.filter((x) => x.name === r.name).length > 1 ? r.code : null, values: r.values.map(Number), total: Number(r.total) }))}
-                  selectedRow={heatSelected >= 0 ? heatSelected : null}
-                  selectedMonths={months}
-                  onSelect={(ri, m) => {
-                    const row = heat.rows[ri];
-                    if (!row) return;
-                    if (m === null) toggleCostCenter(row.id);  // nome: marca/desmarca o CC
-                    else {
-                      setFilters((cur) => ({ ...cur, cost_center_id: String(row.id) }));
-                      toggleMonth(m);
-                    }
-                  }}
-                />
               </Card>,
             )}
 
