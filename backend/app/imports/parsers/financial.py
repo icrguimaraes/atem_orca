@@ -279,6 +279,110 @@ def parse_projection(sheets: list[Sheet], options: dict) -> ParseResult:
     return result
 
 
+BUDGET_LONG_ALIASES = PROJECTION_ALIASES | {
+    "amount": (
+        *(f"Orçamento {y}" for y in range(2020, 2036)),
+        *(f"Orçado {y}" for y in range(2020, 2036)),
+        "Orçamento",
+        "Orçado",
+        "Valor Orçado",
+    ),
+}
+# CC com prefixo de filial ou sufixo na planilha ("03-1050101003", "1050101003(1)"): código SAP dentro do texto
+_CC_IN_TEXT = re.compile(r"(\d{10}|[A-Z]{3}\d{7})")
+
+
+def parse_budget_long(sheets: list[Sheet], options: dict) -> ParseResult:
+    """Orçado de referência em linhas (aba 'Orçamento 2026' da Base de controle da Controladoria): CC × conta × mês
+    com a coluna 'Orçamento AAAA'. Linhas repetidas do mesmo CC × conta × mês somam; linha de total geral (sem CC e
+    conta) fica de fora; CC escrito com prefixo/sufixo é lido pelo código SAP, sempre com aviso."""
+    result = ParseResult("REFERENCE_BUDGET", "BUDGET_LONG")
+    for sheet in sheets:
+        table = find_table(sheet, BUDGET_LONG_ALIASES, ("cost_center", "account", "amount", "month"))
+        if table is None:
+            continue
+        result.meta["sheet"] = sheet.name
+        target = options.get("reference_year")
+        default_company = options.get("company_code")
+        merged: dict[tuple, Record] = {}
+        other_year = Decimal("0")
+        other_year_rows = 0
+        for row_no, row in table.rows():
+            if is_blank(row):
+                continue
+            raw_cc = clean_code(table.value(row, "cost_center"))
+            cc_name = clean_str(table.value(row, "cost_center_name"))
+            account = clean_code(table.value(row, "account"))
+            if raw_cc is None and account is None:
+                continue  # linha de total geral da planilha
+            rec = Record("FACT", sheet.name, row_no, {})
+            raw = table.value(row, "amount")
+            try:
+                amount = to_decimal(raw)
+            except ValueError:
+                rec.error("INVALID_NUMBER", "Valor orçado inválido", "Orçamento", raw)
+                result.records.append(rec)
+                continue
+            if amount in (None, 0):
+                continue
+            month_value = table.value(row, "month")
+            if not hasattr(month_value, "month"):
+                rec.error("INVALID_DATE", "Mês inválido", "Mês", month_value)
+                result.records.append(rec)
+                continue
+            year, month = int(month_value.year), int(month_value.month)
+            if target and year != int(target):
+                other_year += amount
+                other_year_rows += 1
+                continue
+            cc, note = raw_cc, None
+            if cc is None and cc_name and cc_name.strip().upper() in PROJECTION_CC_BY_NAME:
+                cc = PROJECTION_CC_BY_NAME[cc_name.strip().upper()]
+                note = f"Linha sem código de CC ('{cc_name}'): associada ao CC {cc} pela descrição"
+            elif cc and not cc.isalnum() and (found := _CC_IN_TEXT.search(cc)):
+                cc = found.group(1)
+                note = f"CC escrito como '{raw_cc}' na planilha: lido como {cc}. Confirmar com o gestor"
+            company = clean_code(table.value(row, "company")) or default_company
+            key = (company, cc, account, year, month)
+            if key in merged:
+                prev = merged[key]
+                prev.data["values"][month] = str(Decimal(prev.data["values"][month]) + amount)
+                if note:
+                    prev.warn("CC_NORMALIZED", note, "Cód CC", raw_cc or cc_name)
+                continue
+            rec.data.update(
+                {
+                    "company": company,
+                    "branch": None,
+                    "branch_name": None,
+                    "cost_center": cc,
+                    "cost_center_name": cc_name,
+                    "manager": None,
+                    "account": account,
+                    "account_name": clean_str(table.value(row, "account_name")),
+                    "package": None,
+                    "year": year,
+                    "values": {month: str(amount)},
+                }
+            )
+            rec.natural_key = f"{company}|{cc}|{account}|{year}|{month}"
+            if note:
+                rec.warn("CC_NORMALIZED", note, "Cód CC", raw_cc or cc_name)
+            merged[key] = rec
+        result.records.extend(merged.values())
+        result.meta["years"] = sorted({r.data["year"] for r in merged.values()})
+        if other_year_rows:
+            result.structural.append(
+                Issue(
+                    "OTHER_YEAR_IGNORED",
+                    f"{other_year_rows} linha(s) de outro ano (R$ {other_year:,.2f}) ficaram fora desta carga",
+                    severity="WARNING",
+                )
+            )
+        return result
+    return result
+
+
 CAPEX_ACUM_ALIASES = {
     "company": ("EMPRESA",),
     "cost_center": ("CENTRO DE CUSTO",),
