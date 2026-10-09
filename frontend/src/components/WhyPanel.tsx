@@ -98,10 +98,10 @@ export function WhyButton({ qs, label }: { qs: string; label: string }) {
 
   return (
     <span className="why-wrap" onMouseEnter={enter} onMouseLeave={leave}>
-      <button ref={btn} type="button" className="why-btn" onClick={(e) => { e.stopPropagation(); setOpen(true); }} aria-label={`Por que mudou: ${label}`}>
+      <button ref={btn} type="button" className="why-btn" onClick={(e) => { e.stopPropagation(); setHover(null); setOpen(true); }} aria-label={`Por que mudou: ${label}`}>
         por quê?
       </button>
-      {hover && tip && createPortal(
+      {hover && tip && !open && createPortal(
         <div className="why-tip" role="tooltip" style={{ left: hover.x, top: hover.y }}>
           {tip === "loading" ? (
             <span className="muted">Carregando…</span>
