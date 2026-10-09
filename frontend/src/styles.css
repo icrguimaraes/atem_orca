@@ -1109,3 +1109,7 @@ tr.saving { opacity: 0.6; }
 /* cards com valor por extenso (R$ 21.459.252,47, pedido de 09/10/2026): mais largura e fonte que cabe */
 .stats { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
 .stat-value { font-size: clamp(19px, 1.5vw, 24px); overflow-wrap: anywhere; }
+/* tabela do Painel: linhas alternadas, sutil (09/10/2026); os níveis abertos mantêm o próprio fundo */
+.drill-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 45%, transparent); }
+.drill-table tbody tr.drill-level-1:nth-child(even) td, .drill-table tbody tr.drill-level-2:nth-child(even) td { background: color-mix(in srgb, var(--surface-2) 80%, transparent); }
+.drill-table tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 100%, transparent); }
