@@ -83,7 +83,8 @@ def _labels(o: dict) -> dict:
         "prev_series": prev_series or "",
         "main": p["main_label"],
         "main_color": REALIZADO if p["main"] == "actual" else ORCADO,
-        "base_color": ORCADO if p["base_kind"] == "budget" else ANTERIOR,
+        # base: verde se orçado, azul se realizado do ano (orçamento × realizado), roxo se ano anterior
+        "base_color": {"budget": ORCADO, "actual": REALIZADO}.get(p["base_kind"], ANTERIOR),
         # tooltip: no mês basta o ano ("Realizado 2026"); nos rankings vai o período inteiro ("… até SET")
         "tip": {
             "prev": f"Realizado {o['previous_year']}" if o.get("previous_year") else _tip_label(p["base_label"]),
@@ -368,7 +369,7 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
             x=values,
             y=cats,
             name=lb["main"],
-            width=0.6,
+            width=0.52 if show_base else 0.6,
             offset=-0.42 if show_base else -0.3,
             marker={"color": lb["main_color"], "cornerradius": 4, "opacity": opacity},
             text=[text(v, r.get("var_pct")) for v, r in zip(values, rows, strict=True)],
@@ -386,9 +387,14 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
                 x=bases,
                 y=cats,
                 name=lb["base"],
-                width=0.16,
-                offset=0.24,
+                width=0.2,
+                offset=0.14,
                 marker={"color": lb["base_color"], "cornerradius": 3, "opacity": opacity},
+                # rótulo também na base (pedido de 09/10/2026), menor e na cor da série
+                text=[fmt_compact(b) if b else "" for b in bases],
+                textposition="outside",
+                cliponaxis=False,
+                textfont={"size": 11, "color": INK.get(lb["base_color"], lb["base_color"])},
                 customdata=customdata,
                 hovertemplate=hover + "<extra></extra>",
             )

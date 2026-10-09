@@ -637,6 +637,13 @@ def overview(
             db, user, company_id, None, package_id, all_months, account_id=account_id, department_id=department_id
         )
         data["heatmap_all"] = _heatmap(db, f_heat, main_model, P.main_years)
+        # total de todos os CCs (o ranking mostra só os maiores), sem o filtro de CC, como o próprio visual
+        top_main, top_base = f_ccs.total(main_model, P.main_years), _base_total(f_ccs, P)
+        data["top_cost_centers_total"] = {
+            "main": _money(top_main),
+            "base": _money(top_base) if P.base_kind else None,
+            "var_pct": _pct(top_main, top_base) if P.base_kind else None,
+        }
         # evolução do orçamento: sem o filtro de meses (f_months), com todos os demais filtros
         data["evolution"], options = _evolution(db, f_months, P)
         data["evolution_options"] = [

@@ -21,6 +21,7 @@ import { MONTHS, fmtCompact, fmtMoney, fmtPct, fmtSignedMoney } from "../labels"
 type OverviewWithFigures = Overview & {
   figures: Record<string, Figure>;
   heatmap_all?: Overview["heatmap"];
+  top_cost_centers_total?: { main: string; base: string | null; var_pct: string | null };
 };
 
 const ORDER_KEY = "atem.painel2.order";
@@ -537,7 +538,22 @@ export default function Painel2() {
             {shell("top",
               <Card
                 title={`Maiores centros de custo · ${mainLabel}`}
-                actions={filters.cost_center_id ? unpick("Desmarcar", () => setFilters((cur) => ({ ...cur, cost_center_id: "" }))) : undefined}
+                actions={
+                  <>
+                    {o.top_cost_centers_total && (
+                      <span className="rank-total">
+                        Total <strong>{fmtCompact(o.top_cost_centers_total.main)}</strong>
+                        {o.top_cost_centers_total.base !== null && (
+                          <>
+                            {" "}· {baseLabel} <strong>{fmtCompact(o.top_cost_centers_total.base)}</strong>{" "}
+                            <Delta pct={o.top_cost_centers_total.var_pct} />
+                          </>
+                        )}
+                      </span>
+                    )}
+                    {filters.cost_center_id && unpick("Desmarcar", () => setFilters((cur) => ({ ...cur, cost_center_id: "" })))}
+                  </>
+                }
               >
                 <p className="muted small">Clique num centro de custo para filtrar; de novo para desmarcar.</p>
                 {o.top_cost_centers.length ? (

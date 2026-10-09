@@ -603,6 +603,14 @@ def test_projection_fills_only_months_without_ksb1(client, admin, run_worker):
     assert both.status_code == 200, both.text[:200]
     period = both.json()["period"]
     assert period["main"] == "budget" and period["base_kind"] == "actual", period
+    # maiores CCs: total de todos os CCs no cabeçalho e rótulo também na barra da base
+    total = both.json()["top_cost_centers_total"]
+    assert total["base"] == both.json()["kpis"]["prev_ytd"], total
+    from app.services import painel_figures
+
+    lb = {"main": "Orçamento 2027", "base": "Realizado 2026", "main_color": "#000", "base_color": "#111"}
+    rank = painel_figures.fig_rank([{"id": 1, "name": "CC", "value": "10", "base": "8", "var_pct": "0.25"}], lb, True)
+    assert rank["data"][1]["text"] == ["R$ 8"], rank["data"][1]["text"]
     # projeção até nov (11 meses): a base sai anualizada por 12/11
     assert round(float(both.json()["kpis"]["prev_ytd"]), 2) == round(float(after["kpis"]["ref_ytd"]) * 12 / 11, 2)
     # projeção substitui a anterior inteira (não soma)
