@@ -145,14 +145,14 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
   }
 
   function renderRows(rows: BreakdownRow[], level: number, parentKey: string, parentChain = "", parentHit = false): JSX.Element[] {
-    return sortRows(rows, sort).flatMap((r) => {
+    return sortRows(rows, sort).flatMap((r, index) => {
       const key = `${parentKey}/${r.id ?? "none"}`;
       // linha que bate com o filtro mostra todos os filhos abertos; senão, só os caminhos que levam a uma linha que bate
       if (!parentHit && !matches(r, key)) return [];
       const hit = parentHit || (Boolean(needle) && rowMatches(r));
       const kids = children[key];
       const line = (
-        <tr key={key} className={`drill-level-${level}${needle && rowMatches(r) ? " drill-hit" : ""}`}>
+        <tr key={key} className={`drill-level-${level}${index % 2 ? " drill-alt" : ""}${needle && rowMatches(r) ? " drill-hit" : ""}`}>
           <td>
             {r.has_children && level < LEVELS.length - 1 ? (
               <button
