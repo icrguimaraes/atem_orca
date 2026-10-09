@@ -2,12 +2,13 @@ import { useState } from "react";
 import { api } from "../api";
 import { FilterBar } from "../components/FilterBar";
 import { Alert, Badge, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
-import { WhyDrawer, type Question } from "../components/WhyPanel";
+import { ItemContext, WhyDrawer, type Question } from "../components/WhyPanel";
 import { fmtDateTime, fmtInt } from "../labels";
 import { usePersistentState } from "../persist";
 
-/* Perguntas da defesa do orçamento: quem analisa questiona um recorte no "por quê?" do Painel; o gestor da área
-   responde aqui (ou no próprio painel lateral). Tudo fica registrado na auditoria. */
+/* Perguntas da defesa do orçamento: quem analisa questiona um lançamento (linha do OPEX, movimentação de pessoal ou
+   solicitação de CAPEX) no "por quê?" do Painel ou no orçamento do CC; o gestor do CC responde aqui (ou no próprio
+   painel lateral). Perguntas antigas, sobre um recorte, continuam aqui. Tudo fica registrado na auditoria. */
 
 interface QData { items: Question[]; counts: { to_answer: number; answered_mine: number; open: number } }
 
@@ -42,6 +43,7 @@ function Card({ q, onChange }: { q: Question; onChange: (q: Question) => void })
         </div>
         <Badge tone={q.status === "OPEN" ? "warn" : q.status === "ANSWERED" ? "info" : "neutral"}>{q.status_label}</Badge>
       </div>
+      {q.item && <ItemContext item={q.item} />}
       <div className="question-text">{q.question}</div>
       {q.answer && (
         <div className="answer">
@@ -81,7 +83,7 @@ export default function Questions() {
     <>
       <PageHeader
         title="Perguntas"
-        subtitle={'Defesa do orçamento: perguntas feitas no "por quê?" do Painel sobre uma área, setor, pacote, conta ou centro de custo. Quem responde é o gestor da área; tudo fica registrado.'}
+        subtitle={'Defesa do orçamento: perguntas sobre um lançamento do orçamento (linha do OPEX, movimentação de pessoal ou CAPEX), feitas no "por quê?" do Painel ou no orçamento do CC. Quem responde é o gestor do CC; tudo fica registrado.'}
       />
       <div className="stats">
         <Stat label="Para eu responder" value={fmtInt(toAnswer)} tone={toAnswer ? "warn" : "good"} />
@@ -94,7 +96,7 @@ export default function Questions() {
         fields={[{ key: "status", label: "Situação", value: status, onChange: setStatus, options: STATUS }]}
       />
       {shown.length === 0 ? (
-        <Empty>Nenhuma pergunta nesta situação. Para perguntar, use o botão "por quê?" na tabela do Painel.</Empty>
+        <Empty>Nenhuma pergunta nesta situação. Para perguntar, abra o "por quê?" na tabela do Painel e use "Questionar" no lançamento.</Empty>
       ) : (
         <ul className="just-list">
           {shown.map((q) => <Card key={q.id} q={q} onChange={(n) => setItems(all.map((x) => (x.id === n.id ? n : x)))} />)}

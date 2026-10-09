@@ -297,7 +297,7 @@ export interface OpexHeader {
   cycle: { id: number; name: string; status: string; deadline: string | null };
   version: string;
   years: { prev: number; ref: number; target: number };
-  permissions: { edit: boolean; owner: boolean; global: boolean; review_packages: number[]; cycle_blocked: boolean; frozen?: boolean };
+  permissions: { edit: boolean; owner: boolean; global: boolean; review_packages: number[]; cycle_blocked: boolean; frozen?: boolean; ask?: boolean };
   actions: OpexAction[];
   package_reviews: PackageReviewInfo[];
   submitted_at: string | null;

@@ -100,17 +100,17 @@ def fmt_money(value: Decimal | float | None) -> str:
 
 
 def fmt_compact(value: Decimal | float | None) -> str:
-    """R$ 1,2 mi · R$ 850 mil · R$ 125,4 mil · R$ 980."""
+    """R$ 1,25 mi · R$ 850,00 mil · R$ 125,43 mil · R$ 980,00 — sempre duas casas decimais (pedido de 09/10/2026)."""
     n = float(value or 0)
     sign = "-" if n < 0 else ""
     a = abs(n)
     if a >= 1e9:
-        return f"{sign}R$ {_br(a / 1e9, 1)} bi"
+        return f"{sign}R$ {_br(a / 1e9, 2)} bi"
     if a >= 1e6:
-        return f"{sign}R$ {_br(a / 1e6, 1)} mi"
+        return f"{sign}R$ {_br(a / 1e6, 2)} mi"
     if a >= 1e3:
-        return f"{sign}R$ {_br(a / 1e3, 1)} mil".replace(",0 mil", " mil")
-    return f"{sign}R$ {_br(a, 0)}"
+        return f"{sign}R$ {_br(a / 1e3, 2)} mil"
+    return f"{sign}R$ {_br(a, 2)}"
 
 
 def fmt_pct(ratio: Decimal | float | None) -> str:

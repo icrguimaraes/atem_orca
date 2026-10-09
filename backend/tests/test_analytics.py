@@ -13,11 +13,11 @@ REF_BUDGET_2026 = [  # orçado 2026 (orçamento de referência): mesma conta/CC 
 
 
 def test_formatting_pt_br():
-    assert fmt_compact(1_234_567) == "R$ 1,2 mi"
-    assert fmt_compact(850_000) == "R$ 850 mil"
-    assert fmt_compact(125_400) == "R$ 125,4 mil"
-    assert fmt_compact(980) == "R$ 980"
-    assert fmt_compact(-2_500_000_000) == "-R$ 2,5 bi"
+    assert fmt_compact(1_234_567) == "R$ 1,23 mi"
+    assert fmt_compact(850_000) == "R$ 850,00 mil"
+    assert fmt_compact(125_400) == "R$ 125,40 mil"
+    assert fmt_compact(980) == "R$ 980,00"
+    assert fmt_compact(-2_500_000_000) == "-R$ 2,50 bi"
     assert fmt_pct(Decimal("0.125")) == "+12,5%" and fmt_pct(Decimal("-0.082")) == "-8,2%" and fmt_pct(None) == "—"
 
 
@@ -52,7 +52,7 @@ def test_dashboard_matches_process_numbers_and_filters(client, admin, run_worker
     # ranking: conta de salários no topo, rótulo pt-BR
     # (mesmo visual dos maiores CCs do Painel: maior primeiro, cartões de total em meta.totals e coluna Total)
     rank = d["figures"]["ranking"]["data"][0]
-    assert rank["y"][0] == "Salários e ordenados" and rank["text"][0].startswith("<b>R$ 267,8 mil</b>"), rank["text"][0]
+    assert rank["y"][0] == "Salários e ordenados" and rank["text"][0].startswith("<b>R$ 267,75 mil</b>"), rank["text"][0]
     totals = d["figures"]["ranking"]["meta"]["totals"]
     assert Decimal(totals["main"]) > 0 and d["figures"]["ranking"]["meta"]["total_figure"]
     # status: 1 CC preenchido de 2 ativos no escopo

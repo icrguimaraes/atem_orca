@@ -111,7 +111,12 @@ class FindingReview(Base):
 class BudgetQuestion(Base):
     """Pergunta sobre o orçamento (defesa do orçamento): quem analisa (ex.: VP) questiona uma linha do Painel — área,
     setor, pacote, conta ou CC — e o gestor da área responde. OPEN → ANSWERED → CLOSED (quem perguntou encerra ou
-    pergunta de novo). `scope` guarda o recorte do Painel (filtros e linha) para reabrir o "por quê?" no mesmo ponto."""
+    pergunta de novo). `scope` guarda o recorte do Painel (filtros e linha) para reabrir o "por quê?" no mesmo ponto.
+
+    Desde 09/10/2026 a pergunta é sobre um **lançamento** (`item_type`): linha do OPEX (`budget_line_id`), movimentação
+    de pessoal (`personnel_movement_id`) ou solicitação de CAPEX (`capex_project_id`). As FKs ficam nulas se o item for
+    excluído (reimportação) e `item_snapshot` guarda o lançamento como estava na hora da pergunta. Sem `item_type` =
+    pergunta antiga sobre um recorte (pacote/conta/CC), que continua listada e respondida."""
 
     __tablename__ = "budget_questions"
     __table_args__ = (Index("ix_budget_questions_version_status", "version_id", "status"),)
@@ -121,6 +126,15 @@ class BudgetQuestion(Base):
     cost_center_id: Mapped[int | None] = mapped_column(ForeignKey("cost_centers.id"), index=True)
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"))
     account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"))
+    item_type: Mapped[str | None] = mapped_column(String(30))  # OPEX_LINE | PERSONNEL_MOVEMENT | CAPEX_PROJECT
+    budget_line_id: Mapped[int | None] = mapped_column(ForeignKey("budget_lines.id", ondelete="SET NULL"), index=True)
+    personnel_movement_id: Mapped[int | None] = mapped_column(
+        ForeignKey("personnel_movements.id", ondelete="SET NULL"), index=True
+    )
+    capex_project_id: Mapped[int | None] = mapped_column(
+        ForeignKey("capex_projects.id", ondelete="SET NULL"), index=True
+    )
+    item_snapshot: Mapped[dict | None] = mapped_column(JSONB)
     subject: Mapped[str] = mapped_column(String(300))
     scope: Mapped[dict | None] = mapped_column(JSONB)
     question: Mapped[str] = mapped_column(Text)

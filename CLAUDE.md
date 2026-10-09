@@ -50,8 +50,11 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   nas linhas sem justificativa própria.
 - Defesa do orçamento (08/10/2026): botão "por quê?" em cada linha da tabela do Painel (`components/WhyPanel.tsx`: resumo no
   hover, painel lateral no clique) sobre `GET /dashboard/why` (`api/v1/defense.py`: orçamento do ciclo × realizado do ano anterior
-  anualizado, decomposição por conta/CC, justificativas, alertas). "Questionar o gestor" grava `BudgetQuestion` (migração 0007;
-  `/questions`, responde o gestor de algum CC do recorte ou a Controladoria; auditoria) — página `pages/Questions.tsx` (`/perguntas`).
+  anualizado, decomposição por conta/CC, justificativas, alertas). Pergunta-se sobre o **lançamento** (09/10/2026): o painel lista as
+  linhas OPEX do recorte (`GET /dashboard/why/lines`, maiores primeiro, busca) e as movimentações/CAPEX, cada uma com "Questionar";
+  também na grade de linhas do orçamento do CC (`permissions.ask`). `BudgetQuestion` (migrações 0007 e 0012: `item_type` + FK do
+  item com SET NULL + `item_snapshot`) vai ao gestor do CC do lançamento (e do CC atual, se foi movido) ou à Controladoria; perguntas
+  antigas por recorte continuam valendo; auditoria — página `pages/Questions.tsx` (`/perguntas`, valor na pergunta × atual).
 - Contratos PJ (08/10/2026, confidencial; `docs/06-contratos-pj.md`): página `pages/ContratosPj.tsx` (`/pj`) sobre
   `domain/rules/pj.py` (CNPJ inclusive alfanumérico, bonificação proporcional) + `services/pj.py` + `api/v1/pj.py`
   (migração 0009; 0011: nada obrigatório — vazios viram pendência `missing`, "Falta preencher"). Acesso por flags do

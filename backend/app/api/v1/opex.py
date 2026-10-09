@@ -75,6 +75,10 @@ class Access:
         self.edit = (self.global_ or self.owner) and sub.status in EDITABLE and cycle_ok and not ctx.frozen
         self.cycle_blocked = not cycle_ok
         self.roles = set(user.role_codes)
+        # questionar o gestor sobre um lançamento (09/10/2026): quem revisa — Controladoria ou quem tem o CC no
+        # escopo sem ser o gestor dele (a pergunta exige o CC visível, ver services.questions.ask_item)
+        reviewer_scope = visible is not None and self.cc.id in visible and self.cc.manager_user_id != user.id
+        self.ask = self.global_ or reviewer_scope
 
 
 def _load(db: Session, user: User, submission_id: int) -> tuple[svc.Context, BudgetSubmission, Access]:
@@ -133,6 +137,7 @@ def _header(db: Session, ctx: svc.Context, sub: BudgetSubmission, access: Access
             "review_packages": sorted(access.reviewable),
             "cycle_blocked": access.cycle_blocked,
             "frozen": access.frozen,
+            "ask": access.ask,
         },
         "actions": [] if access.frozen else available_actions(sub.status, roles=access.roles, is_owner=access.owner),
         "package_reviews": [

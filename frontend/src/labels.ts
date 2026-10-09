@@ -157,14 +157,15 @@ export const RECORD_TYPES: Record<string, string> = {
   MACRO: "Premissas",
 };
 
-/** Valor compacto para eixos e rótulos: R$ 1,2 mi · R$ 350 mil. */
+/** Valor compacto para eixos e rótulos, sempre com duas casas decimais: R$ 1,25 mi · R$ 350,00 mil. */
 export const fmtCompact = (v: string | number) => {
   const n = Number(v);
   const abs = Math.abs(n);
-  if (abs >= 1e9) return `R$ ${(n / 1e9).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} bi`;
-  if (abs >= 1e6) return `R$ ${(n / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi`;
-  if (abs >= 1e3) return `R$ ${(n / 1e3).toLocaleString("pt-BR", { maximumFractionDigits: 0 })} mil`;
-  return `R$ ${n.toLocaleString("pt-BR", { maximumFractionDigits: 0 })}`;
+  const two = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
+  if (abs >= 1e9) return `R$ ${(n / 1e9).toLocaleString("pt-BR", two)} bi`;
+  if (abs >= 1e6) return `R$ ${(n / 1e6).toLocaleString("pt-BR", two)} mi`;
+  if (abs >= 1e3) return `R$ ${(n / 1e3).toLocaleString("pt-BR", two)} mil`;
+  return `R$ ${n.toLocaleString("pt-BR", two)}`;
 };
 
 /** Participação (AV %), sem sinal: 0,523 → 52,3%. */

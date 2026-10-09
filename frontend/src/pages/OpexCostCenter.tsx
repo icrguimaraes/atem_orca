@@ -289,6 +289,9 @@ export default function OpexCostCenter() {
                 onChanged={() => refresh()}
                 costCenterId={head.cost_center.id}
                 canMove={editable && head.permissions.global}
+                canAsk={Boolean(head.permissions.ask)}
+                costCenterLabel={`${head.cost_center.code} · ${head.cost_center.name}`}
+                highlightLineId={params.get("linha") ? Number(params.get("linha")) : null}
               />
             </Card>
           </div>
