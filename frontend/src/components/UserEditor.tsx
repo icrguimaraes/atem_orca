@@ -175,6 +175,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
         if ([...form.roles].sort().join() !== [...user!.roles].sort().join())
           await api(`/users/${user!.id}/roles`, { method: "PUT", body: JSON.stringify(form.roles) });
         await api(`/users/${user!.id}/cost-centers`, { method: "PUT", body: JSON.stringify({ cost_center_ids, manager_of, department_ids }) });
+        window.dispatchEvent(new Event("atem:refresh-me")); // se for o próprio usuário, menu e acessos já mudam
         onSaved(`Usuário ${form.name.trim()} atualizado${form.password ? " (senha redefinida: envie por um canal seguro)" : ""}.`);
       }
       onClose();

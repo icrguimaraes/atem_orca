@@ -24,6 +24,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // permissões mudam sem novo login (ex.: "Vê contratos PJ" liberado em Usuários): relê o usuário ao voltar à aba
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== "visible" || !getToken()) return;
+      api<User>("/auth/me").then(setUser).catch(() => undefined);
+    };
+    document.addEventListener("visibilitychange", refresh);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("atem:refresh-me", refresh); // disparado ao salvar um usuário (pode ser o próprio)
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("atem:refresh-me", refresh);
+    };
+  }, []);
+
   const login = useCallback(async (email: string, password: string) => {
     const { access_token } = await api<{ access_token: string }>("/auth/login", {
       method: "POST",
