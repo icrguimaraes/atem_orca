@@ -124,8 +124,8 @@ export default function Layout() {
         <div className="brand">
           <BrandMark size={44} />
           <div>
-            <strong>Orçamento 2027</strong>
-            <span>Controladoria · Grupo Atem</span>
+            <strong>Orçamento</strong>
+            <span>Controladoria e Tributos · Grupo Atem</span>
           </div>
         </div>
         <nav id="main-nav" aria-label="Navegação principal">
