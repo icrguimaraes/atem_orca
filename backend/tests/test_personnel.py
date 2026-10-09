@@ -838,3 +838,21 @@ def test_premises_what_if_validation(client, admin, run_worker):
         {"cc_bonus_pct": 2.5},
     ):
         assert client.post(WHAT_IF, headers=admin, json=body).status_code == 422, body
+
+
+def test_employee_without_registration_enters_with_provisional_key(client, admin, run_worker):
+    """Colaborador sem matrícula (não é vaga): entra com matrícula provisória estável e aviso — antes a linha era
+    descartada e o custo sumia do CC (caso da Especialista do Planejamento Tributário, 09/10/2026)."""
+    ccs, _mgr, _final = _setup(client, admin, run_worker)
+    rows = [*QUADRO, (None, "DORA SEM MATRICULA", "ESPECIALISTA", "1001", "0001", CC1, 11400, "MANTER")]
+    rows[-1] = rows[-1] + (None, None, None, "CLT", "NÃO", "NÃO")
+    final = import_and_load(client, admin, run_worker, builders.quadro_funcionarios(rows), "quadro2.xlsx", force=True)
+    assert final["status"] == "COMPLETED", final
+    head = client.get(f"/api/v1/personnel/cost-centers/{ccs[CC1]['id']}", headers=admin).json()
+    view = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).json()
+    dora = next(p for p in view["positions"] if p["name"] == "DORA SEM MATRICULA")
+    assert dora["registration"].startswith("PROV-") and Decimal(dora["annual"]) > 0
+    # reimportar o mesmo arquivo não duplica (a matrícula provisória é estável)
+    import_and_load(client, admin, run_worker, builders.quadro_funcionarios(rows), "quadro3.xlsx", force=True)
+    view = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin).json()
+    assert sum(1 for p in view["positions"] if p["name"] == "DORA SEM MATRICULA") == 1

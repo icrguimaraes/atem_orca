@@ -52,7 +52,9 @@ def test_dashboard_matches_process_numbers_and_filters(client, admin, run_worker
     # ranking: conta de salários no topo, rótulo pt-BR
     # (mesmo visual dos maiores CCs do Painel: maior primeiro, cartões de total em meta.totals e coluna Total)
     rank = d["figures"]["ranking"]["data"][0]
-    assert rank["y"][0] == "Salários e ordenados" and rank["text"][0].startswith("<b>R$ 267,75 mil</b>"), rank["text"][0]
+    assert rank["y"][0] == "Salários e ordenados" and rank["text"][0].startswith("<b>R$ 267,75 mil</b>"), rank["text"][
+        0
+    ]
     totals = d["figures"]["ranking"]["meta"]["totals"]
     assert Decimal(totals["main"]) > 0 and d["figures"]["ranking"]["meta"]["total_figure"]
     # status: 1 CC preenchido de 2 ativos no escopo

@@ -1,5 +1,6 @@
 """Quadro de funcionários (template Pessoal) e premissas macroeconômicas."""
 
+import hashlib
 import re
 
 from app.domain.rules.common import month_from_label
@@ -187,6 +188,18 @@ def parse_employees(sheets: list[Sheet], options: dict) -> ParseResult:
                 if is_vacancy:
                     rec.record_type = "VACANCY"
                     rec.warn("VACANCY", "Vaga sem matrícula: será tratada como admissão planejada (módulo Pessoal)")
+                elif name:
+                    # colaborador sem matrícula (09/10/2026, "o sistema aponta erros"): entra com matrícula provisória
+                    # estável (derivada do nome) e aviso — antes a linha era descartada e sumia do custo do CC
+                    digest = hashlib.sha1(norm(name).encode()).hexdigest()[:8].upper()
+                    registration = f"PROV-{digest}"
+                    rec.data["registration"] = registration
+                    rec.warn(
+                        "NO_REGISTRATION",
+                        f"Colaborador sem matrícula: entra com a matrícula provisória {registration} (trocar pela "
+                        "matrícula real em Cadastros quando houver)",
+                        "Matrícula",
+                    )
                 else:
                     rec.error("REQUIRED", "Matrícula obrigatória", "Matrícula")
             rec.natural_key = f"{rec.data['company']}|{registration}" if registration else None
