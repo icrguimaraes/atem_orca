@@ -1099,3 +1099,6 @@ tr.saving { opacity: 0.6; }
 @media (max-width: 860px) {
   .criteria-row, .criteria-edit { grid-template-columns: 1fr; }
 }
+/* cards com valor por extenso (R$ 21.459.252,47, pedido de 09/10/2026): mais largura e fonte que cabe */
+.stats { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.stat-value { font-size: clamp(19px, 1.5vw, 24px); overflow-wrap: anywhere; }

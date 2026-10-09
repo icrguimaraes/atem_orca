@@ -10,7 +10,7 @@ import { FilterBar } from "../components/FilterBar";
 import { DrillTable } from "../components/DrillTable";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
-import { MONTHS, fmtCompact, fmtMoney, fmtPct, fmtSignedMoney, byDepartment } from "../labels";
+import { MONTHS, fmtMoney, fmtPct, fmtSignedMoney, byDepartment } from "../labels";
 
 /**
  * Painel (rota /): filtros, números, blocos e tabela, com os gráficos em Plotly montados no backend
@@ -429,14 +429,13 @@ export default function Painel2() {
         <div className={`panel-body${overview.loading ? " is-loading" : ""}`} aria-busy={overview.loading}>
           <div className="stats">
             {period?.base_kind === "prev" && !period.annualized_base && o.kpis.prev_total !== o.kpis.prev_ytd && (
-              <Stat label={`Realizado ${o.previous_year} (ano cheio)`} value={fmtCompact(o.kpis.prev_total)} hint={fmtMoney(o.kpis.prev_total)} />
+              <Stat label={`Realizado ${o.previous_year} (ano cheio)`} value={fmtMoney(o.kpis.prev_total)} />
             )}
-            {hasBase && <Stat label={baseLabel} value={fmtCompact(o.kpis.prev_ytd)} hint={lines(fmtMoney(o.kpis.prev_ytd), "base de comparação")} />}
+            {hasBase && <Stat label={baseLabel} value={fmtMoney(o.kpis.prev_ytd)} hint={lines("base de comparação")} />}
             <Stat
               label={mainLabel}
-              value={fmtCompact(o.kpis.ref_ytd)}
+              value={fmtMoney(o.kpis.ref_ytd)}
               hint={lines(
-                fmtMoney(o.kpis.ref_ytd),
                 isBudgetMain && Number(o.kpis.budget_unscheduled) > 0 && `inclui ${fmtMoney(o.kpis.budget_unscheduled)} de CAPEX sem cronograma mensal`,
               )}
             />
@@ -453,16 +452,15 @@ export default function Painel2() {
             {o.has_actual && o.selected_years.length === 1 && o.last_closed_period && !months.length && (
               <Stat
                 label="Média mensal"
-                value={fmtCompact(Number(o.kpis.actual_total) / o.last_closed_period)}
-                hint={lines(fmtMoney(Number(o.kpis.actual_total) / o.last_closed_period), `${o.last_closed_period} mês(es) com realizado`)}
+                value={fmtMoney(Number(o.kpis.actual_total) / o.last_closed_period)}
+                hint={lines(`${o.last_closed_period} mês(es) com realizado`)}
               />
             )}
             {Number(o.kpis.ref_annualized) > 0 && (
               <Stat
                 label={`${o.reference_year} anualizado`}
-                value={fmtCompact(o.kpis.ref_annualized)}
+                value={fmtMoney(o.kpis.ref_annualized)}
                 hint={lines(
-                  fmtMoney(o.kpis.ref_annualized),
                   o.has_prev && o.kpis.annualized_vs_prev_pct !== null
                     ? `${fmtPct(o.kpis.annualized_vs_prev_pct)} (${fmtSignedMoney(Number(o.kpis.ref_annualized) - Number(o.kpis.prev_total))}) vs ${o.previous_year} cheio`
                     : "projeção linear",
@@ -472,9 +470,8 @@ export default function Painel2() {
             {o.has_budget && !isBudgetMain && (period?.base_kind !== "budget" || o.kpis.budget_total !== o.kpis.prev_ytd) && (
               <Stat
                 label={budgetLabel}
-                value={fmtCompact(o.kpis.budget_total)}
+                value={fmtMoney(o.kpis.budget_total)}
                 hint={lines(
-                  fmtMoney(o.kpis.budget_total),
                   o.kpis.budget_consumption_pct !== null && `realizado ${fmtPct(o.kpis.budget_consumption_pct)} do orçado no período`,
                   Number(o.kpis.budget_unscheduled) > 0 && `inclui ${fmtMoney(o.kpis.budget_unscheduled)} de CAPEX sem cronograma mensal`,
                 )}
@@ -487,9 +484,8 @@ export default function Painel2() {
                 <Stat
                   key={m.module}
                   label={`${m.label} · ${mainLabel}`}
-                  value={fmtCompact(m.main)}
+                  value={fmtMoney(m.main)}
                   hint={lines(
-                    fmtMoney(m.main),
                     hasBase && m.var_pct !== null && Number(m.base) > 0 &&
                       `${fmtPct(m.var_pct)} (${fmtSignedMoney(Number(m.main) - Number(m.base))}) vs ${baseLabel}`,
                     Number(m.unscheduled) > 0 && `inclui ${fmtMoney(m.unscheduled)} sem cronograma mensal`,
@@ -537,10 +533,10 @@ export default function Painel2() {
               >
                 {o.top_cost_centers_total && (
                   <div className="stats rank-stats">
-                    <Stat label={`Total · ${mainLabel}`} value={fmtCompact(o.top_cost_centers_total.main)} hint={lines(fmtMoney(o.top_cost_centers_total.main), "todos os centros de custo")} />
+                    <Stat label={`Total · ${mainLabel}`} value={fmtMoney(o.top_cost_centers_total.main)} hint={lines("todos os centros de custo")} />
                     {o.top_cost_centers_total.base !== null && (
                       <>
-                        <Stat label={`Total · ${baseLabel}`} value={fmtCompact(o.top_cost_centers_total.base)} hint={fmtMoney(o.top_cost_centers_total.base)} />
+                        <Stat label={`Total · ${baseLabel}`} value={fmtMoney(o.top_cost_centers_total.base)} />
                         <div className="stat stat-inline-delta">
                           <span className="stat-label">Variação</span>
                           <span className="stat-value"><Delta pct={o.top_cost_centers_total.var_pct} /></span>

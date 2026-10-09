@@ -6,7 +6,7 @@ import { EvolutionCard } from "../components/EvolutionCard";
 import { FilterBar } from "../components/FilterBar";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
-import { fmtCompact, fmtInt, fmtMoney, fmtPct, fmtSignedMoney, byDepartment } from "../labels";
+import { fmtInt, fmtMoney, fmtPct, fmtSignedMoney, byDepartment } from "../labels";
 
 interface Kpi { label: string; value: string | null; compact: string; pct?: string | null; pct_label?: string; share?: string; hint?: string }
 interface Dashboard {
@@ -374,10 +374,10 @@ function RankingWithTotals({ figure }: { figure: Figure }) {
     <>
       {t && (
         <div className="stats rank-stats">
-          <Stat label={`Total · ${t.main_label}`} value={fmtCompact(t.main)} hint={lines(fmtMoney(t.main), "todas as contas")} />
+          <Stat label={`Total · ${t.main_label}`} value={fmtMoney(t.main)} hint={lines("todas as contas")} />
           {t.base !== null && (
             <>
-              <Stat label={`Total · ${t.base_label}`} value={fmtCompact(t.base)} hint={fmtMoney(t.base)} />
+              <Stat label={`Total · ${t.base_label}`} value={fmtMoney(t.base)} />
               <div className="stat stat-inline-delta">
                 <span className="stat-label">Variação</span>
                 <span className="stat-value">
