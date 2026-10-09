@@ -14,7 +14,6 @@ import {
   ROW_STATUS,
   fmtDateTime,
   fmtInt,
-  fmtCompact,
   fmtMoney,
 } from "../labels";
 
@@ -55,6 +54,8 @@ const LOAD_LABELS: Record<string, string> = {
   packages_created: "Pacotes criados",
   account_details_created: "Detalhamentos criados",
   entries: "Lançamentos gravados",
+  entries_kept_from_previous: "Lançamentos mantidos da versão anterior",
+  carried: "Lançamentos mantidos de outras naturezas",
   employees_created: "Colaboradores criados",
   employees_updated: "Colaboradores atualizados",
   employees_deactivated: "Colaboradores inativados",
@@ -199,7 +200,8 @@ export default function ImportDetail() {
         <Stat label="Com avisos" value={fmtInt(batch.warning_rows)} tone="warn" hint="entram na carga" />
         <Stat label="Inconsistentes" value={fmtInt(batch.error_rows)} tone="bad" hint="não entram na carga" />
         <Stat label="Duplicados" value={fmtInt(batch.duplicate_rows)} tone="bad" hint="não entram na carga" />
-        {summary.total_amount !== undefined && <Stat label="Valor válido" value={fmtCompact(summary.total_amount)} hint={fmtMoney(summary.total_amount)} />}
+        {/* importação: valor sempre por extenso, para conferir com a planilha (pedido de 09/10/2026) */}
+        {summary.total_amount !== undefined && <Stat label="Valor válido" value={fmtMoney(summary.total_amount)} />}
       </div>
 
       {(meta.year !== undefined || summary.cost_centers !== undefined || summary.actions) && (
