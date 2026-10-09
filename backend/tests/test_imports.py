@@ -586,7 +586,14 @@ def test_projection_fills_only_months_without_ksb1(client, admin, run_worker):
         assert again_figs.status_code == 200, (extra, again_figs.text[:200])
     names = [t["name"] for t in figs.json()["figures"]["monthly"]["data"]]
     assert any("Projeção" in n for n in names), names
-    # a projeção vem logo depois do realizado, na mesma coluna (antes da barra do orçamento)
+    # a projeção vem logo depois do realizado, na mesma coluna (antes da barra do orçamento); as outras séries
+    # têm coluna própria (sem offsetgroup, o Plotly sobrepunha o orçamento ao realizado)
+    groups = {t["name"]: t.get("offsetgroup") for t in figs.json()["figures"]["monthly"]["data"]}
+    proj_name = next(n for n in names if "Projeção" in n)
+    real_name = next(n for n in names if "Realizado" in n)
+    assert groups[proj_name] == groups[real_name] and all(groups.values())
+    others = [g for n, g in groups.items() if n != proj_name]
+    assert len(others) == len(set(others)), groups
     assert (
         names.index(next(n for n in names if "Projeção" in n))
         == names.index(next(n for n in names if "Realizado" in n)) + 1

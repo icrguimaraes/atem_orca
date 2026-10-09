@@ -135,10 +135,11 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
                         [f"Realizado vs orçado: {fmt_pct((v - budget) / budget)} ({_signed_money(v - budget)})", ""]
                     )
             tips.append(lines)
-        # projeção empilhada sobre o realizado, na mesma coluna (offsetgroup do realizado)
-        stack = {"offsetgroup": "ref", "base": values_by["ref"]} if key == "proj" else {}
-        if key in ("ref", "proj") and "proj" in values_by:
-            stack.setdefault("offsetgroup", "ref")
+        # cada série na sua coluna (offsetgroup); a projeção fica empilhada sobre o realizado, na coluna dele —
+        # sem offsetgroup em todas, o Plotly sobrepõe as séries na mesma coluna
+        stack = {"offsetgroup": "ref" if key == "proj" else key}
+        if key == "proj":
+            stack["base"] = values_by["ref"]
         data.append(
             go.Bar(
                 x=list(MONTHS),
