@@ -610,7 +610,8 @@ def test_projection_fills_only_months_without_ksb1(client, admin, run_worker):
 
     lb = {"main": "Orçamento 2027", "base": "Realizado 2026", "main_color": "#000", "base_color": "#111"}
     rank = painel_figures.fig_rank([{"id": 1, "name": "CC", "value": "10", "base": "8", "var_pct": "0.25"}], lb, True)
-    assert rank["data"][1]["text"] == ["R$ 8"], rank["data"][1]["text"]
+    assert rank["data"][1]["text"] == ["<b>R$ 8</b>"], rank["data"][1]["text"]
+    assert painel_figures.fig_rank_total({"main": "10", "base": "8", "var_pct": "0.25"}, lb) is not None
     # projeção até nov (11 meses): a base sai anualizada por 12/11
     assert round(float(both.json()["kpis"]["prev_ytd"]), 2) == round(float(after["kpis"]["ref_ytd"]) * 12 / 11, 2)
     # projeção substitui a anterior inteira (não soma)
