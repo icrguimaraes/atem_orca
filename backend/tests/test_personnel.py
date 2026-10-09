@@ -331,6 +331,11 @@ def test_inactive_contract_type_still_computes(client, admin, run_worker):
     view = client.get(f"/api/v1/personnel/submissions/{head['submission_id']}/view", headers=admin)
     assert view.status_code == 200 and _by_name(view.json())["CARLA"]["annual"] == "15750.00"
     assert client.get("/api/v1/consolidation/overview", headers=admin).status_code == 200
+    # "Orçamento em construção" do Painel soma todos os tipos: o pessoal proposto entra (antes só OPEX)
+    progress = client.get("/api/v1/dashboard/overview", headers=admin).json()["budget_progress"]
+    assert progress["all_modules"] and Decimal(progress["proposed_total"]) > 0, progress
+    people_only = client.get("/api/v1/dashboard/overview?modules=PERSONNEL", headers=admin).json()["budget_progress"]
+    assert people_only["proposed_total"] == progress["proposed_total"]  # neste cenário só há pessoal
     opts = client.get("/api/v1/personnel/options", headers=admin).json()
     assert "PJ" not in {c["code"] for c in opts["contract_types"]}  # inativo não entra em novas vagas
     # transferência para CC que o gestor não gerencia é recusada

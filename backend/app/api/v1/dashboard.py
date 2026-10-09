@@ -617,6 +617,20 @@ def overview(
         "heatmap": _heatmap(db, f, main_model, P.main_years),
         "budget_progress": budget_progress(db, user, company_id, cost_center_id, package_id),
     }
+    if data["budget_progress"]:
+        # proposto × base por pacote com todos os tipos (OPEX, Pessoal, CAPEX) e os filtros do Painel (09/10/2026:
+        # "em Todos não aparecem as contas de pessoal"); o andamento por status continua o do fluxo OPEX
+        f_all = Facts(
+            db,
+            user,
+            company_id,
+            cost_center_id,
+            package_id,
+            replace(P, months=None),
+            account_id=account_id,
+            department_id=department_id,
+        )
+        data["budget_progress"] |= _progress_by_package(db, f_all, data["budget_progress"]["ref_year"])
     if figures:
         # Painel 2, como o Power BI: o visual em que se clicou não é filtrado pela própria seleção — mostra todos
         # os itens, com o escolhido em destaque (e clicável de novo para desmarcar); os outros visuais filtram.
@@ -1328,6 +1342,48 @@ def budget_progress(
         if closed_by_company and all(c == 12 for c in closed_by_company.values())
         else f"{ref} anualizado",
         "by_package": by_package,
+    }
+
+
+def _progress_by_package(db: Session, f: Facts, ref: int) -> dict:
+    """Orçamento do ciclo em construção, todos os tipos: proposto (consolidação) × realizado do ano de referência por
+    pacote, só dos CCs que já têm valor proposto. Realizado anualizado se o ano ainda não fechou (sem projeção)."""
+    target = f.target_year
+    if target is None:
+        return {}
+    proposed_rows = f.sums(ReferenceBudgetEntry, [target], "package_id", "cost_center_id")
+    started = {cc for _pkg, cc, amount in proposed_rows if cc is not None and amount}
+    proposed: dict[int | None, Decimal] = defaultdict(lambda: ZERO)
+    for pkg, cc, amount in proposed_rows:
+        if cc in started:
+            proposed[pkg] += amount
+    closed = _last_closed(db, ref)
+    scale = Decimal(12) / Decimal(closed) if closed and closed < 12 else Decimal(1)
+    base: dict[int | None, Decimal] = defaultdict(lambda: ZERO)
+    for pkg, cc, amount in f.sums(ActualEntry, [ref], "package_id", "cost_center_id"):
+        if cc in started:
+            base[pkg] += amount * scale
+    packages = {pk.id: pk for pk in db.scalars(select(BudgetPackage))}
+    by_package = sorted(
+        (
+            {
+                "package_id": pid,
+                "package": packages[pid].name if pid in packages else "Sem pacote",
+                "proposed": _money(proposed.get(pid)),
+                "ref_annualized": _money(base.get(pid)),
+            }
+            for pid in set(proposed) | set(base)
+            if proposed.get(pid) or base.get(pid)
+        ),
+        key=lambda r: -max(Decimal(r["proposed"]), Decimal(r["ref_annualized"])),
+    )
+    return {
+        "started_cost_centers": len(started),
+        "proposed_total": _money(sum(proposed.values(), ZERO)),
+        "annualized_started_total": _money(sum(base.values(), ZERO)),
+        "ref_label": f"Realizado {ref}" if scale == 1 else f"{ref} anualizado",
+        "by_package": by_package,
+        "all_modules": True,
     }
 
 
