@@ -3,6 +3,7 @@ from collections.abc import Callable
 from app.imports.base import ParseResult, Sheet, StructureError, norm
 from app.imports.parsers.capex_template import is_capex_template, parse_capex_template
 from app.imports.parsers.financial import (
+    parse_actual_long,
     parse_budget_long,
     parse_capex_acum,
     parse_ksb1,
@@ -21,6 +22,7 @@ PARSERS: dict[str, list[Parser]] = {
     "ACTUAL": [
         parse_ksb1,
         lambda s, o: parse_capex_acum(s, o, "ACTUAL"),
+        parse_actual_long,
         lambda s, o: parse_wide(s, o, "ACTUAL"),
     ],
     "REFERENCE_BUDGET": [lambda s, o: parse_wide(s, o, "REFERENCE_BUDGET"), parse_budget_long],

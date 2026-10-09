@@ -801,3 +801,41 @@ def test_reference_budget_in_rows_reads_only_the_budget_tab():
     assert total == Decimal("602.84")  # bate com a linha de total da planilha (o realizado não entra)
     other = detect_and_parse(sheets, "REFERENCE_BUDGET", {"reference_year": 2025})
     assert other.records == [] and other.structural[0].code == "OTHER_YEAR_IGNORED"
+
+
+def test_actual_long_replaces_opex_and_personnel_keeps_capex(client, admin, run_worker):
+    """Realizado em linhas (aba 'Realizado 2026' da base de controle, 'Total 3ª Projeção'): os meses até o corte do
+    realizado entram como realizado e substituem OPEX/Pessoal (o KSB1); o CAPEX já carregado continua; meses depois do
+    corte ficam para a projeção; CC escrito com prefixo é lido pelo código, com aviso."""
+    import io
+
+    from openpyxl import load_workbook
+
+    _seed_cc(client, admin, run_worker)
+    ksb1 = [
+        ("1001", "1050101011", "6010301001", "Hospedagem", "2026", str(m), f"2026-0{m}-15", "1", str(v), "BRL", "t")
+        + (None, None)
+        for m, v in ((3, 100), (9, 200))
+    ]
+    import_and_load(client, admin, run_worker, builders.ksb1_csv(ksb1), "ksb1.csv", dataset_type="ACTUAL")
+    capex = [(2026, 4, "1050101011", "1020601005", 50, 50), (2026, 9, "1050101011", "1020601005", 5, 77)]
+    import_and_load(client, admin, run_worker, builders.capex_acum(capex), "Capex Acum.xlsx", dataset_type="ACTUAL")
+
+    def total():
+        url = "/api/v1/dashboard/overview?years=2026&compare=false"
+        return float(client.get(url, headers=admin).json()["kpis"]["ref_ytd"])
+
+    assert total() == 355  # 300 do KSB1 + 55 de CAPEX
+    rows = [
+        ("1050101011", 3, "6010301001", "Hospedagem", 130),
+        ("1050101011", 9, "6010301001", "Hospedagem", 170),
+        ("03-1050101011", 5, "6010301001", "Hospedagem", 10),
+        ("1050101011", 11, "6010301001", "Hospedagem", 999),  # mês projetado: não entra como realizado
+    ]
+    wb = load_workbook(io.BytesIO(builders.projecao_base(rows)))
+    wb.active.title = "Realizado 2026"
+    buf = io.BytesIO()
+    wb.save(buf)
+    final = import_and_load(client, admin, run_worker, buf.getvalue(), "Base controle.xlsx", dataset_type="ACTUAL")
+    assert final["status"] == "COMPLETED", final
+    assert total() == 365  # 130 + 170 + 10 do arquivo + 55 de CAPEX mantido

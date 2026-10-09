@@ -195,9 +195,23 @@ PROJECTION_CC_BY_NAME = {"CSC": "1050101012"}
 def parse_projection(sheets: list[Sheet], options: dict) -> ParseResult:
     """Projeção do gestor (planilha 'Base'): CC × conta × mês, usando a 3ª projeção (é a 'Projeção Atual' do
     resumo). Cada linha vira um lançamento mensal; a carga só mantém os meses sem realizado (KSB1)."""
-    result = ParseResult("PROJECTION", "PROJECTION_BASE")
+    return _parse_third_projection(sheets, options, "PROJECTION")
+
+
+def parse_actual_long(sheets: list[Sheet], options: dict) -> ParseResult:
+    """Realizado do ano em linhas (aba 'Realizado AAAA' da Base de controle da Controladoria, coluna 'Total 3ª
+    Projeção'): os meses fechados (até o corte do realizado; sem KSB1 da empresa, o corte das demais) entram como
+    realizado; os seguintes ficam para a projeção. A carga substitui só as naturezas do arquivo (OPEX/Pessoal) — o
+    CAPEX já carregado continua (layout ACTUAL_LONG)."""
+    return _parse_third_projection(sheets, options, "ACTUAL")
+
+
+def _parse_third_projection(sheets: list[Sheet], options: dict, dataset_type: str) -> ParseResult:
+    result = ParseResult(dataset_type, "PROJECTION_BASE" if dataset_type == "PROJECTION" else "ACTUAL_LONG")
     for sheet in sheets:
-        if not norm(sheet.name).startswith("base"):
+        name = norm(sheet.name)
+        wanted = ("base", "realizado") if dataset_type == "PROJECTION" else ("realizado",)
+        if not name.startswith(wanted):
             continue
         table = find_table(sheet, PROJECTION_ALIASES, ("cost_center", "account", "amount", "month"))
         if table is None:
@@ -233,21 +247,30 @@ def parse_projection(sheets: list[Sheet], options: dict) -> ParseResult:
             cut = closed.get(f"{year}:{company}") or max(
                 (int(v or 0) for k, v in closed.items() if k.startswith(f"{year}:")), default=0
             )
-            if month <= int(cut):
-                ignored += 1  # mês com realizado (KSB1): a projeção não entra
+            if (month <= int(cut)) if dataset_type == "PROJECTION" else (not cut or month > int(cut)):
+                ignored += 1  # projeção: mês com realizado; realizado: mês ainda projetado
                 continue
             cc = clean_code(table.value(row, "cost_center"))
+            raw_cc = cc
             cc_name = clean_str(table.value(row, "cost_center_name"))
             by_name: str | None = None
+            normalized: str | None = None
             if cc is None and cc_name and cc_name.strip().upper() in PROJECTION_CC_BY_NAME:
                 cc = PROJECTION_CC_BY_NAME[cc_name.strip().upper()]
                 by_name = cc_name.strip()
+            elif cc and not cc.isalnum() and (found := _CC_IN_TEXT.search(cc)):
+                cc = found.group(1)  # "03-1050101003", "1050101003(1)": código SAP dentro do texto
+                normalized = f"CC escrito como '{raw_cc}' na planilha: lido como {cc}. Confirmar com o gestor"
             account = clean_code(table.value(row, "account"))
             key = (company, cc, account, year, month)
             if key in merged:
                 prev = merged[key]
                 prev.data["values"][month] = str(Decimal(prev.data["values"][month]) + amount)
+                if normalized:
+                    prev.warn("CC_NORMALIZED", normalized, "Cód CC", raw_cc)
                 continue
+            if normalized:
+                rec.warn("CC_NORMALIZED", normalized, "Cód CC", raw_cc)
             rec.data.update(
                 {
                     "company": company,

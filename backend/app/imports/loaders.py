@@ -313,7 +313,9 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
     scenario = (batch.options or {}).get("scenario", "ORC")
     source = "SAP_KSB1" if batch.layout == "SAP_KSB1" else "EXCEL"
     mode = (batch.options or {}).get("mode", "MERGE")
-    if dataset == "PROJECTION":
+    # realizado em linhas da base de controle: substitui as naturezas do arquivo (OPEX/Pessoal), mantém o resto
+    natures_only = dataset == "PROJECTION" or (dataset == "ACTUAL" and batch.layout == "ACTUAL_LONG")
+    if natures_only:
         mode = "REPLACE"  # a projeção substitui a anterior inteira; o realizado (KSB1) nunca é tocado
     model = ActualEntry if dataset in ("ACTUAL", "PROJECTION") else ReferenceBudgetEntry
     # uma versão por empresa × ano: cargas parciais de outra empresa não substituem esta
@@ -396,7 +398,7 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
                     payload.append(entry)
                     max_period = max(max_period, int(month))
         carried = 0
-        if dataset == "PROJECTION" and previous is not None:
+        if natures_only and previous is not None:
             # a projeção só substitui as naturezas de conta que o arquivo cobre: a do CAPEX não apaga a do OPEX
             file_natures = set(
                 db.scalars(
@@ -407,7 +409,11 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
             old = db.execute(
                 select(*[getattr(model, c.name) for c in columns])
                 .join(Account, Account.id == model.account_id)
-                .where(model.dataset_version_id == previous.id, Account.nature.not_in(file_natures or {"-"}))
+                .where(
+                    model.dataset_version_id == previous.id,
+                    # realizado em linhas (OPEX/Pessoal da base de controle): só o CAPEX já carregado continua
+                    Account.nature == "CAPEX" if dataset == "ACTUAL" else Account.nature.not_in(file_natures or {"-"}),
+                )
             ).mappings()
             for row in old:
                 payload.append(dict(row) | {"dataset_version_id": version.id})
