@@ -252,6 +252,7 @@ export interface BudgetProgress {
   target_year: number; ref_year: number; cycle_status: string; deadline: string | null; total_cost_centers: number;
   started_cost_centers: number; status_counts: Record<string, number>; proposed_total: string;
   annualized_started_total: string;
+  ref_label?: string;  // "Realizado 2026" (ano completo com a projeção) ou "2026 anualizado"
   by_package: { package_id: number | null; package: string; proposed: string; ref_annualized: string }[];
 }
 export interface QualityCheck {

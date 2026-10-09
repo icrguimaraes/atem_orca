@@ -781,4 +781,37 @@ def build(
     evolution_fig = fig_evolution(evolution or [])
     if evolution_fig:
         figures["evolution"] = evolution_fig
+    progress = o.get("budget_progress")
+    if progress and progress.get("by_package"):
+        # "Orçamento 2027 em construção": mesmo visual dos maiores CCs (barras iguais, rótulo nas duas, total)
+        lbp = {
+            "main": f"{progress['target_year']} proposto",
+            "base": progress.get("ref_label") or f"{progress['ref_year']} anualizado",
+            "main_color": ORCADO,
+            "base_color": REALIZADO,
+        }
+        rows = []
+        for p in progress["by_package"]:
+            value, base = _num(p["proposed"]), _num(p["ref_annualized"])
+            var = str((value - base) / base) if base else None
+            rows.append(
+                {
+                    "id": p["package_id"],
+                    "code": None,
+                    "name": p["package"],
+                    "value": p["proposed"],
+                    "base": p["ref_annualized"],
+                    "var_pct": var,
+                }
+            )
+        proposed, base_total = _num(progress["proposed_total"]), _num(progress["annualized_started_total"])
+        figures["budget_progress"] = fig_rank(rows, lbp, True, show_code=False)
+        figures["budget_progress_total"] = fig_rank_total(
+            {
+                "main": progress["proposed_total"],
+                "base": progress["annualized_started_total"],
+                "var_pct": str((proposed - base_total) / base_total) if base_total else None,
+            },
+            lbp,
+        )
     return figures

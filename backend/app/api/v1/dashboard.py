@@ -1275,8 +1275,8 @@ def budget_progress(
     # 2026 anualizado só dos CCs que já lançaram 2027 (comparação justa durante o preenchimento)
     ref = cycle.actual_reference_year
     annualized: dict[int | None, Decimal] = defaultdict(lambda: ZERO)
+    closed_by_company: dict[str | None, int | None] = {}
     if started:
-        closed_by_company = {}
         stmt = (
             select(Account.package_id, CostCenter.company_id, func.sum(ActualEntry.amount))
             .join(DatasetVersion, DatasetVersion.id == ActualEntry.dataset_version_id)
@@ -1323,6 +1323,10 @@ def budget_progress(
         "status_counts": dict(counts),
         "proposed_total": _money(sum(proposed.values(), ZERO)),
         "annualized_started_total": _money(sum(annualized.values(), ZERO)),
+        # com a projeção do gestor o ano está completo: "Realizado 2026" em vez de "2026 anualizado"
+        "ref_label": f"Realizado {ref}"
+        if closed_by_company and all(c == 12 for c in closed_by_company.values())
+        else f"{ref} anualizado",
         "by_package": by_package,
     }
 

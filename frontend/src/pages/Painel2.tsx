@@ -603,7 +603,7 @@ export default function Painel2() {
           </div>
         </div>
       )}
-      {o?.budget_progress && o.budget_progress.total_cost_centers > 0 && <BudgetProgressCard progress={o.budget_progress} />}
+      {o?.budget_progress && o.budget_progress.total_cost_centers > 0 && <BudgetProgressCard progress={o.budget_progress} figures={f ? { rank: f.budget_progress, total: f.budget_progress_total } : undefined} />}
       <PainelBase />
     </>
   );

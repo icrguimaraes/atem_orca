@@ -225,6 +225,10 @@ def test_chart_data(client, admin, run_worker):
     dti = next(p for p in progress["by_package"] if p["package"] == "DTI")
     assert dti == {"package_id": pkg["DTI"]["id"], "package": "DTI", "proposed": "7200.00", "ref_annualized": "6000.00"}
     assert client.get("/api/v1/opex/summary", headers=mgr).json()["progress"]["proposed_total"] == "7200.00"
+    # visual do andamento no Painel: barras por pacote + coluna Total (ano 2026 incompleto: "2026 anualizado")
+    figs = client.get("/api/v1/dashboard/overview?figures=true", headers=admin).json()
+    assert figs["budget_progress"]["ref_label"] == "2026 anualizado"
+    assert len(figs["figures"]["budget_progress"]["data"]) == 2 and figs["figures"]["budget_progress_total"]
     # Painel com o ano do ciclo: o orçamento proposto entra como orçado (verde), comparado com 2026 anualizado
     plan = client.get("/api/v1/dashboard/overview?years=2027", headers=admin).json()
     assert plan["period"]["main"] == "budget" and plan["kpis"]["budget_total"] == "7200.00"
