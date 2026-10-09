@@ -50,8 +50,11 @@ def test_dashboard_matches_process_numbers_and_filters(client, admin, run_worker
     assert monthly["Orçamento 2027"]["y"][3] >= 50000  # CAPEX em abril
     assert monthly["Orçado 2026"]["y"][0] == 650.0
     # ranking: conta de salários no topo, rótulo pt-BR
+    # (mesmo visual dos maiores CCs do Painel: maior primeiro, cartões de total em meta.totals e coluna Total)
     rank = d["figures"]["ranking"]["data"][0]
-    assert rank["y"][-1] == "Salários e ordenados" and rank["text"][-1] == "R$ 267,8 mil"
+    assert rank["y"][0] == "Salários e ordenados" and rank["text"][0].startswith("<b>R$ 267,8 mil</b>"), rank["text"][0]
+    totals = d["figures"]["ranking"]["meta"]["totals"]
+    assert Decimal(totals["main"]) > 0 and d["figures"]["ranking"]["meta"]["total_figure"]
     # status: 1 CC preenchido de 2 ativos no escopo
     assert d["status"]["total"] == 2 and d["status"]["filled"] == 1 and k["filled_pct"]["compact"] == "50,0%"
 

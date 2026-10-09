@@ -5,8 +5,8 @@ import { useAuth } from "../auth";
 import { EvolutionCard } from "../components/EvolutionCard";
 import { FilterBar } from "../components/FilterBar";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
-import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
-import { fmtInt } from "../labels";
+import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
+import { fmtCompact, fmtInt, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
 
 interface Kpi { label: string; value: string | null; compact: string; pct?: string | null; pct_label?: string; share?: string; hint?: string }
 interface Dashboard {
@@ -295,7 +295,6 @@ export default function Analytics() {
         ) : <Empty>Sem valores.</Empty>}
       </Card>
 
-      <div className="grid-2">
         <Card
           title={`Variação orçamentária · Orçamento ${y.target} × ${d.figures.variation.meta?.base_label ?? `Orçado ${y.ref}`}`}
           actions={
@@ -315,17 +314,18 @@ export default function Analytics() {
             <PlotlyChart figure={d.figures.variation} ariaLabel="Variação orçamentária" />
           ) : <Empty>Sem variações relevantes (abaixo do valor mínimo de alerta do ciclo).</Empty>}
         </Card>
-        <Card
-          title={`Maiores despesas · contas por orçamento ${y.target}`}
-          actions={
-            <div className="year-tabs" role="tablist" aria-label="Quantidade">
-              {[10, 20, 0].map((n) => <button key={n} className={top === n ? "active" : ""} onClick={() => setTop(n)}>{n ? `Top ${n}` : "Todas"}</button>)}
-            </div>
-          }
-        >
-          {(d.figures.ranking.data[0] as { x?: unknown[] } | undefined)?.x?.length ? <PlotlyChart figure={d.figures.ranking} ariaLabel="Ranking de contas" /> : <Empty>Sem orçamento lançado.</Empty>}
-        </Card>
-      </div>
+
+      {/* maiores contas em largura total: cartões de total e a coluna Total ao lado (09/10/2026) */}
+      <Card
+        title={`Maiores contas · ${k.target.label}`}
+        actions={
+          <div className="year-tabs" role="tablist" aria-label="Quantidade">
+            {[10, 20, 0].map((n) => <button key={n} className={top === n ? "active" : ""} onClick={() => setTop(n)}>{n ? `Top ${n}` : "Todas"}</button>)}
+          </div>
+        }
+      >
+        {(d.figures.ranking.data[0] as { x?: unknown[] } | undefined)?.x?.length ? <RankingWithTotals figure={d.figures.ranking} /> : <Empty>Sem orçamento lançado.</Empty>}
+      </Card>
 
       <div className="grid-2">
         <Card title={`Composição do orçamento ${y.target}`} actions={<span className="muted small">Total <strong>{d.figures.composition.meta?.total}</strong></span>}>
@@ -362,3 +362,44 @@ export default function Analytics() {
 }
 
 const MODULE_OF: Record<string, string> = { OPEX: "OPEX", FINANCEIRO: "OPEX", CAPEX: "CAPEX", PESSOAL: "PERSONNEL" };
+
+type RankTotals = { main: string; base: string | null; var_pct: string | null; main_label: string; base_label: string | null };
+
+/** Maiores contas no mesmo visual dos maiores CCs do Painel: cartões de total, barras e coluna Total. */
+function RankingWithTotals({ figure }: { figure: Figure }) {
+  const meta = (figure.meta ?? {}) as { totals?: RankTotals; total_figure?: Figure | null };
+  const t = meta.totals;
+  const pct = t?.var_pct ?? null;
+  return (
+    <>
+      {t && (
+        <div className="stats rank-stats">
+          <Stat label={`Total · ${t.main_label}`} value={fmtCompact(t.main)} hint={lines(fmtMoney(t.main), "todas as contas")} />
+          {t.base !== null && (
+            <>
+              <Stat label={`Total · ${t.base_label}`} value={fmtCompact(t.base)} hint={fmtMoney(t.base)} />
+              <div className="stat stat-inline-delta">
+                <span className="stat-label">Variação</span>
+                <span className="stat-value">
+                  <span className={`delta ${Number(pct) > 0 ? "up" : Number(pct) < 0 ? "down" : ""}`}>{Number(pct) > 0 ? "▲" : Number(pct) < 0 ? "▼" : "•"} {fmtPct(pct)}</span>
+                </span>
+                <span className="stat-hint">
+                  <span className="stat-line"><strong>{fmtSignedMoney(Number(t.main) - Number(t.base))}</strong></span>
+                  <span className="stat-line">vs {t.base_label}</span>
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      <div className="monthly-split">
+        <PlotlyChart figure={figure} ariaLabel="Maiores contas" />
+        {meta.total_figure && (
+          <div className="monthly-total">
+            <PlotlyChart figure={meta.total_figure} height={360} ariaLabel="Total de todas as contas" />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}

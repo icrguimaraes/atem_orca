@@ -731,44 +731,51 @@ def fig_variation(base: Base, by: str, mode: str, limit: int = 15) -> dict:
     return _fig(data, layout) | {"meta": {"base_label": base_label}}
 
 
+def ranking_base_key(base: Base) -> str | None:
+    """Base das maiores contas: realizado do ano anterior se comparado, senão o orçado de referência."""
+    return "prev" if base.labels.get("prev") else ("ref" if base.labels.get("ref") else None)
+
+
 def fig_ranking(base: Base, top: int) -> dict:
+    """Maiores contas no mesmo visual dos maiores CCs do Painel (09/10/2026): série principal e base do mesmo
+    tamanho, rótulo nas duas e variação; o total de todas as contas vai em meta.totals (cartões) e na coluna Total."""
+    from app.services import painel_figures as pf  # painel_figures importa daqui
+
+    key = ranking_base_key(base)
     rows = sorted(group(base, "account"), key=lambda r: -r["target"])
     rows = [r for r in rows if r["target"] > 0]
     if top:
         rows = rows[:top]
-    rows = rows[::-1]
-    total = base.total("target") or Decimal(1)
-    values = [float(r["target"]) for r in rows]
-    data = [
-        go.Bar(
-            x=values,
-            y=[short(r["label"]) for r in rows],
-            orientation="h",
-            marker_color=COLOR_TARGET,
-            text=[fmt_compact(v) for v in values],
-            textposition="outside",
-            cliponaxis=False,
-            customdata=[
-                [fmt_money(r["target"]), fmt_pct(r["target"] / total), r["sub"], fmt_money(r["ref"]), r["label"]]
-                for r in rows
-            ],
-            hovertemplate=(
-                "<b>%{customdata[4]}</b> · %{customdata[2]}<br>"
-                + base.labels["target"]
-                + ": %{customdata[0]} (%{customdata[1]} do total)<br>"
-                + (base.labels["ref"] or "Referência")
-                + ": %{customdata[3]}<extra></extra>"
-            ),
-        )
+    ranked = [
+        {
+            "id": r["id"],
+            "code": r.get("sub"),
+            "name": r["label"],
+            "value": str(r["target"]),
+            "base": str(r[key]) if key else None,
+            "var_pct": str((r["target"] - r[key]) / r[key]) if key and r[key] else None,
+        }
+        for r in rows
     ]
-    layout = _layout(
-        xaxis=_money_axis(values),
-        yaxis={"automargin": True, "tickfont": {"size": 11}},
-        height=max(260, 26 * len(rows) + 60),
-        showlegend=False,
-        margin={"l": 8, "r": 70, "t": 8, "b": 8},
-    )
-    return _fig(data, layout)
+    is_budget = base.labels["target"].startswith("Orçamento")
+    lb = {
+        "main": base.labels["target"],
+        "base": base.labels[key] if key else "",
+        "main_color": pf.ORCADO if is_budget else pf.REALIZADO,
+        "base_color": (pf.REALIZADO if key == "prev" else pf.ORCADO) if key else pf.ANTERIOR,
+    }
+    fig = pf.fig_rank(ranked, lb, bool(key), show_code=False)
+    main_total = base.total("target")
+    base_total = base.total(key) if key else None
+    totals = {
+        "main": str(main_total),
+        "base": str(base_total) if base_total is not None else None,
+        "var_pct": str((main_total - base_total) / base_total) if base_total else None,
+        "main_label": lb["main"],
+        "base_label": lb["base"] or None,
+    }
+    fig["meta"] = (fig.get("meta") or {}) | {"totals": totals, "total_figure": pf.fig_rank_total(totals, lb)}
+    return fig
 
 
 def fig_composition(base: Base) -> dict:
