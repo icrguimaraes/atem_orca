@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, type Breakdown, type BreakdownRow } from "../api";
 import { fmtMoney, fmtPct, fmtShare, deptRank } from "../labels";
 import { Empty, Loading } from "./ui";
@@ -175,6 +176,11 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
             )}
             {r.code && <span className="muted small mono"> {r.code}</span>}
             {why && <WhyButton qs={[parentChain, ownParam(LEVELS[level], r), query].filter(Boolean).join("&")} label={r.name} />}
+            {why && (
+              <Link className="why-btn trace-link" to={`/rastro?${[parentChain, ownParam(LEVELS[level], r), query].filter(Boolean).join("&")}`} title="Abrir o Rastro já neste recorte (até o lançamento)">
+                ver rastro
+              </Link>
+            )}
           </td>
           <td className="right nowrap">{fmtMoney(r.ref)}</td>
           <td className="right nowrap muted">{fmtShare(r.share_ref)}</td>

@@ -562,3 +562,24 @@ def test_contracts_feed_the_budget_as_a_single_account(client, admin, pj_admin):
     assert client.post("/api/v1/pj", headers=pj_admin, json=ended).status_code == 201
     # 10.000 × 1,035 × 12 + 12.000 (cheia) = 136.200; 1.000 × 1,035 × 6 (jul–dez) + 1.200 (cheia) = 7.410
     assert opex() - before == Decimal("143610.00")
+
+
+def test_pj_shows_in_the_cost_center_opex_screen(client, admin, pj_admin):
+    """A tela de orçamento do CC (contas) e o resumo OPEX somam os contratos PJ na conta pj.budget_account, como o
+    Painel — antes a conta aparecia zerada ("Sem orçamento") enquanto o Painel já somava (09/10/2026)."""
+    st = make_structure(client, admin)
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+    client.post(f"/api/v1/cycles/{cycle_id}/open", headers=admin)
+    cc = st["ccs"]["9001"]
+    acc = client.post(
+        "/api/v1/accounts", headers=admin, json={"code": "6010201016", "name": "Provisão de Serviços", "nature": "OPEX"}
+    )
+    assert acc.status_code in (201, 409), acc.text
+    assert client.post("/api/v1/pj", headers=pj_admin, json=contract(1, cost_center_id=cc)).status_code == 201
+    head = client.get(f"/api/v1/opex/cost-centers/{cc}", headers=admin).json()
+    view = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/accounts", headers=admin).json()
+    row = next(r for r in view["accounts"] if r["code"] == "6010201016")
+    assert row["proposed"] == "136200.00" and row["pj_amount"] == "136200.00"  # 10.000 × 1,035 × 12 + 12.000
+    summary = client.get("/api/v1/opex/summary", headers=admin).json()
+    mine = next(r for r in summary["rows"] if r["cost_center_id"] == cc)
+    assert Decimal(mine["proposed"]) == Decimal("136200.00")

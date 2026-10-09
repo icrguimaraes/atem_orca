@@ -28,6 +28,7 @@ from app.api.v1 import (
     personnel,
     pj,
     rules,
+    trace,
     users,
     validation,
 )
@@ -105,6 +106,7 @@ for module in (
     validation,
     integrations,
     pj,
+    trace,
 ):
     api.include_router(module.router)
 app.include_router(api)

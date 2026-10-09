@@ -185,6 +185,19 @@ def closed_period(db: Session, year: int, company_code: str) -> int | None:
     )
 
 
+def pj_monthly_by_account(db: Session, ctx: Context, cc_id: int) -> dict[int, list[Decimal]]:
+    """Contratos PJ do CC por conta × mês (conta pj.budget_account), como a consolidação lança."""
+    from app.services import consolidation as cons
+
+    accounts = list(db.scalars(select(Account)))
+    by_code = {a.code: a.id for a in accounts}
+    out: dict[int, list[Decimal]] = defaultdict(lambda: [ZERO] * 12)
+    for _cc, code, _name, _pkg, month, amount in cons.pj_budget_amounts(db, ctx, {cc_id}, accounts, {}):
+        if code in by_code:
+            out[by_code[code]][month - 1] += amount
+    return out
+
+
 def proposed_by_account(db: Session, submission_id: int) -> dict[int, Decimal]:
     rows = db.execute(
         select(BudgetLine.account_id, func.sum(BudgetLine.total_amount))
@@ -216,10 +229,18 @@ def account_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
         .group_by(BudgetLine.account_id, BudgetLineValue.month)
     ):
         prop_m[acc_id][int(month) - 1] += amount
+    # contratos PJ do CC (09/10/2026): entram na conta pj.budget_account como valor derivado (só o total, sem o
+    # contrato) — a tela do CC mostrava a conta zerada enquanto o Painel já somava
+    pj_m = pj_monthly_by_account(db, ctx, cc.id)
+    for acc_id, series in pj_m.items():
+        for i, amount in enumerate(series):
+            prop_m[acc_id][i] += amount
     prev = {k: sum(v, ZERO) for k, v in prev_m.items()}
     ref = {k: sum(v, ZERO) for k, v in ref_m.items()}
     ref_budget = {k: sum(v, ZERO) for k, v in budget_m.items()}
     proposed = proposed_by_account(db, sub.id)
+    for acc_id, series in pj_m.items():
+        proposed[acc_id] = proposed.get(acc_id, ZERO) + sum(series, ZERO)
     justifications = {
         j.account_id: j
         for j in db.scalars(select(AccountJustification).where(AccountJustification.submission_id == sub.id))
@@ -286,6 +307,8 @@ def account_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
             "justification": just.text if just else None,
             "line_justified": acc_id in line_justified,
             "ref_monthly": [str(money(v)) for v in ref_m[acc_id]] if acc_id in ref_m else None,
+            # parte da conta que vem dos contratos PJ (derivada; não é linha do gestor)
+            "pj_amount": str(money(sum(pj_m[acc_id], ZERO))) if acc_id in pj_m else None,
         }
         rows.append(row)
         for k in ("prev_actual", "ref_actual_ytd", "ref_annualized", "ref_budget", "proposed"):

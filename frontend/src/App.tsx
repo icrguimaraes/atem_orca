@@ -26,6 +26,7 @@ import PersonnelCostCenter from "./pages/PersonnelCostCenter";
 import PersonnelPremises from "./pages/PersonnelPremises";
 import PersonnelSimulation from "./pages/PersonnelSimulation";
 import Structure from "./pages/Structure";
+import Trace from "./pages/Trace";
 import Users from "./pages/Users";
 
 function Protected({ children, roles, pj }: { children: ReactNode; roles?: string[]; pj?: boolean }) {
@@ -52,6 +53,7 @@ export default function App() {
           >
             <Route index element={<Suspense fallback={<Loading />}><Painel2 /></Suspense>} />
             <Route path="analise" element={<Suspense fallback={<Loading />}><Analytics /></Suspense>} />
+            <Route path="rastro" element={<Trace />} />
             <Route path="painel-2" element={<Navigate to="/" replace />} />
             <Route path="importacoes" element={<Protected roles={["CONTROLLER"]}><Imports /></Protected>} />
             <Route path="importacoes/:id" element={<Protected roles={["CONTROLLER"]}><ImportDetail /></Protected>} />

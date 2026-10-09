@@ -186,6 +186,13 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
             .group_by(BudgetLine.cost_center_id)
         ).all()
     )
+    # contratos PJ (derivados) somam no proposto do CC, como no Painel
+    from app.services import consolidation as cons
+
+    for cc_id, _code, _name, _pkg, _month, amount in cons.pj_budget_amounts(
+        db, ctx, ids, list(db.scalars(select(Account))), {}
+    ):
+        proposed[cc_id] = proposed.get(cc_id, ZERO) + amount
 
     def actual(year: int, model=ActualEntry) -> dict[int, Decimal]:
         return dict(

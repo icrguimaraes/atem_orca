@@ -17,6 +17,7 @@ const ICON = {
   painel: "M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z",
   painel2: "M4 19h16M5 15l4-4 3 3 7-7M15 7h4v4",
   analise: "M4 19h16M6 16V9m4 7V5m4 11v-6m4 6V7",
+  rastro: "M4 5h6v4H4zM9 7h4M13 10h6v4h-6zM9 7v8h4M13 12h-4",
   consolidacao: "M12 3 3 7.5l9 4.5 9-4.5L12 3zM3 12l9 4.5 9-4.5M3 16.5l9 4.5 9-4.5",
   apontamentos: "M12 4 2.5 20h19L12 4zM12 10v4M12 17h.01",
   justificativas: "M5 4h14v12H9l-4 4zM9 9h6M9 12h4",
@@ -49,6 +50,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: "/", label: "Painel", end: true, icon: ICON.painel },
       { to: "/analise", label: "Análise orçamentária", icon: ICON.analise },
+      { to: "/rastro", label: "Rastro", icon: ICON.rastro },
       { to: "/consolidacao", label: "Consolidação e exportação", icon: ICON.consolidacao },
       { to: "/apontamentos", label: "Apontamentos", icon: ICON.apontamentos },
       { to: "/justificativas", label: "Justificativas", icon: ICON.justificativas },

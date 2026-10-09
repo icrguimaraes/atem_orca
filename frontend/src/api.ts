@@ -250,6 +250,28 @@ export interface Breakdown {
   total: { ref: string; base: string; var: string; var_pct: string | null };
 }
 
+/** Rastro (/rastro): um nível da árvore e os lançamentos de origem de um recorte. */
+export type TraceLevel = "department" | "area" | "cost_center" | "package" | "account";
+export interface TraceCrumb { level: TraceLevel; label: string; id: number | null; code: string | null; name: string }
+export interface TraceRow { id: number | null; code: string | null; name: string; value: string; share: string | null; children: number }
+export interface TraceTree {
+  level: TraceLevel; level_label: string; next_level: TraceLevel | null; next_label: string;
+  series: "actual" | "budget"; series_label: string; period: PeriodInfo; available_years: number[];
+  trail: TraceCrumb[]; rows: TraceRow[]; total: string; count: number;
+}
+export interface TraceRecord {
+  id: string; kind: string; kind_label: string; module: string;
+  cost_center: { id: number; code: string; name: string } | null;
+  account: { id: number | null; code: string | null; name: string } | null;
+  package: string | null; title: string; detail: string | null; month: number | null; values: string[];
+  unscheduled: string; total: string; justification: string | null; fields: [string, string][];
+  source: Record<string, string | number | null> | null; link: string | null;
+}
+export interface TraceEntries {
+  items: TraceRecord[]; count: number; total: string; level_total: string; difference: string; offset: number; limit: number;
+  series: "actual" | "budget"; series_label: string; period: PeriodInfo; available_years: number[]; trail: TraceCrumb[];
+}
+
 export interface BudgetProgress {
   target_year: number; ref_year: number; cycle_status: string; deadline: string | null; total_cost_centers: number;
   started_cost_centers: number; status_counts: Record<string, number>; proposed_total: string;
@@ -307,6 +329,7 @@ export interface OpexAccountRow {
   package_type: number | null; prev_actual: string; ref_actual_ytd: string; ref_annualized: string; ref_budget: string;
   proposed: string; variation_base: string; variation_pct: string | null; flags: string[];
   needs_justification: boolean; justification: string | null; ref_monthly: string[] | null;
+  pj_amount?: string | null;  // parte da conta que vem dos contratos PJ (derivada, não é linha do gestor)
 }
 export interface OpexAccounts {
   prev_year: number; ref_year: number; target_year: number; closed_period: number | null;

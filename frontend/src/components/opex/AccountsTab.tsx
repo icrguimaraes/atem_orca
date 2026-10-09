@@ -168,7 +168,14 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
                     <td className="right">{fmtMoney(r.ref_actual_ytd)}</td>
                     <td className="right">{fmtMoney(r.ref_annualized)}</td>
                     {showBudget && <td className="right">{fmtMoney(r.ref_budget)}</td>}
-                    <td className="right"><strong>{fmtMoney(r.proposed)}</strong></td>
+                    <td className="right">
+                      <strong>{fmtMoney(r.proposed)}</strong>
+                      {r.pj_amount && Number(r.pj_amount) > 0 && (
+                        <div className="small muted" title="Vem do cadastro de Contratos PJ (mensal com reajuste + bonificação); não é lançado aqui">
+                          inclui {fmtMoney(r.pj_amount)} de contratos PJ
+                        </div>
+                      )}
+                    </td>
                     <td className="right nowrap">{fmtPct(r.variation_pct)}</td>
                     <td className="just-cell">
                       <Justification row={r} submissionId={submissionId} editable={editable} onSaved={onChanged} />

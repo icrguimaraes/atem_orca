@@ -156,6 +156,7 @@ a { color: inherit; }
 .why-wrap { position: relative; display: inline-block; margin-left: 8px; vertical-align: middle; }
 .why-btn { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); font: 500 11px/16px var(--font-body); padding: 1px 7px; cursor: pointer; }
 .why-btn:hover { color: var(--text); border-color: var(--text); }
+.trace-link { margin-left: 4px; text-decoration: none; display: inline-block; vertical-align: middle; }
 .why-tip { position: fixed; z-index: 70; width: 340px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-3); padding: 10px 12px; font-size: 12px; line-height: 1.55; font-weight: 400; white-space: normal; text-align: left; }
 .drawer-backdrop { position: fixed; inset: 0; background: rgba(34, 34, 34, 0.35); z-index: 60; display: flex; justify-content: flex-end; }
 .drawer { width: min(620px, 100vw); height: 100%; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; box-shadow: var(--shadow-3); }

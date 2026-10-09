@@ -127,24 +127,42 @@ def pj_budget_amounts(db: Session, ctx: Context, cc_ids, accounts, packages):
     reajuste `pj.adjustment_pct` a partir de `pj.adjustment_month`, mais a bonificação anual CHEIA diluída nos meses de
     vigência (o que se provisiona no ano é pago no seguinte). Tudo na conta `pj.budget_account`, somado por CC e mês —
     sem identificar o contrato (são confidenciais). Contrato sem CC ou sem valor fica de fora (pendência no PJ)."""
-    from app.models.pj import PjContract
-
-    year = ctx.target_year
-    raw = ctx.params.get("pj.budget_account", 6010201016)
-    code = str(int(raw)) if isinstance(raw, (int, float)) else str(raw).strip()
+    code, _adj, _adj_month = pj_budget_params(ctx)
     account = next((a for a in accounts if a.code == code), None)
     name = account.name if account else "Provisão de Serviços"
     package = packages.get(account.package_id) if account else None
+    totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: ZERO)
+    for c, months in pj_contract_amounts(db, ctx, cc_ids):
+        for m, amount in months.items():
+            totals[(c.cost_center_id, m)] += amount
+    for (cc_id, month), amount in totals.items():
+        if amount:
+            yield cc_id, code, name, package, month, amount
+
+
+def pj_budget_params(ctx: Context) -> tuple[str, Decimal, int]:
+    """(conta do orçamento PJ, reajuste, mês do reajuste) dos parâmetros do ciclo."""
+    raw = ctx.params.get("pj.budget_account", 6010201016)
+    code = str(int(raw)) if isinstance(raw, (int, float)) else str(raw).strip()
     try:
         adj = Decimal(str(ctx.params.get("pj.adjustment_pct", 0) or 0))
         adj_month = int(ctx.params.get("pj.adjustment_month", 1) or 1)
     except (ArithmeticError, ValueError):
         adj, adj_month = ZERO, 1
+    return code, adj, adj_month
+
+
+def pj_contract_amounts(db: Session, ctx: Context, cc_ids):
+    """Valor mês a mês de cada contrato PJ ativo no ano do ciclo: (contrato, {mês: valor}). Base de
+    `pj_budget_amounts` (soma por CC) e do Rastro (um registro por contrato, só para quem tem acesso)."""
+    from app.models.pj import PjContract
+
+    year = ctx.target_year
+    _code, adj, adj_month = pj_budget_params(ctx)
     stmt = select(PjContract).where(PjContract.archived_at.is_(None), PjContract.cost_center_id.is_not(None))
     if cc_ids is not None:
         stmt = stmt.where(PjContract.cost_center_id.in_(cc_ids or {-1}))
-    totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: ZERO)
-    for c in db.scalars(stmt):
+    for c in db.scalars(stmt.order_by(PjContract.id)):
         if c.start_date is not None and c.start_date.year > year:
             continue
         if c.end_date is not None and c.end_date.year < year:
@@ -157,14 +175,13 @@ def pj_budget_amounts(db: Session, ctx: Context, cc_ids, accounts, packages):
         monthly = Decimal(c.monthly_value or 0)
         bonus = Decimal(c.annual_bonus or 0)
         paid = ZERO
+        out: dict[int, Decimal] = {}
         for i, m in enumerate(months, start=1):
             value = monthly * (1 + adj) if (adj and m >= adj_month) else monthly
             due = money(bonus * i / len(months))  # bonificação cheia, parcelas pelo acumulado (soma exata)
-            totals[(c.cost_center_id, m)] += money(value) + (due - paid)
+            out[m] = money(value) + (due - paid)
             paid = due
-    for (cc_id, month), amount in totals.items():
-        if amount:
-            yield cc_id, code, name, package, month, amount
+        yield c, out
 
 
 def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list[Row]:
