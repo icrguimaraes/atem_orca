@@ -16,7 +16,7 @@ from app.imports.base import (
     to_date,
     to_decimal,
 )
-from app.imports.parsers.common import attach_month_columns
+from app.imports.parsers.common import attach_month_columns, parse_month_header
 
 WIDE_ALIASES = {
     "company": ("Empresa", "Código Empresa"),
@@ -85,6 +85,33 @@ def _identity(rec: Record, table, row) -> dict:
     }
 
 
+def _pick_block_months(table, dataset_type: str) -> str | None:
+    """Acompanhamento orçamentário (ex.: 'Realizado 2025', aba ANÁLISE): os meses aparecem duas vezes no
+    cabeçalho, com a linha de cima dizendo ORÇADO ou REAL. Realizado usa o bloco REAL; orçado de referência, o
+    bloco ORÇADO. Sem essa linha, vale a detecção normal (primeira ocorrência de cada mês)."""
+    markers: dict[int, str] = {}
+    for back in (2, 3, 4):  # a linha das marcas pode vir acima de uma linha de totais
+        if table.header_row - back < 0:
+            break
+        above = table.sheet.rows[table.header_row - back]
+        found = {idx: norm(cell).upper() for idx, cell in enumerate(above, start=1) if cell not in (None, "")}
+        if {"REAL", "ORCADO"} <= set(found.values()):
+            markers = found
+            break
+    if not markers:
+        return None
+    want = "REAL" if dataset_type == "ACTUAL" else "ORCADO"
+    header = table.sheet.rows[table.header_row - 1]
+    months: dict[int, int] = {}
+    for idx, cell in enumerate(header, start=1):
+        parsed = parse_month_header(cell)
+        if parsed is None or markers.get(idx) != want or parsed[1] in months:
+            continue
+        months[parsed[1]] = idx
+    table.month_columns = months
+    return want
+
+
 def parse_wide(sheets: list[Sheet], options: dict, dataset_type: str) -> ParseResult:
     """Layout do template ('Realizado 2026'): uma linha por chave, colunas mensais."""
     result = ParseResult(dataset_type, "WIDE_MONTHLY")
@@ -93,6 +120,9 @@ def parse_wide(sheets: list[Sheet], options: dict, dataset_type: str) -> ParseRe
         if table is None:
             continue
         detected_year = attach_month_columns(table)
+        block = _pick_block_months(table, dataset_type)
+        if block:
+            result.meta["block"] = block
         if not table.month_columns:
             continue
         year = options.get("reference_year") or detected_year
@@ -129,7 +159,7 @@ def parse_wide(sheets: list[Sheet], options: dict, dataset_type: str) -> ParseRe
                     values[month] = str(amount)
             rec.data["year"] = int(year)
             rec.data["values"] = values
-            declared = table.value(row, "total")
+            declared = table.value(row, "total") if block != "ORCADO" else None
             if declared not in (None, ""):
                 try:
                     declared_total = to_decimal(declared) or Decimal("0")

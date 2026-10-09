@@ -718,3 +718,32 @@ def test_capex_acum_actual_and_projection(client, admin, run_worker):
     final = client.get("/api/v1/dashboard/overview?years=2026&compare=false&figures=true", headers=admin)
     assert final.status_code == 200, final.text
     assert float(final.json()["kpis"]["ref_ytd"]) == base + 55 + 60  # projeção do CAPEX soma sem apagar a do OPEX (40)
+
+
+def test_wide_with_budget_and_actual_blocks_uses_the_right_months():
+    """Acompanhamento orçamentário (ex.: 'Realizado 2025'): meses repetidos no cabeçalho, com ORÇADO/REAL na linha
+    de cima (e uma linha de totais no meio). Realizado lê o bloco REAL; orçado de referência, o bloco ORÇADO."""
+    import io
+    from datetime import datetime
+
+    from openpyxl import Workbook
+
+    from app.imports.base import load_sheets
+    from app.imports.parsers.financial import parse_wide
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "ANÁLISE"
+    months = [datetime(2025, m, 1) for m in range(1, 13)]
+    ws.append([None] * 5 + ["ORÇADO"] * 12 + ["REAL"] * 12)
+    ws.append([None] * 5 + [1] * 24)  # totais
+    ws.append(["Empresa", "Centro de Custos", "Conta Razão", "Pacotes Orçamento", "Gestor", *months, *months])
+    ws.append([1001, 1050101001, 6010301001, "Viagens", "X", *([100] * 12), *([7] * 12)])
+    buf = io.BytesIO()
+    wb.save(buf)
+    sheets = load_sheets(buf.getvalue(), "Realizado 2025.xlsx")
+    actual = parse_wide(sheets, {}, "ACTUAL")
+    assert actual.meta["block"] == "REAL" and actual.meta["year"] == 2025
+    assert actual.records[0].data["values"] == {m: "7" for m in range(1, 13)}
+    budget = parse_wide(sheets, {}, "REFERENCE_BUDGET")
+    assert budget.meta["block"] == "ORCADO" and budget.records[0].data["values"][1] == "100"
