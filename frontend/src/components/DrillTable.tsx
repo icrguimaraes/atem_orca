@@ -40,10 +40,11 @@ function sortRows(rows: BreakdownRow[], sort: Sort): BreakdownRow[] {
 /** Semáforo da variação, com os limiares de alerta do ciclo (os mesmos do orçamento OPEX):
  * vermelho acima do limite de crescimento (`alert.growth_pct`), amarelo abaixo do limite de redução
  * (`alert.reduction_pct`, queda forte que pede atenção) e verde dentro da faixa. */
-function tone(pct: string | null, t: { growth: number; reduction: number }): "good" | "warn" | "bad" | null {
+function tone(pct: string | null, t: { growth: number; reduction: number }): "good" | "bad" | null {
   if (pct === null) return null;
   const n = Number(pct);
-  return n > t.growth ? "bad" : n < -t.reduction ? "warn" : "good";
+  // só verde e vermelho (09/10/2026): fora da faixa, para cima ou para baixo, é vermelho
+  return n > t.growth || n < -t.reduction ? "bad" : "good";
 }
 
 function VarCell({ pct, t }: { pct: string | null; t: { growth: number; reduction: number } }) {
@@ -218,7 +219,7 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
           {hasBase && (
             <>
               {" "}Semáforo: <span className="dot good" aria-hidden="true" />dentro da faixa (de −{pctLabel(th.reduction)} a +{pctLabel(th.growth)}),{" "}
-              <span className="dot bad" aria-hidden="true" />acima de +{pctLabel(th.growth)}, <span className="dot warn" aria-hidden="true" />queda maior que {pctLabel(th.reduction)}
+              <span className="dot bad" aria-hidden="true" />fora da faixa (acima de +{pctLabel(th.growth)} ou queda maior que {pctLabel(th.reduction)})
               {" "}(limites de alerta do ciclo).
             </>
           )}
