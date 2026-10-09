@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Company, type CostCenter, type Department, type PjAccess, type UserAccess, type UserListItem } from "../api";
-import { PJ_ACCESS_LABELS, ROLE_LABELS, fmtInt } from "../labels";
+import { PJ_ACCESS_LABELS, ROLE_LABELS, fmtInt, byDepartment } from "../labels";
 import { Alert, Loading, Modal } from "./ui";
 
 /* Criar e editar usuário num formulário só (08/10/2026): dados, perfis e os centros de custo que ele acessa — por
@@ -80,7 +80,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
       if (needle && !fold(label).includes(needle)) continue;
       out.set(area, [...(out.get(area) ?? []), cc]);
     }
-    return [...out.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([area, list]) => [area, list, deptId.get(area) ?? null] as const);
+    return [...out.entries()].sort((a, b) => byDepartment(a[0], b[0])).map(([area, list]) => [area, list, deptId.get(area) ?? null] as const);
   }, [ccs, depts, companies, q]);
   const companyName = (id: number) => companies.find((c) => c.id === id)?.short_name ?? "";
   const companyScopes = access?.scopes.filter((s) => s.kind === "COMPANY") ?? [];

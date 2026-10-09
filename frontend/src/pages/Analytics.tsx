@@ -6,7 +6,7 @@ import { EvolutionCard } from "../components/EvolutionCard";
 import { FilterBar } from "../components/FilterBar";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
-import { fmtCompact, fmtInt, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
+import { fmtCompact, fmtInt, fmtMoney, fmtPct, fmtSignedMoney, byDepartment } from "../labels";
 
 interface Kpi { label: string; value: string | null; compact: string; pct?: string | null; pct_label?: string; share?: string; hint?: string }
 interface Dashboard {
@@ -140,7 +140,7 @@ export default function Analytics() {
                 <span className="chip-label">Área</span>
                 <div className="month-chips" role="group" aria-label="Áreas">
                   <button type="button" className={!filters.department_id ? "active" : ""} aria-pressed={!filters.department_id} onClick={() => { set({ department_id: "", cost_center_id: "" }); setTrail([]); }}>Todas</button>
-                  {[...(opts.data?.departments ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((dp) => {
+                  {[...(opts.data?.departments ?? [])].sort((a, b) => byDepartment(a.name, b.name)).map((dp) => {
                     const picked = filters.department_id ? filters.department_id.split(",") : [];
                     const on = picked.includes(String(dp.id));
                     return (

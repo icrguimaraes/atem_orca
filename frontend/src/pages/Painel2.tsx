@@ -10,7 +10,7 @@ import { FilterBar } from "../components/FilterBar";
 import { DrillTable } from "../components/DrillTable";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
-import { MONTHS, fmtCompact, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
+import { MONTHS, fmtCompact, fmtMoney, fmtPct, fmtSignedMoney, byDepartment } from "../labels";
 
 /**
  * Painel (rota /): filtros, números, blocos e tabela, com os gráficos em Plotly montados no backend
@@ -281,7 +281,7 @@ export default function Painel2() {
                   <button type="button" className={!department ? "active" : ""} aria-pressed={!department} onClick={() => setDepartment("")}>
                     Todas
                   </button>
-                  {[...departments].sort((a, b) => a.name.localeCompare(b.name)).map((d) => (
+                  {[...departments].sort((a, b) => byDepartment(a.name, b.name)).map((d) => (
                     <button
                       key={d.id}
                       type="button"

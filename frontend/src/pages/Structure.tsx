@@ -3,7 +3,7 @@ import { api, type Company, type CostCenter, type Department, type Sector } from
 import { useAuth } from "../auth";
 import { RecordForm, type Field } from "../components/RecordForm";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, SearchBox, Stat, useLoad } from "../components/ui";
-import { fmtInt } from "../labels";
+import { fmtInt, byDepartment } from "../labels";
 
 interface Editing { title: string; endpoint: string; id?: number; initial: object; fields: Field[] }
 
@@ -36,7 +36,7 @@ export default function Structure() {
       if (cc.area_id) ccsBySector.set(cc.area_id, [...(ccsBySector.get(cc.area_id) ?? []), cc]);
     }
     const groups = [...data.departments]
-      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+      .sort((a, b) => byDepartment(a.name, b.name))
       .map((d) => ({
         dept: d,
         sectors: data.sectors

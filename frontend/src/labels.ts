@@ -320,3 +320,7 @@ export function maskCnpj(text: string): string {
   if (v.length > 12) out += `-${v.slice(12)}`;
   return out;
 }
+
+/** Áreas pela ordem de importância (09/10/2026): Vice-Presidência sempre primeiro, depois alfabética. */
+export const deptRank = (name?: string | null) => (/presid/i.test(name ?? "") ? 0 : 1);
+export const byDepartment = (a: string, b: string) => deptRank(a) - deptRank(b) || a.localeCompare(b, "pt-BR");

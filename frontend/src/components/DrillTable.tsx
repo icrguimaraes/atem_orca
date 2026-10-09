@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Breakdown, type BreakdownRow } from "../api";
-import { fmtMoney, fmtPct, fmtShare } from "../labels";
+import { fmtMoney, fmtPct, fmtShare, deptRank } from "../labels";
 import { Empty, Loading } from "./ui";
 import { WhyButton } from "./WhyPanel";
 
@@ -32,7 +32,8 @@ function sortRows(rows: BreakdownRow[], sort: Sort): BreakdownRow[] {
     name: (a: BreakdownRow, b: BreakdownRow) => a.name.localeCompare(b.name, "pt-BR"),
     var: (a: BreakdownRow, b: BreakdownRow) => Math.abs(Number(b.var)) - Math.abs(Number(a.var)),
   }[sort];
-  return [...rows].sort(by);
+  // área: Vice-Presidência sempre primeiro (ordem de importância), qualquer que seja a ordenação escolhida
+  return [...rows].sort((a, b) => deptRank(a.name) - deptRank(b.name) || by(a, b));
 }
 
 /** Semáforo da variação, com os limiares de alerta do ciclo (os mesmos do orçamento OPEX):

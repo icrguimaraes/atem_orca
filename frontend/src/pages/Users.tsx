@@ -4,7 +4,7 @@ import { useAuth } from "../auth";
 import { Alert, Badge, Card, Loading, PageHeader, SearchBox, useLoad } from "../components/ui";
 import { UserAccessModal } from "../components/UserAccess";
 import { UserEditor } from "../components/UserEditor";
-import { ROLE_LABELS, fmtDateTime, fmtInt, PJ_ACCESS_LABELS } from "../labels";
+import { ROLE_LABELS, fmtDateTime, fmtInt, PJ_ACCESS_LABELS, deptRank } from "../labels";
 
 /* Usuários agrupados por área (08/10/2026): cada área lista quem acessa os CCs dela, com o setor e o CC explícitos;
    Administrador/Controladoria ficam num grupo à parte (veem tudo) e quem ainda não tem CC aparece em destaque. */
@@ -58,7 +58,7 @@ export default function Users() {
       byDept.forEach((items, dept) => push(dept, u, items));
     }
   }
-  const order = (g: string) => (g === NONE_GROUP ? "0" : g === GLOBAL_GROUP ? "2" : `1${g}`);
+  const order = (g: string) => (g === NONE_GROUP ? "0" : g === GLOBAL_GROUP ? "2" : `1${deptRank(g)}${g}`);
   const sorted = [...groups.entries()].sort((a, b) => order(a[0]).localeCompare(order(b[0])));
 
   return (
