@@ -126,7 +126,17 @@ class Period:
 
     @property
     def main(self) -> str:
+        # com o ano do ciclo no filtro, a série principal é o orçamento: "orçado 2027 − realizado 2026" (08/10/2026)
+        if self.target_year in self.years and self.target_year not in self.actual_years:
+            return "budget"
         return "actual" if self.actual_selected else "budget"
+
+    @property
+    def main_years(self) -> list[int]:
+        """Anos da série principal: com o orçamento contra o realizado, os anos de realizado são a base."""
+        if self.base_kind == "actual":
+            return [y for y in self.years if y not in self.actual_years]
+        return self.years
 
     @property
     def compare(self) -> bool:
@@ -142,11 +152,15 @@ class Period:
             return "prev"
         if self.main == "actual" and self.budget_selected:
             return "budget"
+        if self.main == "budget" and self.actual_selected:
+            return "actual"
         return None
 
     @property
     def annualize_base(self) -> bool:
         """Orçamento (ano sem realizado) contra um ano anterior incompleto: base anualizada (régua da consolidação)."""
+        if self.base_kind == "actual":
+            return not self.months and len(self.actual_selected) == 1 and bool(self.closed) and self.closed < 12
         return (
             self.compare
             and self.main == "budget"
@@ -157,7 +171,9 @@ class Period:
 
     @property
     def base_scale(self) -> Decimal:
-        return Decimal(12) / Decimal(self.prev_closed) if self.annualize_base else Decimal(1)
+        if not self.annualize_base:
+            return Decimal(1)
+        return Decimal(12) / Decimal(self.closed if self.base_kind == "actual" else self.prev_closed)
 
     @property
     def same_period_available(self) -> bool:
@@ -191,6 +207,8 @@ class Period:
     @property
     def budget_label(self) -> str | None:
         ys = self.budget_selected
+        if self.base_kind == "actual":
+            ys = [y for y in ys if y not in self.actual_years]
         if not ys:
             return None
         return f"{'Orçamento' if ys == [self.target_year] else 'Orçado'} {_years_label(ys)}"
@@ -211,6 +229,8 @@ class Period:
             return label if self.months else f"{label} (ano cheio)"
         if self.base_kind == "budget":
             return f"{self.budget_label} até {MONTH_ABBR[self.base_cap - 1]}" if self.base_cap else self.budget_label
+        if self.base_kind == "actual":
+            return f"Realizado {self.actual_selected[0]} anualizado" if self.annualize_base else self.actual_label
         return None
 
     def summary(self) -> dict:
@@ -512,6 +532,8 @@ def _base_total(f: Facts, P: Period) -> Decimal:
         return f.total(ActualEntry, P.prev_years, P.base_cap) * P.base_scale
     if P.base_kind == "budget":
         return f.total(ReferenceBudgetEntry, P.years, P.base_cap)
+    if P.base_kind == "actual":
+        return f.total(ActualEntry, P.actual_selected) * P.base_scale
     return ZERO
 
 
@@ -521,6 +543,8 @@ def _base_sums(f: Facts, P: Period, key: str) -> dict:
         return {k: v * P.base_scale for k, v in f.sums(ActualEntry, P.prev_years, key, max_period=P.base_cap)}
     if P.base_kind == "budget":
         return dict(f.sums(ReferenceBudgetEntry, P.years, key, max_period=P.base_cap))
+    if P.base_kind == "actual":
+        return {k: v * P.base_scale for k, v in f.sums(ActualEntry, P.actual_selected, key)}
     return {}
 
 
@@ -549,7 +573,7 @@ def overview(
     f = Facts(db, user, company_id, cost_center_id, package_id, P, account_id=account_id, department_id=department_id)
     main_model = _main_model(P)
     actual_total = f.total(ActualEntry, P.years)
-    budget_total = f.total(ReferenceBudgetEntry, P.years)
+    budget_total = f.total(ReferenceBudgetEntry, P.main_years)
     main_total = actual_total if P.main == "actual" else budget_total
     base_total = _base_total(f, P)
     prev_full = f.total(ActualEntry, P.prev_years) if P.compare else ZERO
@@ -590,7 +614,7 @@ def overview(
         "monthly": _monthly(f, P),
         "top_cost_centers": _ranking(db, f, P, "cost_center_id", CostCenter),
         "top_accounts": _ranking(db, f, P, "account_id", Account),
-        "heatmap": _heatmap(db, f, main_model, P.years),
+        "heatmap": _heatmap(db, f, main_model, P.main_years),
         "budget_progress": budget_progress(db, user, company_id, cost_center_id, package_id),
     }
     if figures:
@@ -612,7 +636,7 @@ def overview(
         f_heat = Facts(
             db, user, company_id, None, package_id, all_months, account_id=account_id, department_id=department_id
         )
-        data["heatmap_all"] = _heatmap(db, f_heat, main_model, P.years)
+        data["heatmap_all"] = _heatmap(db, f_heat, main_model, P.main_years)
         # evolução do orçamento: sem o filtro de meses (f_months), com todos os demais filtros
         data["evolution"], options = _evolution(db, f_months, P)
         data["evolution_options"] = [
@@ -746,11 +770,13 @@ def _by_module(f: Facts, P: Period) -> list[dict]:
     ativo, o card do total já é o do tipo: a lista vem vazia."""
     if P.modules:
         return []
-    main = f.by_module(_main_model(P), P.years)
+    main = f.by_module(_main_model(P), P.main_years)
     if P.base_kind == "prev":
         base = {k: v * P.base_scale for k, v in f.by_module(ActualEntry, P.prev_years, P.base_cap).items()}
     elif P.base_kind == "budget":
         base = f.by_module(ReferenceBudgetEntry, P.years, P.base_cap)
+    elif P.base_kind == "actual":
+        base = {k: v * P.base_scale for k, v in f.by_module(ActualEntry, P.actual_selected).items()}
     else:
         base = {}
     unscheduled = f.unscheduled_by_module() if (P.main == "budget" and P.target_year in P.years) else {}
@@ -778,14 +804,14 @@ def _monthly(f: Facts, P: Period) -> list[dict]:
     for period, projected, amount in f.sums(ActualEntry, P.years, "period", "projected"):
         if projected:
             monthly[int(period)]["proj"] = amount
-    for period, amount in f.sums(ReferenceBudgetEntry, P.years, "period"):
+    for period, amount in f.sums(ReferenceBudgetEntry, P.main_years, "period"):
         monthly[int(period)]["budget"] = amount
     return [{k: (_money(v) if k != "month" else v) for k, v in row.items()} for row in monthly.values()]
 
 
 def _ranking(db: Session, f: Facts, P: Period, key: str, label_model, limit: int = 10) -> list[dict]:
     """Maiores itens (CC ou conta) na série principal, com a base de comparação quando houver."""
-    cur = dict(f.sums(_main_model(P), P.years, key))
+    cur = dict(f.sums(_main_model(P), P.main_years, key))
     base = _base_sums(f, P, key)
     ids = sorted((k for k in cur if k is not None), key=lambda k: cur[k], reverse=True)[:limit]
     objs = {o.id: o for o in db.scalars(select(label_model).where(label_model.id.in_(ids)))} if ids else {}
@@ -848,7 +874,7 @@ def breakdown(
         "account": "account_id",
         "cost_center": "cost_center_id",
     }[group_by]
-    cur = dict(f.sums(_main_model(P), P.years, key))
+    cur = dict(f.sums(_main_model(P), P.main_years, key))
     base = _base_sums(f, P, key)
 
     ids = [k for k in set(cur) | set(base) if k is not None]
@@ -1295,10 +1321,4 @@ def budget_progress(
 
 
 def _last_closed_company(db: Session, year: int, company_code: str | None) -> int | None:
-    return db.scalar(
-        select(DatasetVersion.last_closed_period).where(
-            DatasetVersion.dataset_type == "ACTUAL",
-            DatasetVersion.is_current,
-            DatasetVersion.scope_key == f"ACTUAL:{year}:{company_code}",
-        )
-    )
+    return opex_svc.closed_period(db, year, company_code) if company_code else None

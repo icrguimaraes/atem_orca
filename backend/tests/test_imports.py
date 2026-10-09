@@ -586,6 +586,18 @@ def test_projection_fills_only_months_without_ksb1(client, admin, run_worker):
         assert again_figs.status_code == 200, (extra, again_figs.text[:200])
     names = [t["name"] for t in figs.json()["figures"]["monthly"]["data"]]
     assert any("Projeção" in n for n in names), names
+    # a projeção vem logo depois do realizado, na mesma coluna (antes da barra do orçamento)
+    assert (
+        names.index(next(n for n in names if "Projeção" in n))
+        == names.index(next(n for n in names if "Realizado" in n)) + 1
+    )
+    # ano do ciclo no filtro: orçamento 2027 é a série principal e o realizado 2026 (completo) é a base
+    both = client.get("/api/v1/dashboard/overview?years=2026,2027&figures=true", headers=admin)
+    assert both.status_code == 200, both.text[:200]
+    period = both.json()["period"]
+    assert period["main"] == "budget" and period["base_kind"] == "actual", period
+    # projeção até nov (11 meses): a base sai anualizada por 12/11
+    assert round(float(both.json()["kpis"]["prev_ytd"]), 2) == round(float(after["kpis"]["ref_ytd"]) * 12 / 11, 2)
     # projeção substitui a anterior inteira (não soma)
     import_and_load(
         client,

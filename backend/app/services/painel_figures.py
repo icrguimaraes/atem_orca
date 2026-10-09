@@ -108,8 +108,9 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
     rows = monthly or o["monthly"]
     # meses projetados (sem realizado): a barra do realizado fica só com o realizado e a projeção sai em vermelho
     proj = [_num(r.get("proj", 0)) for r in rows]
-    if any(proj):
-        series.append(("proj", "Projeção out–dez (gestor)", PROJETADO))
+    if any(proj) and o["has_actual"]:
+        # logo depois do realizado: a coluna de 2026 vem antes da de 2027 também de out a dez
+        series.insert([k for k, _, _ in series].index("ref") + 1, ("proj", "Projeção out–dez (gestor)", PROJETADO))
     picked = set(months or [])
     opacity = [1.0 if (not picked or m in picked) else 0.3 for m in range(1, 13)]
     values_by = {key: [_num(r[key]) for r in rows] for key, _, _ in series}
@@ -134,11 +135,16 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
                         [f"Realizado vs orçado: {fmt_pct((v - budget) / budget)} ({_signed_money(v - budget)})", ""]
                     )
             tips.append(lines)
+        # projeção empilhada sobre o realizado, na mesma coluna (offsetgroup do realizado)
+        stack = {"offsetgroup": "ref", "base": values_by["ref"]} if key == "proj" else {}
+        if key in ("ref", "proj") and "proj" in values_by:
+            stack.setdefault("offsetgroup", "ref")
         data.append(
             go.Bar(
                 x=list(MONTHS),
                 y=values,
                 name=name,
+                **stack,
                 marker={"color": color, "cornerradius": 4, "opacity": opacity},
                 text=[_short(v) if v > 0 else "" for v in values],
                 textposition="outside",

@@ -165,6 +165,17 @@ def _current_sum(db: Session, model, cost_center_id: int, year: int, by_period: 
 
 
 def closed_period(db: Session, year: int, company_code: str) -> int | None:
+    """Último mês do realizado da empresa no ano. Com a projeção do gestor carregada (meses sem KSB1), o realizado
+    cobre o ano todo: vale o último mês da projeção e o "anualizado" não multiplica de novo (08/10/2026)."""
+    projected = db.scalar(
+        select(DatasetVersion.last_closed_period).where(
+            DatasetVersion.dataset_type == "PROJECTION",
+            DatasetVersion.is_current,
+            DatasetVersion.scope_key == f"PROJECTION:{year}:{company_code}",
+        )
+    )
+    if projected:
+        return int(projected)
     return db.scalar(
         select(DatasetVersion.last_closed_period).where(
             DatasetVersion.dataset_type == "ACTUAL",

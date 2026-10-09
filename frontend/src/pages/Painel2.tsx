@@ -18,12 +18,9 @@ import { MONTHS, fmtCompact, fmtMoney, fmtPct, fmtSignedMoney } from "../labels"
  * Painel em SVG; depois da escolha, uma das duas versões sai. Clique nos gráficos e na tabela filtra; "Limpar filtros" volta ao início.
  */
 // heatmap_all: mapa sem o filtro de CC e mês (o próprio visual destaca a seleção em vez de se filtrar)
-type EvolutionOption = { key: string; label: string; kind: string; value: string };
 type OverviewWithFigures = Overview & {
   figures: Record<string, Figure>;
   heatmap_all?: Overview["heatmap"];
-  evolution?: { key: string }[];
-  evolution_options?: EvolutionOption[];
 };
 
 const ORDER_KEY = "atem.painel2.order";
@@ -39,7 +36,6 @@ const SECTIONS = [
   { key: "cumulative", label: "Total acumulado" },
   { key: "top", label: "Maiores centros de custo" },
   { key: "heatmap", label: "Mapa de calor" },
-  { key: "evolution", label: "Evolução do orçamento" },
 ];
 
 function Delta({ pct }: { pct: string | null }) {
@@ -578,77 +574,11 @@ export default function Painel2() {
               </Card>,
             )}
 
-            {f.evolution && shell("evolution",
-              <EvolutionCard
-                figure={f.evolution}
-                options={o.evolution_options ?? []}
-                defaults={(o.evolution ?? []).map((x) => x.key)}
-                query={query}
-              />,
-            )}
           </div>
         </div>
       )}
       {o?.budget_progress && o.budget_progress.total_cost_centers > 0 && <BudgetProgressCard progress={o.budget_progress} />}
       <PainelBase />
     </>
-  );
-}
-
-/** Evolução do orçamento (cascata): os marcos a comparar são escolhidos no próprio visual (botões); a figura com a
- *  escolha vem de /dashboard/evolution com os mesmos filtros do Painel (ano e mês não se aplicam). */
-function EvolutionCard({ figure, options, defaults, query }: { figure: Figure; options: EvolutionOption[]; defaults: string[]; query: string }) {
-  const [marks, setMarks] = useState<string[] | null>(null); // null = marcos padrão (os do Painel)
-  const custom = useLoad(
-    () => (marks ? api<{ figure: Figure | null; selected: string[] }>(`/dashboard/evolution?marks=${encodeURIComponent(marks.join(","))}${query ? `&${query}` : ""}`) : Promise.resolve(null)),
-    [marks?.join(","), query],
-  );
-  const selected = marks ?? defaults;
-  const fig = (marks && custom.data?.figure) || figure;
-  const meta = (fig.meta ?? {}) as Record<string, string | undefined>;
-  function toggle(key: string) {
-    const next = selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key];
-    if (next.length < 2) return; // a cascata precisa de dois marcos
-    setMarks(options.map((o) => o.key).filter((k) => next.includes(k)));
-  }
-  return (
-    <Card
-      title="Evolução do orçamento"
-      actions={marks ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => setMarks(null)}>Voltar ao padrão</button> : undefined}
-    >
-      {options.length > 2 && (
-        <div className="chip-group evolution-marks">
-          <span className="chip-label">Comparar</span>
-          <div className="month-chips" role="group" aria-label="Marcos da evolução">
-            {options.map((o) => {
-              const on = selected.includes(o.key);
-              return (
-                <button
-                  key={o.key}
-                  type="button"
-                  className={on ? "active" : ""}
-                  aria-pressed={on}
-                  disabled={on && selected.length <= 2}
-                  title={on && selected.length <= 2 ? "Mínimo de dois marcos" : undefined}
-                  onClick={() => toggle(o.key)}
-                >
-                  {o.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      <p className="muted small evolution-note">
-        De <strong>{meta.first}</strong> a <strong>{meta.last}</strong>: os filtros de ano e mês do Painel não se aplicam (escolha os marcos acima); empresa, área, centro de custo, pacote, conta e tipo valem.
-        {" "}Variação total:{" "}
-        <strong className={meta.total_diff?.startsWith("-") ? "down" : meta.total_diff?.startsWith("+") ? "up" : ""}>
-          {meta.total_pct} ({meta.total_diff})
-        </strong>.
-      </p>
-      <div aria-busy={Boolean(marks) && !custom.data}>
-        <PlotlyChart figure={fig} height={400} ariaLabel="Evolução do orçamento" />
-      </div>
-    </Card>
   );
 }

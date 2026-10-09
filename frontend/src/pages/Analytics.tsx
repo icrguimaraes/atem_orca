@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePersistentState } from "../persist";
 import { api, type Company, type Package } from "../api";
 import { useAuth } from "../auth";
+import { EvolutionCard } from "../components/EvolutionCard";
 import { FilterBar } from "../components/FilterBar";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
@@ -64,6 +65,13 @@ export default function Analytics() {
     return p.toString();
   }, [filters, dimension, variationBy, variationMode, top, opts.data?.target_year]);
   const { data, error } = useLoad(() => api<Dashboard>(`/analytics/dashboard?${qs}`), [qs]);
+  // cascata "Evolução do orçamento" (veio do Painel em 08/10/2026): mesmos filtros, exceto ano, mês e conta
+  const evolutionQs = useMemo(() => {
+    const p = new URLSearchParams();
+    (["company_id", "department_id", "cost_center_id", "package_id"] as const).forEach((k) => filters[k] && p.set(k, filters[k]));
+    if (filters.module) p.set("modules", filters.module);
+    return p.toString();
+  }, [filters]);
   const [shown, setShown] = useState<Dashboard | null>(null);
   useEffect(() => { if (data) setShown(data); }, [data]);
 
@@ -133,9 +141,10 @@ export default function Analytics() {
                 <div className="month-chips" role="group" aria-label="Áreas">
                   <button type="button" className={!filters.department_id ? "active" : ""} aria-pressed={!filters.department_id} onClick={() => { set({ department_id: "", cost_center_id: "" }); setTrail([]); }}>Todas</button>
                   {[...(opts.data?.departments ?? [])].sort((a, b) => a.name.localeCompare(b.name)).map((dp) => {
-                    const on = filters.department_id === String(dp.id);
+                    const picked = filters.department_id ? filters.department_id.split(",") : [];
+                    const on = picked.includes(String(dp.id));
                     return (
-                      <button key={dp.id} type="button" className={on ? "active" : ""} aria-pressed={on} onClick={() => { set({ department_id: on ? "" : String(dp.id), cost_center_id: "" }); setTrail([]); }}>
+                      <button key={dp.id} type="button" className={on ? "active" : ""} aria-pressed={on} onClick={() => { const next = on ? picked.filter((x) => x !== String(dp.id)) : [...picked, String(dp.id)]; set({ department_id: next.length === (opts.data?.departments.length ?? 0) ? "" : next.join(","), cost_center_id: "" }); setTrail([]); }}>
                         {dp.name}
                       </button>
                     );
@@ -163,7 +172,7 @@ export default function Analytics() {
             options: () => [
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
               ...(opts.data?.cost_centers ?? [])
-                .filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!filters.department_id || String(c.department_id) === filters.department_id))
+                .filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!filters.department_id || filters.department_id.split(",").includes(String(c.department_id))))
                 .map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
             ],
           },
@@ -264,6 +273,8 @@ export default function Analytics() {
       <Card title={`Evolução mensal · Realizado ${y.prev} × Orçado ${y.ref} × Orçamento ${y.target}`}>
         {d.figures.monthly.data.length ? <PlotlyChart figure={d.figures.monthly} height={340} ariaLabel="Evolução mensal" /> : <Empty>Sem valores mensais.</Empty>}
       </Card>
+
+      <EvolutionCard query={evolutionQs} />
 
       <Card
         title="Comparativo anual"

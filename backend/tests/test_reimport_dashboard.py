@@ -163,10 +163,12 @@ def test_dashboard_overview_and_scope(client, admin, run_worker):
     target = client.get("/api/v1/dashboard/overview?years=2027", headers=admin).json()
     assert target["period"]["main"] == "budget" and target["period"]["main_label"] == "Orçamento 2027"
     assert target["kpis"]["ref_ytd"] == "0.00" and target["has_actual"] is False
-    # 2026 + 2027: realizado 2026 (série principal) e orçamento 2027 (orçado) como base, sem repetir o ano
+    # 2026 + 2027: orçado 2027 − realizado 2026 (08/10/2026): o orçamento é a série principal e o realizado
+    # (incompleto, anualizado) é a base
     mixed = client.get("/api/v1/dashboard/overview?years=2026,2027&compare=false", headers=admin).json()
-    assert mixed["period"]["main_label"] == "Realizado 2026 até AGO" and mixed["period"]["base_kind"] == "budget"
-    assert mixed["period"]["base_label"] == "Orçamento 2027 até AGO"
+    assert mixed["period"]["main_label"] == "Orçamento 2027" and mixed["period"]["base_kind"] == "actual"
+    assert mixed["period"]["base_label"] == "Realizado 2026 anualizado"
+    assert mixed["kpis"]["prev_ytd"] == "645.00"
     # tipo de orçamento: as contas do fixture são OPEX; Pessoal não tem lançamentos
     opex = client.get("/api/v1/dashboard/overview?years=2026&modules=OPEX", headers=admin).json()
     people = client.get("/api/v1/dashboard/overview?years=2026&modules=PERSONNEL", headers=admin).json()
