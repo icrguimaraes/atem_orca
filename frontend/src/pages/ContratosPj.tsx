@@ -10,7 +10,8 @@ import "./pj.css";
 
 /* Contratos PJ (confidencial): prestadores contratados como pessoa jurídica — valores, bonificação anual e devida no
    ano, tempo de casa, foto. Só para quem tem "Vê contratos PJ" (Usuários); "Da área" vê só os CCs das áreas dos próprios
-   CCs. Toda consulta e alteração vai para a auditoria, sem os valores. */
+   CCs. Toda consulta e alteração vai para a auditoria, sem os valores. Nada é obrigatório para salvar: campos
+   importantes vazios (`missing` da API) aparecem como "Falta preencher" na lista e "Precisa preencher" no formulário. */
 
 const THIS_YEAR = new Date().getFullYear();
 
@@ -94,6 +95,11 @@ function BonusRule({ year }: { year: number }) {
 
 const months = (n: number) => `${n} ${n === 1 ? "mês" : "meses"}`;
 
+/** Nota discreta sob um campo importante vazio (não bloqueia o salvamento). */
+function NeedsFill({ show, children = "Precisa preencher" }: { show: boolean; children?: ReactNode }) {
+  return show ? <span className="field-warn">{children}</span> : null;
+}
+
 export default function ContratosPj() {
   const { user } = useAuth();
   const areaOnly = user?.pj_access !== "ALL";
@@ -101,6 +107,7 @@ export default function ContratosPj() {
   const [status, setStatus] = usePersistentState("pj.status", "");
   const [cc, setCc] = usePersistentState("pj.cc", "");
   const [search, setSearch] = usePersistentState("pj.q", "");
+  const [pending, setPending] = usePersistentState("pj.pending", ""); // "1" = só com pendência
   const [privacy, setPrivacy] = usePersistentState("pj.privacy", false);
   const q = useDebounced(search.trim());
   const [editing, setEditing] = useState<PjContract | "new" | null>(null);
@@ -110,11 +117,11 @@ export default function ContratosPj() {
   const photos = useLoad(() => api<Record<string, string>>("/pj/photos"));
   const { data, error, reload, loading } = useLoad(async () => {
     const [list, summary] = await Promise.all([
-      api<PjList>(`/pj${query({ year, status, cost_center_id: cc, q })}`),
+      api<PjList>(`/pj${query({ year, status, cost_center_id: cc, q, pending: pending ? "true" : "" })}`),
       api<PjSummary>(`/pj/summary${query({ year, cost_center_id: cc, q })}`),
     ]);
     return { list, summary };
-  }, [year, status, cc, q]);
+  }, [year, status, cc, q, pending]);
 
   const years = useMemo(() => {
     const list = Array.from({ length: 6 }, (_, i) => THIS_YEAR + 1 - i);
@@ -131,7 +138,7 @@ export default function ContratosPj() {
 
   const s = data?.summary;
   const items = data?.list.items ?? [];
-  const activeFilters = (status ? 1 : 0) + (cc ? 1 : 0) + (q ? 1 : 0);
+  const activeFilters = (status ? 1 : 0) + (cc ? 1 : 0) + (q ? 1 : 0) + (pending ? 1 : 0);
   const ccLabel = (c: PjOptions["cost_centers"][number]) => `${c.code} · ${c.name}${c.department ? ` (${c.department})` : ""}`;
 
   return (
@@ -167,8 +174,30 @@ export default function ContratosPj() {
 
       <div className="stack-lg">
         <div className="stats pj-stats">
-          <Stat label="Contratos ativos" value={s ? fmtInt(s.active) : "—"} hint={s ? `${fmtInt(s.ended)} encerrado${s.ended === 1 ? "" : "s"}` : undefined} />
-          <Stat label="Total mensal" value={<span className="sens">{s ? fmtMoney(s.monthly_total) : "—"}</span>} hint="contratos ativos" />
+          <Stat
+            label="Contratos ativos"
+            value={s ? fmtInt(s.active) : "—"}
+            hint={
+              s ? (
+                <>
+                  {fmtInt(s.ended)} encerrado{s.ended === 1 ? "" : "s"}
+                  {s.pending > 0 && <span className="pj-warn-text"> · {fmtInt(s.pending)} com pendência</span>}
+                </>
+              ) : undefined
+            }
+          />
+          <Stat
+            label="Total mensal"
+            value={<span className="sens">{s ? fmtMoney(s.monthly_total) : "—"}</span>}
+            hint={
+              <>
+                contratos ativos
+                {s && s.monthly_missing > 0 && (
+                  <span className="pj-warn-text"> · {fmtInt(s.monthly_missing)} sem valor (conta zero)</span>
+                )}
+              </>
+            }
+          />
           <Stat label="Bonificação anual" value={<span className="sens">{s ? fmtMoney(s.annual_bonus_total) : "—"}</span>} hint="contratos ativos" />
           <Stat
             label={`Bonificação devida em ${year}`}
@@ -203,9 +232,19 @@ export default function ContratosPj() {
                     ...(options.data?.cost_centers ?? []).map((c) => ({ value: String(c.id), label: ccLabel(c) })),
                   ],
                 },
+                {
+                  key: "pending",
+                  label: "Preenchimento",
+                  value: pending,
+                  onChange: setPending,
+                  options: [
+                    { value: "", label: "Todos os contratos" },
+                    { value: "1", label: `Com pendência${s ? ` (${fmtInt(s.pending)})` : ""}` },
+                  ],
+                },
               ]}
               extra={<SearchBox value={search} onChange={setSearch} placeholder="Buscar nome, empresa ou CNPJ" />}
-              onReset={() => { setStatus(""); setCc(""); setSearch(""); }}
+              onReset={() => { setStatus(""); setCc(""); setSearch(""); setPending(""); }}
               resetCount={activeFilters}
             />
             <BonusRule year={year} />
@@ -243,13 +282,18 @@ export default function ContratosPj() {
                             type="button"
                             className="pj-person"
                             onClick={(e) => { e.stopPropagation(); setEditing(c); }}
-                            aria-label={`Editar o contrato de ${c.name}`}
+                            aria-label={`Editar o contrato de ${c.name ?? "pessoa sem nome"}`}
                           >
                             <Avatar src={c.has_photo ? photos.data?.[String(c.id)] : undefined} blurred={c.photo_blurred} />
                             <span className="pj-person-text">
-                              <strong className="pii">{c.name}</strong>
-                              <span className="muted small pii">{c.company_name}</span>
-                              <span className="muted small pii nowrap">{c.cnpj_formatted}</span>
+                              {c.name ? <strong className="pii">{c.name}</strong> : <strong className="muted">Sem nome</strong>}
+                              {c.company_name && <span className="muted small pii">{c.company_name}</span>}
+                              {c.cnpj_formatted && <span className="muted small pii nowrap">{c.cnpj_formatted}</span>}
+                              {c.missing.length > 0 && (
+                                <span className="badge badge-warn pj-missing" title="Campos importantes ainda vazios">
+                                  Falta preencher: {c.missing.join(", ")}
+                                </span>
+                              )}
                             </span>
                           </button>
                         </td>
@@ -261,11 +305,11 @@ export default function ContratosPj() {
                           </div>
                         </td>
                         <td data-label="Admissão">
-                          <span className="nowrap">{fmtDay(c.start_date)}</span>
-                          <div className="muted small">{fmtTenure(c.tenure)}</div>
+                          <span className="nowrap">{c.start_date ? fmtDay(c.start_date) : "—"}</span>
+                          {c.tenure && <div className="muted small">{fmtTenure(c.tenure)}</div>}
                           {c.end_date && <div className="muted small">término {fmtDay(c.end_date)}</div>}
                         </td>
-                        <td data-label="Mensal" className="right nowrap"><span className="sens">{fmtMoney(c.monthly_value)}</span></td>
+                        <td data-label="Mensal" className="right nowrap"><span className="sens">{c.monthly_value ? fmtMoney(c.monthly_value) : "—"}</span></td>
                         <td data-label="Bonif. anual" className="right nowrap">
                           <span className="sens">{c.annual_bonus ? fmtMoney(c.annual_bonus) : "—"}</span>
                         </td>
@@ -314,7 +358,7 @@ function toDraft(c: PjContract | null): Draft {
   return {
     name: c?.name ?? "",
     company_name: c?.company_name ?? "",
-    cnpj: c ? c.cnpj_formatted : "",
+    cnpj: c?.cnpj_formatted ?? "",
     role: c?.role ?? "",
     cost_center_id: c?.cost_center_id ? String(c.cost_center_id) : "",
     email: c?.email ?? "",
@@ -355,9 +399,10 @@ function ContractModal({ contract, year, options, areaOnly, photo, onClose, onSa
   const monthly = parseMoney(draft.monthly_value);
   const bonus = parseMoney(draft.annual_bonus);
   const invalidMoney = monthly === undefined || bonus === undefined;
-  const valid =
-    draft.name.trim() && draft.company_name.trim() && draft.cnpj.trim() && monthly && draft.start_date && !invalidMoney &&
-    (!areaOnly || draft.cost_center_id); // com acesso "Da área", o centro de custo é obrigatório
+  // nada é obrigatório; só o escopo: com acesso "Da área", sem CC a pessoa deixaria de ver o contrato depois de salvar
+  const needsCc = areaOnly && !draft.cost_center_id;
+  const valid = !invalidMoney && !needsCc;
+  const empty = (v: string) => !v.trim();
   const shownPhoto = pending?.url ?? (hasPhoto ? current : undefined);
 
   useEffect(() => () => {
@@ -412,9 +457,9 @@ function ContractModal({ contract, year, options, areaOnly, photo, onClose, onSa
     setBusy(true);
     setError(null);
     const body: PjBody = {
-      name: draft.name.trim(),
-      company_name: draft.company_name.trim(),
-      cnpj: draft.cnpj.trim(),
+      name: orNull(draft.name),
+      company_name: orNull(draft.company_name),
+      cnpj: orNull(draft.cnpj),
       role: orNull(draft.role),
       cost_center_id: draft.cost_center_id ? Number(draft.cost_center_id) : null,
       email: orNull(draft.email),
@@ -479,12 +524,23 @@ function ContractModal({ contract, year, options, areaOnly, photo, onClose, onSa
           )}
           <span className="pj-spacer" />
           <button type="button" className="btn btn-ghost" onClick={close}>Cancelar</button>
-          <button type="button" className="btn btn-primary" disabled={!valid || busy} onClick={save}>{busy ? "Salvando…" : "Salvar"}</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!valid || busy}
+            onClick={save}
+            title={needsCc ? "Escolha o centro de custo (da sua área) para salvar" : undefined}
+          >
+            {busy ? "Salvando…" : "Salvar"}
+          </button>
         </div>
       }
     >
       <div className="stack pj-form">
         {error && <Alert>{error}</Alert>}
+        <p className="muted small pj-form-note">
+          Nenhum campo é obrigatório: salve com o que tiver. O que faltar fica marcado como pendência na lista.
+        </p>
 
         <div className="pj-photo">
           <Avatar src={shownPhoto} blurred={draft.photo_blurred} />
@@ -521,15 +577,28 @@ function ContractModal({ contract, year, options, areaOnly, photo, onClose, onSa
         </div>
 
         <div className="form-row">
-          <label>Nome da pessoa<input className="pii" value={draft.name} maxLength={200} onChange={(e) => set("name", e.target.value)} autoFocus={creating} /></label>
-          <label>Razão social<input className="pii" value={draft.company_name} maxLength={200} onChange={(e) => set("company_name", e.target.value)} /></label>
+          <label>
+            Nome da pessoa
+            <input className="pii" value={draft.name} maxLength={200} onChange={(e) => set("name", e.target.value)} autoFocus={creating} />
+            <NeedsFill show={empty(draft.name)} />
+          </label>
+          <label>
+            Razão social
+            <input className="pii" value={draft.company_name} maxLength={200} onChange={(e) => set("company_name", e.target.value)} />
+            <NeedsFill show={empty(draft.company_name)} />
+          </label>
         </div>
         <div className="form-row">
           <label>
             CNPJ
             <input className="pii" inputMode="text" autoComplete="off" placeholder="00.000.000/0000-00" value={draft.cnpj} onChange={(e) => set("cnpj", maskCnpj(e.target.value))} />
+            <NeedsFill show={empty(draft.cnpj)} />
           </label>
-          <label>Função<input value={draft.role} maxLength={150} placeholder="Ex.: Consultor tributário" onChange={(e) => set("role", e.target.value)} /></label>
+          <label>
+            Função
+            <input value={draft.role} maxLength={150} placeholder="Ex.: Consultor tributário" onChange={(e) => set("role", e.target.value)} />
+            <NeedsFill show={empty(draft.role)} />
+          </label>
         </div>
         <div className="form-row">
           <label>
@@ -542,17 +611,29 @@ function ContractModal({ contract, year, options, areaOnly, photo, onClose, onSa
                 </option>
               ))}
             </select>
+            {needsCc ? (
+              <NeedsFill show>
+                Precisa preencher para salvar: com o seu acesso “Da área”, o contrato precisa de um CC da sua área (sem
+                ele, você deixaria de ver o contrato).
+              </NeedsFill>
+            ) : (
+              <NeedsFill show={!draft.cost_center_id} />
+            )}
             <span className="muted small">A área e o setor vêm do cadastro do centro de custo.</span>
           </label>
           <label>E-mail (opcional)<input className="pii" type="email" autoComplete="off" value={draft.email} onChange={(e) => set("email", e.target.value)} /></label>
         </div>
         <div className="form-row">
           <label>Telefone (opcional)<input className="pii" type="tel" autoComplete="off" value={draft.phone} maxLength={30} onChange={(e) => set("phone", e.target.value)} /></label>
-          <MoneyInput label="Valor mensal do contrato" value={draft.monthly_value} onChange={(v) => set("monthly_value", v)} />
+          <MoneyInput label="Valor mensal do contrato" value={draft.monthly_value} onChange={(v) => set("monthly_value", v)} needed />
           <MoneyInput label="Bonificação anual (opcional)" value={draft.annual_bonus} onChange={(v) => set("annual_bonus", v)} />
         </div>
         <div className="form-row">
-          <label>Data de admissão<input type="date" value={draft.start_date} onChange={(e) => set("start_date", e.target.value)} /></label>
+          <label>
+            Data de admissão
+            <input type="date" value={draft.start_date} onChange={(e) => set("start_date", e.target.value)} />
+            <NeedsFill show={!draft.start_date} />
+          </label>
           <label>
             Data de término (opcional)
             <input type="date" value={draft.end_date} min={draft.start_date || undefined} onChange={(e) => set("end_date", e.target.value)} />
@@ -564,7 +645,7 @@ function ContractModal({ contract, year, options, areaOnly, photo, onClose, onSa
         {contract && (
           <dl className="kv pj-calc">
             <dt>Tempo de casa</dt>
-            <dd>{fmtTenure(contract.tenure)}</dd>
+            <dd>{contract.tenure ? fmtTenure(contract.tenure) : <span className="muted">sem data de admissão</span>}</dd>
             <dt>Bonificação devida em {year}</dt>
             <dd>
               <span className="sens">{fmtMoney(contract.bonus.due)}</span>
@@ -583,7 +664,7 @@ function ContractModal({ contract, year, options, areaOnly, photo, onClose, onSa
       {dialog === "archive" && contract && (
         <ConfirmModal title="Arquivar contrato" confirmLabel="Arquivar" onClose={() => setDialog(null)} onConfirm={archive}>
           <p>
-            O contrato de <strong className="pii">{contract.name}</strong> sai da lista e dos totais. O registro continua na
+            O contrato de <strong className="pii">{contract.name ?? "pessoa sem nome"}</strong> sai da lista e dos totais. O registro continua na
             auditoria.
           </p>
           <p className="muted small">Para registrar o fim do contrato (e manter o histórico na lista), use a data de término.</p>
@@ -594,7 +675,9 @@ function ContractModal({ contract, year, options, areaOnly, photo, onClose, onSa
 }
 
 /** Valor em R$: digita "12.345,67"; vai para a API como string decimal. */
-function MoneyInput({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function MoneyInput({ label, value, onChange, needed = false }: {
+  label: string; value: string; onChange: (v: string) => void; needed?: boolean; // needed = campo importante (nota se vazio)
+}) {
   const invalid = parseMoney(value) === undefined;
   return (
     <label>
@@ -613,6 +696,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: string; 
         }}
       />
       {invalid && <span className="field-error">Valor inválido. Ex.: 12.345,67</span>}
+      <NeedsFill show={needed && !value.trim()} />
     </label>
   );
 }

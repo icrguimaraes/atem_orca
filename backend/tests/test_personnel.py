@@ -673,3 +673,25 @@ def test_premises_frozen_version_is_read_only(client, admin, run_worker):
     assert client.post("/api/v1/personnel/premises/remove-overlap", headers=admin).status_code == 409
     items = client.get("/api/v1/findings", headers=admin).json()["items"]
     assert not any(i["kind"] == "PERSONNEL_SPLIT_OVERLAP" for i in items)
+
+
+def test_bonus_by_cc_counts_once_when_code_exists_in_two_companies(client, admin, run_worker):
+    """O mesmo código de CC em duas empresas (ex.: criado na REAM pela importação do realizado) não duplica o bônus:
+    fica com o CC da empresa de menor código."""
+    ccs, _mgr, _final = _setup(client, admin, run_worker)
+    companies = client.get("/api/v1/companies", headers=admin).json()
+    cc1_company = ccs[CC1]["company_id"]
+    other = next(c for c in companies if c["id"] != cc1_company)
+    dup = client.post(
+        "/api/v1/cost-centers",
+        headers=admin,
+        json={"company_id": other["id"], "code": CC1, "name": "Cópia REAM"},
+    )
+    assert dup.status_code in (200, 201), dup.text
+    before = client.get("/api/v1/consolidation/overview", headers=admin).json()["modules"]["PERSONNEL"]["proposed"]
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+    client.put(
+        f"/api/v1/cycles/{cycle_id}/parameters/personnel.bonus_by_cc", headers=admin, json={"value": {CC1: 1200}}
+    )
+    after = client.get("/api/v1/consolidation/overview", headers=admin).json()["modules"]["PERSONNEL"]["proposed"]
+    assert Decimal(after) - Decimal(before) == Decimal("1200.00")

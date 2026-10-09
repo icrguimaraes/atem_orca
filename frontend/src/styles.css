@@ -1089,3 +1089,13 @@ tr.saving { opacity: 0.6; }
 /* busca: o campo some na caixa (sem a borda e o contorno dos inputs comuns) */
 .palette-search input, .palette-search input:focus { border: 0; outline: 0; min-height: 0; width: auto; }
 .rank-stats { margin-bottom: 4px; }
+/* critérios do orçamento (Painel) */
+.criteria-list { margin: 8px 0 0; display: grid; gap: 0; }
+.criteria-row { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 4px 20px; padding: 10px 0; border-top: 1px solid var(--border); }
+.criteria-row:first-child { border-top: 0; }
+.criteria-row dt { font-weight: 700; }
+.criteria-row dd { margin: 0; color: var(--text); }
+.criteria-edit { display: grid; grid-template-columns: minmax(140px, 220px) 1fr auto; gap: 8px; align-items: start; }
+@media (max-width: 860px) {
+  .criteria-row, .criteria-edit { grid-template-columns: 1fr; }
+}

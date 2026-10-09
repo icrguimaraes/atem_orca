@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api, type Breakdown, type BreakdownRow, type Company, type CostCenter, type Cycle, type Department, type Overview, type Package } from "../api";
 import { useAuth } from "../auth";
 import { BudgetProgressCard } from "../components/BudgetProgressCard";
+import { CriteriaCard } from "../components/CriteriaCard";
 import { ManagerTasks, PackageReviews, PainelBase, QuestionsInbox } from "../components/PainelBlocks";
 import { FilterBar } from "../components/FilterBar";
 import { DrillTable } from "../components/DrillTable";
@@ -571,6 +572,7 @@ export default function Painel2() {
           </div>
         </div>
       )}
+      <CriteriaCard />
       {o?.budget_progress && o.budget_progress.total_cost_centers > 0 && <BudgetProgressCard progress={o.budget_progress} figures={f ? { rank: f.budget_progress, total: f.budget_progress_total } : undefined} />}
       <PainelBase />
     </>

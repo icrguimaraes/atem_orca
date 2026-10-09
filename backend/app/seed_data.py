@@ -343,13 +343,35 @@ CYCLE_PARAMETERS = {
     ),
     "travel.flat_estimate": (4000, "Passagem estimada: valor fixo por viagem (R$) quando não houver rota"),
     "capex.min_unit_value": (1200, "Valor unitário mínimo para enquadramento como CAPEX"),
+    # resumo de critérios da versão (09/10/2026, pedido da gestora): só informativo, no Painel
+    "budget.criteria": (
+        [
+            {
+                "item": "Passagens",
+                "texto": "Valor sujeito a alteração: consideramos uma projeção, mas o valor final será definido pelo "
+                "gestor do pacote de viagens.",
+            },
+            {
+                "item": "Pessoal",
+                "texto": "Salário + dissídio de 5% × 1,8 de encargos e benefícios. O valor final será enviado pelo "
+                "time de RH posteriormente.",
+            },
+            {"item": "Valores rescisórios", "texto": "Não considerados ainda nesta versão."},
+            {"item": "Abono sindical", "texto": "Considerado R$ 2.500 por pessoa (CLT) no ano, em 12 parcelas."},
+            {
+                "item": "Bônus anual",
+                "texto": "Mesmo valor pago em 2026 + 5% de dissídio, diluído de janeiro a dezembro.",
+            },
+        ],
+        "Critérios do orçamento (informativo, no Painel): lista de {item, texto}",
+    ),
     "capex.min_useful_life_months": (12, "Vida útil mínima (meses) para CAPEX"),
     "personnel.salary_adjustment_pct": (0.05, "Premissa de reajuste salarial (template Pessoal, E9)"),
     "personnel.adjustment_month": (1, "Mês de aplicação do reajuste (data-base)"),
     # Consolidação: contas em que o custo de pessoal é lançado (confirmar com a contabilidade)
     "personnel.salary_account": (6010101001, "Conta do salário (com reajuste) na consolidação e na carga SAP"),
     "personnel.charges_account": (6010102001, "Conta de encargos e benefícios (parte do multiplicador)"),
-    "personnel.severance_account": (6010101010, "Conta das verbas rescisórias"),
+    "personnel.severance_account": (6010101014, "Conta das verbas rescisórias (Aviso Prév/Indeniz)"),
     # abono anual do CLT (09/10/2026): ~R$ 2.500 por colaborador no ano, em 12 parcelas, sem multiplicador
     "personnel.annual_bonus_clt": (2500, "Abono anual por colaborador CLT (R$/ano, diluído em 12 parcelas)"),
     "personnel.annual_bonus_account": (6010101009, "Conta do abono anual do CLT (Gratificações/Premiações)"),

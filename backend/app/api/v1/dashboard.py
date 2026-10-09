@@ -10,11 +10,11 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_user, require_roles, visible_cost_center_ids
+from app.core.deps import client_ip, get_current_user, require_roles, visible_cost_center_ids
 from app.db import get_db
 from app.models import (
     Account,
@@ -25,6 +25,7 @@ from app.models import (
     Company,
     ContractType,
     CostCenter,
+    CycleParameter,
     DatasetVersion,
     Department,
     Employee,
@@ -1389,3 +1390,45 @@ def _progress_by_package(db: Session, f: Facts, ref: int) -> dict:
 
 def _last_closed_company(db: Session, year: int, company_code: str | None) -> int | None:
     return opex_svc.closed_period(db, year, company_code) if company_code else None
+
+
+# ------------------------------------------------------------------ critérios da versão (informativo)
+
+MAX_CRITERIA = 30
+
+
+def _criteria_items(raw) -> list[dict]:
+    items = []
+    for it in raw if isinstance(raw, list) else []:
+        if isinstance(it, dict) and (str(it.get("item") or "").strip() or str(it.get("texto") or "").strip()):
+            items.append({"item": str(it.get("item") or "").strip(), "texto": str(it.get("texto") or "").strip()})
+    return items
+
+
+@router.get("/criteria", summary="Critérios do orçamento da versão (informativo, parâmetro budget.criteria)")
+def criteria(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
+    if cycle is None:
+        return {"target_year": None, "items": []}
+    param = db.get(CycleParameter, (cycle.id, "budget.criteria"))
+    return {"target_year": cycle.fiscal_year, "items": _criteria_items(param.value if param else [])}
+
+
+@router.put("/criteria", summary="Edita os critérios do orçamento (Controladoria; auditado)")
+def set_criteria(
+    request: Request,
+    items: list[dict] = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(Role.CONTROLLER)),
+):
+    from app.api.v1.cycles import apply_parameter
+
+    cycle = db.scalar(select(BudgetCycle).order_by(BudgetCycle.fiscal_year.desc()))
+    if cycle is None:
+        raise HTTPException(404, "Nenhum ciclo cadastrado")
+    clean = _criteria_items(items)
+    if len(clean) > MAX_CRITERIA or any(len(i["item"]) > 80 or len(i["texto"]) > 600 for i in clean):
+        raise HTTPException(422, "Critérios: até 30 itens, título com até 80 e texto com até 600 caracteres")
+    apply_parameter(db, cycle.id, "budget.criteria", clean, user_id=actor.id, ip=client_ip(request))
+    db.commit()
+    return {"target_year": cycle.fiscal_year, "items": clean}

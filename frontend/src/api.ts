@@ -90,17 +90,19 @@ export interface User {
 
 // ---------------------------------------------------------------- Contratos PJ (confidencial; /pj)
 
+/** Nada é obrigatório: campos vazios vêm null e os importantes listados em `missing` ("Falta preencher"). */
 export interface PjContract {
-  id: number; name: string; company_name: string; cnpj: string; cnpj_formatted: string; role: string | null;
-  cost_center_id: number | null; cost_center: string | null; department: string | null; sector: string | null;
-  email: string | null; phone: string | null; monthly_value: string; annual_bonus: string | null;
-  start_date: string; end_date: string | null; status: "ACTIVE" | "ENDED"; notes: string | null;
-  has_photo: boolean; photo_blurred: boolean; tenure: { years: number; months: number };
-  bonus: { year: number; months: number; due: string };
+  id: number; name: string | null; company_name: string | null; cnpj: string | null; cnpj_formatted: string | null;
+  role: string | null; cost_center_id: number | null; cost_center: string | null; department: string | null;
+  sector: string | null; email: string | null; phone: string | null; monthly_value: string | null;
+  annual_bonus: string | null; start_date: string | null; end_date: string | null; status: "ACTIVE" | "ENDED";
+  notes: string | null; has_photo: boolean; photo_blurred: boolean; tenure: { years: number; months: number } | null;
+  bonus: { year: number; months: number; due: string }; missing: string[];
 }
 export interface PjList { year: number; items: PjContract[] }
 export interface PjSummary {
   year: number; active: number; ended: number; monthly_total: string; annual_bonus_total: string; bonus_due_total: string;
+  monthly_missing: number; pending: number; // ativos sem valor mensal (somam zero) · contratos com pendência
 }
 export interface PjOptions {
   all: boolean;
@@ -108,7 +110,7 @@ export interface PjOptions {
 }
 /** Corpo de POST/PATCH /pj: datas "AAAA-MM-DD", valores em string decimal ("12345.67"). */
 export interface PjBody {
-  name: string; company_name: string; cnpj: string; role: string | null; cost_center_id: number | null;
+  name: string | null; company_name: string | null; cnpj: string | null; role: string | null; cost_center_id: number | null;
   email: string | null; phone: string | null; monthly_value: string | null; annual_bonus: string | null;
   start_date: string | null; end_date: string | null; notes: string | null; photo_blurred: boolean;
 }

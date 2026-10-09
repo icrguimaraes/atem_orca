@@ -337,6 +337,27 @@ def cc_bonus_series(ctx: Context, cc_code: str | None) -> list[Decimal]:
     return out
 
 
+def bonus_owners(db: Session, ctx: Context) -> dict[int, str]:
+    """CC que recebe o bônus de cada código do parâmetro (id → código). O mesmo código pode existir em mais de
+    uma empresa (ex.: 1050101001 na ATEM e na REAM, criado pela importação do realizado): fica com o CC da empresa
+    de menor código (a ATEM, 1001) — o bônus nunca é contado duas vezes."""
+    codes = set((ctx.params.get("personnel.bonus_by_cc") or {}).keys())
+    if not codes:
+        return {}
+    best: dict[str, tuple[str, int]] = {}
+    for cc in db.scalars(select(CostCenter).where(CostCenter.code.in_(codes))):
+        key = (cc.company.code if cc.company else "~", cc.id)
+        if cc.code not in best or key < best[cc.code]:
+            best[cc.code] = key
+    return {cc_id: code for code, (_company, cc_id) in best.items()}
+
+
+def cc_bonus_for(db: Session, ctx: Context, cc_id: int | None, owners: dict[int, str] | None = None) -> list[Decimal]:
+    """Série do bônus do CC (zero se o CC não é o dono do código no parâmetro)."""
+    owners = bonus_owners(db, ctx) if owners is None else owners
+    return cc_bonus_series(ctx, owners.get(cc_id)) if cc_id in owners else [ZERO] * 12
+
+
 def add_cc_bonus(t: Totals, series: list[Decimal]) -> Totals:
     """Soma o bônus do CC nos totais (custo mensal e série própria)."""
     for i, v in enumerate(series):
@@ -480,8 +501,7 @@ def submission_view(db: Session, ctx: Context, sub: BudgetSubmission) -> dict:
     scenario = baseline(db, ctx)
     positions = build_positions(db, ctx, {sub.cost_center_id}).get(sub.cost_center_id, [])
     cc_names = {c.id: f"{c.code} · {c.name}" for c in db.scalars(select(CostCenter))}
-    cc = db.get(CostCenter, sub.cost_center_id)
-    totals = add_cc_bonus(totals_for(positions, scenario), cc_bonus_series(ctx, cc.code if cc else None))
+    totals = add_cc_bonus(totals_for(positions, scenario), cc_bonus_for(db, ctx, sub.cost_center_id))
     actual = personnel_actual(db, ctx, {sub.cost_center_id}).get(sub.cost_center_id) or {
         "prev": ZERO,
         "ref_ytd": ZERO,

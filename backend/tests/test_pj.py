@@ -1,5 +1,6 @@
-"""Contratos PJ: acesso só com "Vê contratos PJ", escopo "Da área" por centro de custo, validação, CRUD com auditoria
-sem valores, fotos, indicadores e a migração 0009 (up/down sem drift)."""
+"""Contratos PJ: acesso só com "Vê contratos PJ", escopo "Da área" por centro de custo, validação (nada obrigatório,
+pendências em `missing`), CRUD com auditoria sem valores, fotos, indicadores e as migrações 0009/0011 (up/down sem
+drift)."""
 
 import io
 import json
@@ -176,21 +177,18 @@ def test_validation_messages(client, pj_admin):
     def post(**extra):
         return client.post("/api/v1/pj", headers=pj_admin, json=contract(**extra))
 
+    # formato continua validado quando há valor
     assert post(cnpj="11.222.333/0001-82").json()["detail"] == "CNPJ inválido"
-    assert post(cnpj="").json()["detail"] == "CNPJ inválido"
+    assert post(cnpj="123").json()["detail"] == "CNPJ inválido"
     assert post(monthly_value="-1").json()["detail"] == "Valor mensal não pode ser negativo"
     assert post(annual_bonus="-0.01").json()["detail"] == "Valor da bonificação não pode ser negativo"
     assert post(monthly_value="abc").json()["detail"] == "Valor mensal inválido"
-    assert post(monthly_value=None).json()["detail"] == "Informe o valor mensal do contrato"
     assert post(end_date="2020-06-19").json()["detail"] == "A data de término não pode ser anterior à admissão"
     assert post(start_date="2026-02-30").json()["detail"] == "Data de admissão inválida"
-    assert post(start_date=None).json()["detail"] == "Informe a data de admissão"
-    assert post(name="  ").json()["detail"] == "Informe o nome da pessoa"
     assert post(email="sem-arroba").json()["detail"] == "E-mail inválido"
+    assert post(phone="abc").json()["detail"] == "Telefone inválido"
+    assert post(name="x" * 201).json()["detail"] == "O nome da pessoa: no máximo 200 caracteres"
     assert post(cost_center_id=999).json()["detail"] == "Centro de custo não encontrado"
-    body = contract()
-    del body["company_name"]
-    assert client.post("/api/v1/pj", headers=pj_admin, json=body).json()["detail"] == "Informe a razão social"
     assert client.get("/api/v1/pj", headers=pj_admin).json()["items"] == []
     # CNPJ alfanumérico aceito; CNPJ repetido não é bloqueado (decisão)
     assert post(cnpj="12.ABC.345/01DE-35").status_code == 201
@@ -199,6 +197,70 @@ def test_validation_messages(client, pj_admin):
         "12.ABC.345/01DE-35",
         "12.ABC.345/01DE-35",
     ]
+
+
+def test_nothing_is_required_and_missing_fields_are_flagged(client, pj_admin):
+    st = make_structure(client, pj_admin)
+    # sem nada: salva e devolve todas as pendências
+    empty = client.post("/api/v1/pj", headers=pj_admin, json={})
+    assert empty.status_code == 201, empty.text
+    item = empty.json()
+    assert item["missing"] == [
+        "Nome da pessoa",
+        "Razão social",
+        "CNPJ",
+        "Função",
+        "Centro de custo",
+        "Valor mensal",
+        "Data de admissão",
+    ]
+    assert (item["name"], item["cnpj"], item["cnpj_formatted"], item["monthly_value"]) == (None, None, None, None)
+    assert item["start_date"] is None and item["tenure"] is None and item["status"] == "ACTIVE"
+    assert item["bonus"] == {"year": 2026, "months": 0, "due": "0.00"}
+
+    # só o nome; vazios explícitos ("", "  ", null) também passam
+    only_name = client.post(
+        "/api/v1/pj",
+        headers=pj_admin,
+        json={"name": "SO O NOME", "company_name": "  ", "cnpj": "", "monthly_value": None, "start_date": ""},
+    )
+    assert only_name.status_code == 201, only_name.text
+    assert "Nome da pessoa" not in only_name.json()["missing"] and "CNPJ" in only_name.json()["missing"]
+    cid = only_name.json()["id"]
+
+    # completo: sem pendência; esvaziar um campo na edição volta a ser pendência (e não é recusado)
+    full = client.post("/api/v1/pj", headers=pj_admin, json=contract(7, cost_center_id=st["ccs"]["9001"]))
+    assert full.status_code == 201 and full.json()["missing"] == []
+    full_id = full.json()["id"]
+    upd = client.patch(f"/api/v1/pj/{full_id}", headers=pj_admin, json={"cnpj": "", "monthly_value": ""})
+    assert upd.status_code == 200, upd.text
+    assert upd.json()["missing"] == ["CNPJ", "Valor mensal"] and upd.json()["cnpj"] is None
+    assert client.patch(f"/api/v1/pj/{cid}", headers=pj_admin, json={"cnpj": "11.222.333/0001-82"}).status_code == 422
+
+    # totais: valor mensal vazio soma zero; contadores de pendência e filtro "Com pendência"
+    other = client.post("/api/v1/pj", headers=pj_admin, json=contract(8, cost_center_id=st["ccs"]["9001"]))
+    assert other.json()["missing"] == []
+    s = client.get("/api/v1/pj/summary", headers=pj_admin, params={"year": 2026}).json()
+    assert s["active"] == 4 and s["monthly_total"] == "10000.00"  # só o contrato 8 tem valor
+    assert s["monthly_missing"] == 3 and s["pending"] == 3
+    pending = client.get("/api/v1/pj", headers=pj_admin, params={"pending": "true"}).json()["items"]
+    assert len(pending) == 3 and other.json()["id"] not in {i["id"] for i in pending}
+    # busca por CNPJ com contratos sem CNPJ
+    found = client.get("/api/v1/pj", headers=pj_admin, params={"q": fake_cnpj(8)[:6]}).json()["items"]
+    assert [i["id"] for i in found] == [other.json()["id"]]
+
+    # Excel com vazios e a coluna "Falta preencher"
+    from openpyxl import load_workbook
+
+    xlsx = client.get("/api/v1/pj/export.xlsx", headers=pj_admin, params={"year": 2026})
+    rows = list(load_workbook(io.BytesIO(xlsx.content)).active.iter_rows(values_only=True))
+    assert rows[0][-1] == "Falta preencher" and len(rows) == 5
+    no_name = next(r for r in rows[1:] if r[0] is None)
+    assert no_name[12] is None and no_name[9] is None and "CNPJ" in no_name[-1]
+
+    # auditoria continua sem valores em R$
+    logs = client.get("/api/v1/audit-logs", headers=pj_admin, params={"entity_type": "pj_contract"}).json()["items"]
+    assert "10000" not in json.dumps(logs)
 
 
 def test_crud_archive_and_audit_without_money(client, pj_admin):
@@ -291,6 +353,8 @@ def test_summary_filters_and_export(client, pj_admin):
         "monthly_total": "22000.00",  # 10000 + 5000 + 7000 (ativos)
         "annual_bonus_total": "18000.00",  # 12000 + 6000 (ativos)
         "bonus_due_total": "23000.00",  # 12000 + 5000 + 6000 (encerrado no ano conta até junho)
+        "monthly_missing": 0,
+        "pending": 0,  # todos completos (nome, empresa, CNPJ, função, CC, valor e admissão)
     }
     s2025 = client.get("/api/v1/pj/summary", headers=pj_admin, params={"year": 2025}).json()
     assert s2025["bonus_due_total"] == "24000.00"  # pessoas 1 e 3 o ano todo; 2 ainda não tinha entrado
@@ -429,7 +493,7 @@ def test_area_scope(client, pj_admin):
 # ---------------------------------------------------------------- migração
 
 
-def test_migration_0009_up_down_without_drift():
+def test_migrations_0009_0011_up_down_without_drift():
     from alembic.autogenerate import compare_metadata
     from alembic.config import Config
     from alembic.migration import MigrationContext
@@ -449,6 +513,18 @@ def test_migration_0009_up_down_without_drift():
         pj_diff = [d for d in diff if "pj_" in repr(d) or "can_view" in repr(d)]
         assert pj_diff == [], pj_diff
         assert diff == [], diff
+        # 0011 para baixo: vazios recebem '' / 0 / data de criação antes de voltar a NOT NULL
+        with engine.begin() as conn:
+            conn.execute(text("insert into pj_contracts default values"))
+        command.downgrade(cfg, "0010")
+        cols = {c["name"]: c["nullable"] for c in inspect(engine).get_columns("pj_contracts")}
+        assert not any(cols[c] for c in ("name", "company_name", "cnpj", "monthly_value", "start_date"))
+        with engine.connect() as conn:
+            row = conn.execute(text("select name, cnpj, monthly_value, start_date from pj_contracts")).one()
+        assert row[0] == "" and row[1] == "" and row[2] == 0 and row[3] is not None
+        command.upgrade(cfg, "0011")
+        cols = {c["name"]: c["nullable"] for c in inspect(engine).get_columns("pj_contracts")}
+        assert all(cols[c] for c in ("name", "company_name", "cnpj", "monthly_value", "start_date"))
         command.downgrade(cfg, "0008")
         insp = inspect(engine)
         assert "pj_contracts" not in insp.get_table_names() and "pj_photos" not in insp.get_table_names()

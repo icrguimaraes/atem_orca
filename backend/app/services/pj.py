@@ -5,6 +5,10 @@ Acesso: só quem tem `users.can_view_pj` (checado nas rotas por `core.deps.requi
 (`departments`) dos CCs da própria pessoa (gestor do CC + escopos atribuídos) — sempre, mesmo com perfil
 Administrador/Controladoria, que no Orçamento vê todos os CCs. Contrato sem CC só aparece em "Todos".
 Regras puras (CNPJ, situação, tempo de casa, bonificação proporcional) em `app/domain/rules/pj.py`.
+
+Nada é obrigatório para salvar (09/10/2026): campos importantes vazios saem em `missing` (rótulos pt-BR) e contam como
+pendência; valor mensal vazio soma zero nos totais. Formatos continuam validados quando há valor (CNPJ, e-mail etc.).
+A única exigência é de escopo: com "Da área", o contrato precisa de um CC da área (senão a pessoa deixaria de vê-lo).
 """
 
 import base64
@@ -106,7 +110,10 @@ def _check_scope(scope: Scope, contract: PjContract) -> None:
     if scope.all:
         return
     if contract.cost_center_id is None:
-        raise Invalid("Informe o centro de custo: o seu acesso aos contratos PJ é só aos CCs da sua área")
+        raise Invalid(
+            "Informe o centro de custo: com o acesso “Da área”, o contrato precisa de um CC da sua área "
+            "(sem ele, você deixaria de ver o contrato depois de salvar)"
+        )
     if contract.cost_center_id not in scope.cost_centers:
         raise Forbidden("Centro de custo fora da sua área: você só pode lançar contratos PJ dos CCs que enxerga")
 
@@ -185,10 +192,14 @@ class _Lookups:
         self.photos = set(db.scalars(select(PjPhoto.contract_id)))
 
 
+def _missing(c: PjContract) -> list[str]:
+    return R.missing_fields({attr: getattr(c, attr) for attr, _ in R.IMPORTANT_FIELDS})
+
+
 def _out(c: PjContract, year: int, today: date, lk: _Lookups) -> dict:
     months = R.bonus_months(c.start_date, c.end_date, year)
     until = min(today, c.end_date) if c.end_date else today
-    tenure = R.tenure(c.start_date, until)
+    tenure = R.tenure(c.start_date, until) if c.start_date else None
     cc = lk.ccs.get(c.cost_center_id) if c.cost_center_id else None
     return {
         "id": c.id,
@@ -205,18 +216,19 @@ def _out(c: PjContract, year: int, today: date, lk: _Lookups) -> dict:
         "phone": c.phone,
         "monthly_value": _money_str(c.monthly_value),
         "annual_bonus": _money_str(c.annual_bonus),
-        "start_date": c.start_date.isoformat(),
+        "start_date": c.start_date.isoformat() if c.start_date else None,
         "end_date": c.end_date.isoformat() if c.end_date else None,
         "status": R.status(c.end_date, today),
         "notes": c.notes,
         "has_photo": c.id in lk.photos,
         "photo_blurred": bool(c.photo_blurred),
-        "tenure": {"years": tenure.years, "months": tenure.months},
+        "tenure": {"years": tenure.years, "months": tenure.months} if tenure else None,
         "bonus": {
             "year": year,
             "months": months,
             "due": _money_str(R.bonus_due(c.annual_bonus, months)),
         },
+        "missing": _missing(c),  # campos importantes vazios ("Falta preencher")
     }
 
 
@@ -231,7 +243,7 @@ def _active_contracts(db: Session, scope: Scope, cost_center_id: int | None, q: 
         rows = [
             c
             for c in rows
-            if term in _norm(c.name) or term in _norm(c.company_name) or (len(digits) >= 3 and digits in c.cnpj)
+            if term in _norm(c.name) or term in _norm(c.company_name) or (len(digits) >= 3 and digits in (c.cnpj or ""))
         ]
     return rows
 
@@ -244,7 +256,9 @@ def list_contracts(
     status: str | None = None,
     cost_center_id: int | None = None,
     q: str | None = None,
+    pending: bool = False,
 ) -> dict:
+    """`pending=True`: só os contratos com campos importantes vazios ("Com pendência")."""
     today = _today()
     year = _year(year, today)
     if status not in (None, "", R.ACTIVE, R.ENDED):
@@ -253,6 +267,8 @@ def list_contracts(
     items = [_out(c, year, today, lk) for c in _active_contracts(db, scope_for(db, user), cost_center_id, q)]
     if status:
         items = [i for i in items if i["status"] == status]
+    if pending:
+        items = [i for i in items if i["missing"]]
     items.sort(key=lambda i: (i["status"] != R.ACTIVE, _norm(i["name"])))
     log_pj_view(db, user)
     return {"year": year, "items": items}
@@ -262,7 +278,8 @@ def summary(
     db: Session, user: User, *, year: int | None = None, cost_center_id: int | None = None, q: str | None = None
 ) -> dict:
     """Indicadores do cabeçalho. Mensal e bonificação anual: contratos ativos hoje. Devida no ano: todos os
-    contratos com meses no ano de referência (inclui os encerrados durante o ano)."""
+    contratos com meses no ano de referência (inclui os encerrados durante o ano). Valor mensal vazio soma zero
+    (`monthly_missing` = ativos sem valor); `pending` = contratos com campos importantes vazios."""
     today = _today()
     year = _year(year, today)
     contracts = _active_contracts(db, scope_for(db, user), cost_center_id, q)
@@ -275,9 +292,11 @@ def summary(
         "year": year,
         "active": len(active),
         "ended": len(contracts) - len(active),
-        "monthly_total": _money_str(sum((c.monthly_value for c in active), Decimal("0.00"))),
+        "monthly_total": _money_str(sum((c.monthly_value or Decimal("0") for c in active), Decimal("0.00"))),
+        "monthly_missing": sum(1 for c in active if c.monthly_value is None),
         "annual_bonus_total": _money_str(sum((c.annual_bonus or Decimal("0") for c in active), Decimal("0.00"))),
         "bonus_due_total": _money_str(due),
+        "pending": sum(1 for c in contracts if _missing(c)),
     }
 
 
@@ -324,11 +343,10 @@ def _load(db: Session, scope: Scope, contract_id: int) -> PjContract:
 # ---------------------------------------------------------------- validação
 
 
-def _text(value: Any, max_len: int, label: str, *, required: bool = False) -> str | None:
+def _text(value: Any, max_len: int, label: str) -> str | None:
+    """Texto sem espaços sobrando; vazio → None (nada é obrigatório)."""
     text = re.sub(r"\s+", " ", str(value)).strip() if value is not None else ""
     if not text:
-        if required:
-            raise Invalid(f"Informe {label}")
         return None
     if len(text) > max_len:
         raise Invalid(f"{label[0].upper()}{label[1:]}: no máximo {max_len} caracteres")
@@ -368,9 +386,9 @@ def _apply(db: Session, c: PjContract, data: dict) -> None:
     if unknown:
         raise Invalid(f"Campo não editável: {', '.join(sorted(unknown))}")
     if "name" in data:
-        c.name = _text(data["name"], 200, "o nome da pessoa", required=True)
+        c.name = _text(data["name"], 200, "o nome da pessoa")
     if "company_name" in data:
-        c.company_name = _text(data["company_name"], 200, "a razão social", required=True)
+        c.company_name = _text(data["company_name"], 200, "a razão social")
     if "cnpj" in data:
         c.cnpj = R.normalize_cnpj(data["cnpj"])
     if "role" in data:
@@ -394,10 +412,7 @@ def _apply(db: Session, c: PjContract, data: dict) -> None:
             raise Invalid("Telefone inválido")
         c.phone = phone
     if "monthly_value" in data:
-        value = _money(data["monthly_value"], "Valor mensal")
-        if value is None:
-            raise Invalid("Informe o valor mensal do contrato")
-        c.monthly_value = value
+        c.monthly_value = _money(data["monthly_value"], "Valor mensal")
     if "annual_bonus" in data:
         c.annual_bonus = _money(data["annual_bonus"], "Valor da bonificação")
     if "start_date" in data:
@@ -414,14 +429,7 @@ def _apply(db: Session, c: PjContract, data: dict) -> None:
 
 
 def _validate(c: PjContract) -> None:
-    for attr, message in (
-        ("name", "Informe o nome da pessoa"),
-        ("company_name", "Informe a razão social"),
-        ("cnpj", "Informe o CNPJ"),
-        ("monthly_value", "Informe o valor mensal do contrato"),
-    ):
-        if getattr(c, attr) is None:
-            raise Invalid(message)
+    """Nada é obrigatório (vazio vira pendência em `missing`); só a coerência entre as datas preenchidas."""
     R.validate_dates(c.start_date, c.end_date)
 
 
@@ -593,6 +601,7 @@ def export_xlsx(db: Session, user: User, year: int | None, ip: str | None = None
             f"Meses em {year}",
             f"Bonificação devida em {year}",
             "Observação",
+            "Falta preencher",
         ]
     )
     for i in items:
@@ -607,14 +616,15 @@ def export_xlsx(db: Session, user: User, year: int | None, ip: str | None = None
                 i["sector"],
                 i["email"],
                 i["phone"],
-                date.fromisoformat(i["start_date"]),
+                date.fromisoformat(i["start_date"]) if i["start_date"] else None,
                 date.fromisoformat(i["end_date"]) if i["end_date"] else None,
                 "Ativo" if i["status"] == R.ACTIVE else "Encerrado",
-                Decimal(i["monthly_value"]),
+                Decimal(i["monthly_value"]) if i["monthly_value"] else None,
                 Decimal(i["annual_bonus"]) if i["annual_bonus"] else None,
                 i["bonus"]["months"],
                 Decimal(i["bonus"]["due"]),
                 i["notes"],
+                ", ".join(i["missing"]) or None,
             ]
         )
     for cell in ws[1]:

@@ -20,11 +20,37 @@ def test_cnpj_check_digits_and_normalization():
 
 @pytest.mark.parametrize(
     "value",
-    ["", None, "11.222.333/0001-82", "1122233300018", "112223330001811", "00000000000000", "11111111111111", "abc"],
+    ["11.222.333/0001-82", "1122233300018", "112223330001811", "00000000000000", "11111111111111", "abc"],
 )
 def test_invalid_cnpj(value):
     with pytest.raises(R.PjError, match="CNPJ inválido"):
         R.normalize_cnpj(value)
+
+
+def test_empty_cnpj_is_not_an_error():
+    # nada é obrigatório: CNPJ vazio vira pendência, não "CNPJ inválido"
+    assert R.normalize_cnpj("") is None
+    assert R.normalize_cnpj(None) is None
+    assert R.normalize_cnpj(" ./- ") is None
+
+
+def test_missing_fields():
+    full = {
+        "name": "P",
+        "company_name": "E",
+        "cnpj": "11222333000181",
+        "role": "Consultor",
+        "cost_center_id": 1,
+        "monthly_value": Decimal("0"),  # zero é valor informado
+        "start_date": date(2026, 1, 1),
+    }
+    assert R.missing_fields(full) == []
+    assert R.missing_fields(full | {"cnpj": None, "monthly_value": None, "name": "  "}) == [
+        "Nome da pessoa",
+        "CNPJ",
+        "Valor mensal",
+    ]
+    assert R.missing_fields({}) == [label for _, label in R.IMPORTANT_FIELDS]
 
 
 def test_status_and_dates():
@@ -35,8 +61,10 @@ def test_status_and_dates():
     R.validate_dates(date(2026, 1, 1), date(2026, 1, 1))
     with pytest.raises(R.PjError, match="anterior à admissão"):
         R.validate_dates(date(2026, 5, 1), date(2026, 4, 30))
-    with pytest.raises(R.PjError, match="admissão"):
-        R.validate_dates(None, None)
+    # admissão vazia é pendência, não erro (com ou sem término)
+    R.validate_dates(None, None)
+    R.validate_dates(None, date(2026, 1, 1))
+    assert R.bonus_months(None, None, 2026) == 0
 
 
 def test_tenure():

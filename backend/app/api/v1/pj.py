@@ -30,7 +30,8 @@ def _call(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
 
 
 class ContractIn(BaseModel):
-    """Datas "AAAA-MM-DD"; valores em string decimal ("12345.67"). Na edição, só os campos enviados mudam."""
+    """Datas "AAAA-MM-DD"; valores em string decimal ("12345.67"). Na edição, só os campos enviados mudam.
+    Nada é obrigatório: campos importantes vazios voltam em `missing` ("Falta preencher")."""
 
     name: str | None = Field(default=None, max_length=300)
     company_name: str | None = Field(default=None, max_length=300)
@@ -47,16 +48,19 @@ class ContractIn(BaseModel):
     photo_blurred: bool | None = None
 
 
-@router.get("", summary="Contratos (não arquivados) com a bonificação do ano")
+@router.get("", summary="Contratos (não arquivados) com a bonificação do ano; pending=true só os com pendência")
 def list_contracts(
     year: int | None = None,
     status: Literal["ACTIVE", "ENDED"] | None = None,
     cost_center_id: int | None = None,
     q: str | None = None,
+    pending: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(require_pj),
 ):
-    return _call(S.list_contracts, db, user, year=year, status=status, cost_center_id=cost_center_id, q=q)
+    return _call(
+        S.list_contracts, db, user, year=year, status=status, cost_center_id=cost_center_id, q=q, pending=pending
+    )
 
 
 @router.get("/summary", summary="Indicadores: ativos, total mensal, bonificação anual e devida no ano")

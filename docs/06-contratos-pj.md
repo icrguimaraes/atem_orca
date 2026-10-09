@@ -25,18 +25,27 @@ a outros, mas não vê os dados antes disso. Nomes não ficam no código.
   não veem nada.
 - Com "Da área": lista, resumo, filtros, `/pj/options` (só os CCs do escopo), fotos e Excel trazem só o escopo; get,
   edição, arquivamento e foto de contrato fora dele respondem **404** (não revela que existe). Ao criar ou editar, o CC
-  é obrigatório (422 "Informe o centro de custo…") e precisa estar no escopo (403 "Centro de custo fora da sua área…").
+  é a única exigência (422 "Informe o centro de custo: com o acesso “Da área”, o contrato precisa de um CC da sua
+  área…" — sem ele a pessoa deixaria de ver o contrato) e precisa estar no escopo (403 "Centro de custo fora da sua
+  área…"); a tela avisa sob o campo e só então libera o "Salvar".
 - Menu "Contratos PJ" (grupo Orçamento) e a rota `/pj` só aparecem com acesso (`NAV` filtra pela flag `pj` do item e
   `Protected pj` na rota).
 - Auditoria (`/audit-logs`, `entity_type = "pj_contract"`): sem acesso, nenhum registro; "Da área", só os dos
   contratos do escopo (inclusive arquivados); "Todos", toda.
 
-## 2. Modelo (migração 0009)
+## 2. Modelo (migrações 0009 e 0011)
+
+**Nada é obrigatório** (pedido da Controladoria, 09/10/2026; migração **0011** tornou anuláveis `name`,
+`company_name`, `cnpj`, `monthly_value` e `start_date` — o downgrade preenche os vazios com `''`, `0` e a data de
+criação antes de voltar a NOT NULL). Campos importantes vazios viram **pendência**: o contrato sai com `missing`
+(rótulos, na ordem do formulário: Nome da pessoa, Razão social, CNPJ, Função, Centro de custo, Valor mensal, Data de
+admissão — `rules.pj.IMPORTANT_FIELDS`/`missing_fields`). Formatos continuam validados quando há valor (CNPJ, e-mail,
+telefone, valores negativos, datas, tamanhos).
 
 `pj_contracts`: `name` (pessoa), `company_name` (razão social), `cnpj` (14 posições sem pontuação, **sem bloqueio de
-duplicidade**), `role` (função, texto livre), `cost_center_id` (opcional; obrigatório para "Da área"), `email`,
-`phone`, `monthly_value` (Numeric 18,2, obrigatório), `annual_bonus` (Numeric 18,2, opcional), `start_date`
-(admissão), `end_date` (término, opcional), `notes`, `photo_blurred`, `archived_at` (exclusão lógica),
+duplicidade**), `role` (função, texto livre), `cost_center_id` (opcional; exigido para "Da área"), `email`,
+`phone`, `monthly_value` (Numeric 18,2; vazio soma zero nos totais), `annual_bonus` (Numeric 18,2, opcional),
+`start_date` (admissão; vazia = sem tempo de casa e 0 mês de bonificação), `end_date` (término, opcional), `notes`, `photo_blurred`, `archived_at` (exclusão lógica),
 `created_by`/`updated_by` e carimbos. `pj_photos`: foto por contrato (JPEG/PNG/WebP até 400 KB; a tela recorta e grava
 JPEG 280×280). `users.can_view_pj` / `users.can_view_all_pj`.
 
@@ -67,14 +76,14 @@ para a auditoria: no `UPDATE` aparecem como "(sigiloso) → (alterado)"; na cria
 Valores em string decimal; datas `"AAAA-MM-DD"`; `year` padrão = ano corrente.
 
 ```text
-GET    /pj?year=&status=ACTIVE|ENDED&cost_center_id=&q=   → {year, items: [Contrato]} (ativos primeiro, por nome; q = nome, empresa ou CNPJ)
-GET    /pj/summary?year=&cost_center_id=&q=               → {year, active, ended, monthly_total, annual_bonus_total, bonus_due_total}
+GET    /pj?year=&status=ACTIVE|ENDED&cost_center_id=&q=&pending=true → {year, items: [Contrato]} (ativos primeiro, por nome; q = nome, empresa ou CNPJ; pending = só com pendência)
+GET    /pj/summary?year=&cost_center_id=&q=               → {year, active, ended, monthly_total, annual_bonus_total, bonus_due_total, monthly_missing, pending}
 GET    /pj/options                                        → {all, cost_centers: [{id, code, name, department, sector}] (só do escopo)}
 GET    /pj/photos                                         → {"<id>": "data:image/jpeg;base64,..."} (não arquivados)
 GET    /pj/export.xlsx?year=                              → Excel com todos os campos, área/setor e a bonificação do ano
 GET    /pj/{id}?year=                                     → Contrato
-POST   /pj {name, company_name, cnpj, role?, cost_center_id?, email?, phone?, monthly_value, annual_bonus?,
-            start_date, end_date?, notes?, photo_blurred?}  → 201 Contrato
+POST   /pj {name?, company_name?, cnpj?, role?, cost_center_id?, email?, phone?, monthly_value?, annual_bonus?,
+            start_date?, end_date?, notes?, photo_blurred?}  → 201 Contrato (tudo opcional)
 PATCH  /pj/{id} {mesmos campos, só os enviados}           → Contrato
 DELETE /pj/{id}                                           → arquiva {id}
 PUT    /pj/{id}/photo (multipart file)  · DELETE /pj/{id}/photo
@@ -82,23 +91,27 @@ PUT    /pj/{id}/photo (multipart file)  · DELETE /pj/{id}/photo
 
 `Contrato = {id, name, company_name, cnpj, cnpj_formatted, role, cost_center_id, cost_center, department, sector,
 email, phone, monthly_value, annual_bonus, start_date, end_date, status, notes, has_photo, photo_blurred,
-tenure: {years, months}, bonus: {year, months, due}}`.
+tenure: {years, months} | null, bonus: {year, months, due}, missing: [rótulo]}` (campos vazios vêm `null`).
 
 Indicadores: ativos, total mensal e bonificação anual contam os contratos **ativos hoje**; a bonificação devida soma
 todos os contratos com meses no ano escolhido (inclui os encerrados durante o ano). Filtros de CC e busca valem para os
 indicadores; o de situação, só para a lista. Erros 422 em pt-BR ("CNPJ inválido", "Valor mensal não pode ser
-negativo", "A data de término não pode ser anterior à admissão", "Centro de custo não encontrado" etc.).
+negativo", "A data de término não pode ser anterior à admissão", "Centro de custo não encontrado" etc.); vazio
+nunca é erro. `monthly_total` trata valor vazio como zero; `monthly_missing` conta os ativos sem valor e `pending`, os
+contratos (do filtro) com pendência.
 
 ## 6. Tela (`/pj`, `pages/ContratosPj.tsx` + `pj.css`)
 
 Cabeçalho com o ano da bonificação, botão "Embaçar dados" (modo privacidade da página: embaça nomes, CNPJ, valores e
 fotos — `.pii`/`.sens`), "Exportar Excel" e "Novo contrato"; cartões: contratos ativos, total mensal, bonificação anual
-e bonificação devida no ano; filtros (FilterBar: situação, centro de custo com área; busca) com estado persistido e
-"Resetar filtros"; a fórmula da bonificação em nota discreta. Lista em tabela (`.table-wrap`) no desktop e cartões no
+e bonificação devida no ano (com "N com pendência" e "N sem valor (conta zero)" nas dicas); filtros (FilterBar:
+situação, centro de custo com área, preenchimento "Com pendência (N)"; busca) com estado persistido e "Resetar filtros"; a fórmula da bonificação em nota discreta. Lista em tabela (`.table-wrap`) no desktop e cartões no
 celular: foto, nome, razão social e CNPJ, função e CC/área/setor, admissão com tempo de casa (e término), mensal,
-bonificação anual, devida no ano com os meses contados e a situação. Clique abre a janela de edição (`ui.Modal`): todos
+bonificação anual, devida no ano com os meses contados e a situação; selo "Falta preencher: …" nas linhas com
+pendência. Clique abre a janela de edição (`ui.Modal`): todos
 os campos, foto (incluir, recortar com `components/pj/PhotoEditor.tsx`, ajustar, remover, embaçar), CC obrigatório e
-só da área para "Da área", valores no padrão "12.345,67", tempo de casa e devida no ano, "Arquivar" com confirmação.
+só da área para "Da área" (aviso sob o campo), nenhum outro campo obrigatório — campo importante vazio leva a
+nota "Precisa preencher" —, valores no padrão "12.345,67", tempo de casa e devida no ano, "Arquivar" com confirmação.
 
 Em **Usuários → Editar**, seção "Perfis": select "Vê contratos PJ: Não / Da área / Todos" (salvo pelo `PATCH
 /users/{id}` ou já no `POST /users`); a lista mostra um selo "Contratos PJ: …" para quem tem acesso.
@@ -107,6 +120,7 @@ Em **Usuários → Editar**, seção "Perfis": select "Vê contratos PJ: Não / 
 
 `tests/test_pj_rules.py` (CNPJ numérico e alfanumérico, máscara, inválidos; situação; tempo de casa; bonificação por
 cenário; arredondamento) e `tests/test_pj.py` (todas as rotas sem acesso = 403, inclusive Administrador; níveis pela
-API de usuários com auditoria; validação; CRUD + arquivar com auditoria sem valores; auditoria escondida sem acesso;
-resumo, filtros e Excel; fotos; escopo "Da área" por área do CC, Controladoria com "Da área"; migração 0009 up/down com
-`compare_metadata` sem drift).
+API de usuários com auditoria; validação de formato; nada obrigatório com `missing`, totais com valor vazio e
+filtro de pendência; CRUD + arquivar com auditoria sem valores; auditoria escondida sem acesso;
+resumo, filtros e Excel; fotos; escopo "Da área" por área do CC, Controladoria com "Da área"; migrações 0009 e 0011 up/down
+com `compare_metadata` sem drift e o downgrade da 0011 com vazios).

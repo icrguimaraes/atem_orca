@@ -54,8 +54,8 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   `/questions`, responde o gestor de algum CC do recorte ou a Controladoria; auditoria) — página `pages/Questions.tsx` (`/perguntas`).
 - Contratos PJ (08/10/2026, confidencial; `docs/06-contratos-pj.md`): página `pages/ContratosPj.tsx` (`/pj`) sobre
   `domain/rules/pj.py` (CNPJ inclusive alfanumérico, bonificação proporcional) + `services/pj.py` + `api/v1/pj.py`
-  (migração 0009). Acesso por flags do usuário, não por perfil: `users.can_view_pj`/`can_view_all_pj` ("Vê contratos PJ:
-  Não / Da área / Todos" no editor de Usuários; `/auth/me` expõe `pj_access`); "Da área" = CCs das áreas dos CCs da própria
+  (migração 0009; 0011: nada obrigatório — vazios viram pendência `missing`, "Falta preencher"). Acesso por flags do
+  usuário, não por perfil: `users.can_view_pj`/`can_view_all_pj` ("Vê contratos PJ: Não / Da área / Todos" no editor de Usuários; `/auth/me` expõe `pj_access`); "Da área" = CCs das áreas dos CCs da própria
   pessoa, mesmo com perfil global. Toda rota exige `core.deps.require_pj`; auditoria sem valores em R$ e escondida de quem
   não tem acesso (`api/v1/audit_logs.py`).
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`

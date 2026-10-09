@@ -254,14 +254,14 @@ def personnel_amounts(db: Session, ctx: Context, cc_ids: set[int] | None = None)
     scenario = personnel_svc.baseline(db, ctx)
     by_cc = personnel_svc.build_positions(db, ctx, cc_ids)
     # bônus CLT por CC (parâmetro): entra mesmo em CC sem quadro carregado
-    bonus_codes = set((ctx.params.get("personnel.bonus_by_cc") or {}).keys())
-    for cc in db.scalars(select(CostCenter).where(CostCenter.code.in_(bonus_codes or {"-"}))):
-        if cc_ids is None or cc.id in cc_ids:
-            by_cc.setdefault(cc.id, [])
-    cc_codes = {c.id: c.code for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(set(by_cc) or {-1})))}
+    # (um código em duas empresas fica com um só CC: personnel.bonus_owners)
+    owners = personnel_svc.bonus_owners(db, ctx)
+    for cc_id in owners:
+        if cc_ids is None or cc_id in cc_ids:
+            by_cc.setdefault(cc_id, [])
     for cc_id, positions in by_cc.items():
         t = personnel_svc.add_cc_bonus(
-            personnel_svc.totals_for(positions, scenario), personnel_svc.cc_bonus_series(ctx, cc_codes.get(cc_id))
+            personnel_svc.totals_for(positions, scenario), personnel_svc.cc_bonus_for(db, ctx, cc_id, owners)
         )
         for kind, series in (
             ("salary", t.salary),
@@ -392,7 +392,8 @@ def personnel_premises(db: Session, ctx: Context) -> dict:
 
     raw_cc = ctx.params.get("personnel.bonus_by_cc") or {}
     raw_cc = raw_cc if isinstance(raw_cc, dict) else {}
-    ccs = {c.code: c for c in db.scalars(select(CostCenter).where(CostCenter.code.in_(set(raw_cc) or {"-"})))}
+    owner_ids = personnel_svc.bonus_owners(db, ctx)  # o CC que de fato recebe cada código
+    ccs = {c.code: c for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(set(owner_ids) or {-1})))}
     bonus_rows = []
     for cc_code, value in sorted(raw_cc.items()):
         cc = ccs.get(str(cc_code))

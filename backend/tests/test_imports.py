@@ -747,3 +747,57 @@ def test_wide_with_budget_and_actual_blocks_uses_the_right_months():
     assert actual.records[0].data["values"] == {m: "7" for m in range(1, 13)}
     budget = parse_wide(sheets, {}, "REFERENCE_BUDGET")
     assert budget.meta["block"] == "ORCADO" and budget.records[0].data["values"][1] == "100"
+
+
+def test_reference_budget_in_rows_reads_only_the_budget_tab():
+    """Base de controle da Controladoria: abas 'Realizado 2026' e 'Orçamento 2026' no mesmo layout em linhas
+    (CC × conta × mês). O orçado de referência lê só a coluna 'Orçamento 2026'; linhas repetidas somam, a linha de
+    total geral fica de fora e o CC com prefixo de filial é lido pelo código SAP, com aviso."""
+    import io
+    from datetime import datetime
+
+    from openpyxl import Workbook
+
+    from app.imports.base import load_sheets
+    from app.imports.detector import detect_and_parse
+
+    header = ["Cód CC_Código conta", "Mês", "Empresa", "Tp", "Centro de Custo SAP", "Cód CC", "Descrição C. Custo"]
+    header += ["Centro financ./item orçamento", "Código conta", "Descrição Conta Contábil", "Pacote"]
+    jan, fev = datetime(2026, 1, 1), datetime(2026, 2, 1)
+
+    def line(month, company, cc, account, value):
+        return [f"{cc}{account}", month, company, "X", f"* 01-{cc}", cc, "CC", account, account, "Conta", "P", value]
+
+    wb = Workbook()
+    real = wb.active
+    real.title = "Realizado 2026"
+    real.append([*header, "Total 3ª Projeção"])
+    real.append(line(jan, 1001, 1050101002, 6010301005, 999))
+    budget = wb.create_sheet("Orçamento 2026")
+    budget.append([*header, "Orçamento 2026"])
+    budget.append(line(jan, 1001, 1050101002, 6010301005, 100.5))
+    budget.append(line(jan, 1001, 1050101002, 6010301005, 20))  # mesma chave: soma
+    budget.append(line(fev, 1001, 1050101002, 6010301005, -30))  # negativo: entra (aviso no resolver)
+    budget.append(line(jan, 1001, 1050101002, 6010301006, 0))  # zerado: fora
+    budget.append(line(jan, 1001, "03-1050101003", 6020101010, 12.34))
+    budget.append(line(jan, 2001, "RFM6001000", 6020201005, 500))
+    budget.append([None] * 11 + [602.84])  # total geral
+    buf = io.BytesIO()
+    wb.save(buf)
+    sheets = load_sheets(buf.getvalue(), "Base controle orçamentário controladoria.xlsx")
+
+    result = detect_and_parse(sheets, "REFERENCE_BUDGET", {})
+    assert result.layout == "BUDGET_LONG" and result.meta["sheet"] == "Orçamento 2026"
+    by_key = {
+        (r.data["company"], r.data["cost_center"], r.data["account"], *r.data["values"]): r for r in result.records
+    }
+    assert by_key[("1001", "1050101002", "6010301005", 1)].data["values"] == {1: "120.5"}
+    assert by_key[("1001", "1050101002", "6010301005", 2)].data["values"] == {2: "-30"}
+    fiscal = by_key[("1001", "1050101003", "6020101010", 1)]
+    assert [i.code for i in fiscal.issues] == ["CC_NORMALIZED"] and fiscal.data["year"] == 2026
+    assert by_key[("2001", "RFM6001000", "6020201005", 1)].data["values"] == {1: "500"}
+    assert len(result.records) == 4
+    total = sum(Decimal(v) for r in result.records for v in r.data["values"].values())
+    assert total == Decimal("602.84")  # bate com a linha de total da planilha (o realizado não entra)
+    other = detect_and_parse(sheets, "REFERENCE_BUDGET", {"reference_year": 2025})
+    assert other.records == [] and other.structural[0].code == "OTHER_YEAR_IGNORED"

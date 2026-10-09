@@ -10,19 +10,21 @@ from app.models.base import Base, Money, TimestampMixin
 
 
 class PjContract(TimestampMixin, Base):
+    """Nada é obrigatório (migração 0011): campos importantes vazios viram pendência ("Falta preencher")."""
+
     __tablename__ = "pj_contracts"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(200))  # pessoa
-    company_name: Mapped[str] = mapped_column(String(200))  # razão social
-    cnpj: Mapped[str] = mapped_column(String(14), index=True)  # sem pontuação (sem bloqueio de duplicidade)
+    name: Mapped[str | None] = mapped_column(String(200))  # pessoa
+    company_name: Mapped[str | None] = mapped_column(String(200))  # razão social
+    cnpj: Mapped[str | None] = mapped_column(String(14), index=True)  # sem pontuação (sem bloqueio de duplicidade)
     role: Mapped[str | None] = mapped_column(String(150))  # função (texto livre)
     cost_center_id: Mapped[int | None] = mapped_column(ForeignKey("cost_centers.id"), index=True)
     email: Mapped[str | None] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(30))
-    monthly_value: Mapped[Decimal] = mapped_column(Money)
+    monthly_value: Mapped[Decimal | None] = mapped_column(Money)
     annual_bonus: Mapped[Decimal | None] = mapped_column(Money)
-    start_date: Mapped[date] = mapped_column(Date)  # admissão
+    start_date: Mapped[date | None] = mapped_column(Date)  # admissão
     end_date: Mapped[date | None] = mapped_column(Date)  # término ("encerrar" = informar)
     notes: Mapped[str | None] = mapped_column(Text)
     photo_blurred: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

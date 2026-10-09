@@ -187,9 +187,10 @@ def summary(db: Session = Depends(get_db), user: User = Depends(get_current_user
     terminations_by_month = [0] * 12
     hires_by_month = [0] * 12
     by_position: dict[str, int] = defaultdict(int)
+    owners = svc.bonus_owners(db, ctx)
     for cc in ccs:
         pos = positions.get(cc.id, [])
-        t = svc.add_cc_bonus(svc.totals_for(pos, scenario), svc.cc_bonus_series(ctx, cc.code))
+        t = svc.add_cc_bonus(svc.totals_for(pos, scenario), svc.cc_bonus_for(db, ctx, cc.id, owners))
         overall.add(t)
         for p in pos:
             mv = p.movement
