@@ -343,6 +343,11 @@ CYCLE_PARAMETERS = {
     ),
     "travel.flat_estimate": (4000, "Passagem estimada: valor fixo por viagem (R$) quando não houver rota"),
     "capex.min_unit_value": (1200, "Valor unitário mínimo para enquadramento como CAPEX"),
+    # contratos PJ no orçamento (09/10/2026): mensal × meses ativos (com IPCA) + bonificação anual cheia em 12x
+    # (o que se provisiona no ano é pago no ano seguinte), numa conta só, sem detalhe do contrato
+    "pj.budget_account": (6010201016, "Conta dos contratos PJ no orçamento (Provisão de Serviços)"),
+    "pj.adjustment_pct": (0.035, "Reajuste dos contratos PJ no ano do orçamento (IPCA projetado; confirmar)"),
+    "pj.adjustment_month": (1, "Mês a partir do qual vale o reajuste dos contratos PJ"),
     # resumo de critérios da versão (09/10/2026, pedido da gestora): só informativo, no Painel
     "budget.criteria": (
         [

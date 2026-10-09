@@ -122,6 +122,51 @@ def _dims(db: Session):
     return ccs, companies, branches, accounts, packages
 
 
+def pj_budget_amounts(db: Session, ctx: Context, cc_ids, accounts, packages):
+    """Contratos PJ ativos no orçamento do ano do ciclo (09/10/2026): valor mensal nos meses de vigência, com o
+    reajuste `pj.adjustment_pct` a partir de `pj.adjustment_month`, mais a bonificação anual CHEIA diluída nos meses de
+    vigência (o que se provisiona no ano é pago no seguinte). Tudo na conta `pj.budget_account`, somado por CC e mês —
+    sem identificar o contrato (são confidenciais). Contrato sem CC ou sem valor fica de fora (pendência no PJ)."""
+    from app.models.pj import PjContract
+
+    year = ctx.target_year
+    raw = ctx.params.get("pj.budget_account", 6010201016)
+    code = str(int(raw)) if isinstance(raw, (int, float)) else str(raw).strip()
+    account = next((a for a in accounts if a.code == code), None)
+    name = account.name if account else "Provisão de Serviços"
+    package = packages.get(account.package_id) if account else None
+    try:
+        adj = Decimal(str(ctx.params.get("pj.adjustment_pct", 0) or 0))
+        adj_month = int(ctx.params.get("pj.adjustment_month", 1) or 1)
+    except (ArithmeticError, ValueError):
+        adj, adj_month = ZERO, 1
+    stmt = select(PjContract).where(PjContract.archived_at.is_(None), PjContract.cost_center_id.is_not(None))
+    if cc_ids is not None:
+        stmt = stmt.where(PjContract.cost_center_id.in_(cc_ids or {-1}))
+    totals: dict[tuple[int, int], Decimal] = defaultdict(lambda: ZERO)
+    for c in db.scalars(stmt):
+        if c.start_date is not None and c.start_date.year > year:
+            continue
+        if c.end_date is not None and c.end_date.year < year:
+            continue
+        first = 1 if c.start_date is None or c.start_date.year < year else c.start_date.month
+        last = c.end_date.month if c.end_date is not None and c.end_date.year == year else 12
+        months = [m for m in range(1, 13) if first <= m <= last]
+        if not months:
+            continue
+        monthly = Decimal(c.monthly_value or 0)
+        bonus = Decimal(c.annual_bonus or 0)
+        paid = ZERO
+        for i, m in enumerate(months, start=1):
+            value = monthly * (1 + adj) if (adj and m >= adj_month) else monthly
+            due = money(bonus * i / len(months))  # bonificação cheia, parcelas pelo acumulado (soma exata)
+            totals[(c.cost_center_id, m)] += money(value) + (due - paid)
+            paid = due
+    for (cc_id, month), amount in totals.items():
+        if amount:
+            yield cc_id, code, name, package, month, amount
+
+
 def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list[Row]:
     """Orçamento da versão do contexto, calculado a partir das linhas, itens e quadro."""
     ccs, companies, branches, accounts, packages = _dims(db)
@@ -235,6 +280,10 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
         if pending > 0:
             acc = accounts.get(acc_id)
             add("CAPEX", company_id, branch_id, cc_id, acc.code, acc.name, "Capex", None, pending)
+
+    # contratos PJ (confidenciais): só o total por CC × mês na conta pj.budget_account
+    for cc_id, code, name, package, month, amount in pj_budget_amounts(db, ctx, cc_ids, accounts.values(), packages):
+        add("OPEX", None, None, cc_id, code, name, package, month, amount)
 
     for cc_id, _kind, code, name, m, amount in personnel_amounts(db, ctx, cc_ids):
         add("PERSONNEL", None, None, cc_id, code, name, "Pessoas", m, amount)

@@ -5,6 +5,7 @@ drift)."""
 import io
 import json
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -534,3 +535,30 @@ def test_migrations_0009_0011_up_down_without_drift():
     finally:
         with engine.begin() as conn:
             conn.execute(text("drop table if exists alembic_version"))
+
+
+# ---------------------------------------------------------------- orçamento
+
+
+def test_contracts_feed_the_budget_as_a_single_account(client, admin, pj_admin):
+    """Contratos PJ entram no orçamento do ciclo (09/10/2026): mensal × meses de vigência com IPCA (pj.adjustment_pct,
+    3,5% no seed) + bonificação anual cheia diluída nos meses (paga no ano seguinte), na conta pj.budget_account
+    (6010201016), só o total por CC × mês. Sem CC, encerrado antes do ano ou arquivado: fora."""
+    st = make_structure(client, admin)
+    cycle_id = client.get("/api/v1/cycles", headers=admin).json()[0]["id"]
+    client.post(f"/api/v1/cycles/{cycle_id}/open", headers=admin)
+
+    def opex():
+        ov = client.get("/api/v1/consolidation/overview", headers=admin).json()
+        return Decimal(ov["modules"]["OPEX"]["proposed"])
+
+    before = opex()
+    cc = st["ccs"]["9001"]
+    assert client.post("/api/v1/pj", headers=pj_admin, json=contract(1, cost_center_id=cc)).status_code == 201
+    mid = contract(2, cost_center_id=cc, monthly_value="1000.00", annual_bonus="1200.00", start_date="2027-07-10")
+    assert client.post("/api/v1/pj", headers=pj_admin, json=mid).status_code == 201
+    assert client.post("/api/v1/pj", headers=pj_admin, json=contract(3)).status_code == 201  # sem CC
+    ended = contract(4, cost_center_id=cc, start_date="2020-01-01", end_date="2026-12-31")
+    assert client.post("/api/v1/pj", headers=pj_admin, json=ended).status_code == 201
+    # 10.000 × 1,035 × 12 + 12.000 (cheia) = 136.200; 1.000 × 1,035 × 6 (jul–dez) + 1.200 (cheia) = 7.410
+    assert opex() - before == Decimal("143610.00")
