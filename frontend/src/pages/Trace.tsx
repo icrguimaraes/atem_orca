@@ -33,6 +33,10 @@ const BUDGET_TYPES = [
   { key: "PERSONNEL", label: "Pessoal" },
 ];
 const PAGE = 50;
+const SOURCE_LABELS: Record<string, string> = {
+  version_id: "Versão (id)", version: "Versão nº", scope: "Escopo da versão", batch_id: "Lote de importação", layout: "Layout do arquivo",
+  line_id: "Linha nº", submission_id: "Submissão nº", project_id: "Projeto nº", item_id: "Item nº", contract_id: "Contrato nº",
+};
 
 const nums = (csv: string) => csv.split(",").filter(Boolean).map(Number).filter((n) => Number.isFinite(n));
 
@@ -514,7 +518,7 @@ function RecordRow({ r, isController, pj }: { r: TraceRecord; isController: bool
               ))}
               {r.justification && <><dt>Justificativa</dt><dd>{r.justification}</dd></>}
               {Object.entries(src).filter(([k, v]) => v !== null && v !== "" && !["label", "file_name", "loaded_at"].includes(k)).map(([k, v]) => (
-                <Fragment key={k}><dt>Origem · {k}</dt><dd>{String(v)}</dd></Fragment>
+                <Fragment key={k}><dt>Origem · {SOURCE_LABELS[k] ?? k}</dt><dd>{String(v)}</dd></Fragment>
               ))}
             </dl>
           </td>
