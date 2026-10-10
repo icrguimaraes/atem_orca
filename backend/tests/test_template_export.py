@@ -36,7 +36,7 @@ def test_opex_template_export_roundtrip(client, admin, run_worker):
 
     resp = client.get(f"/api/v1/opex/submissions/{sub}/template.xlsx", headers=admin)
     assert resp.status_code == 200 and resp.headers["content-type"] == XLSX
-    assert resp.headers["content-disposition"].endswith(f'filename="Template_OPEX_2027_{CC}_v1.0.xlsx"')
+    assert resp.headers["content-disposition"].endswith(f'filename="Template_OPEX_2027_{CC}_Rev0.xlsx"')
     content = resp.content
 
     wb = load_workbook(io.BytesIO(content))
@@ -48,7 +48,7 @@ def test_opex_template_export_roundtrip(client, admin, run_worker):
     # o importador lê a planilha exportada como template OPEX e encontra os mesmos valores
     sheets = load_sheets(content, "export.xlsx")
     result = parse_opex_template(sheets, {})
-    assert result.meta["system_export"] == {"module": "OPEX", "cost_center": CC, "version": "1.0"}
+    assert result.meta["system_export"] == {"module": "OPEX", "cost_center": CC, "version": "Rev0"}
     assert result.meta["parts"]["budget_lines"] == 5  # 2 viagens + consultoria + DTI + linha digitada
     assert result.meta["consolidator_check"]["I - Viagens"]["ok"] is True
     budget = [r for r in result.records if r.record_type in ("BUDGET_LINE", "TRAVEL")]
@@ -132,7 +132,7 @@ def test_capex_template_export_roundtrip(client, admin, run_worker):
 
     resp = client.get(f"/api/v1/capex/submissions/{sub}/template.xlsx", headers=admin)
     assert resp.status_code == 200
-    assert resp.headers["content-disposition"].endswith(f'filename="Template_CAPEX_2027_{CC}_v1.0.xlsx"')
+    assert resp.headers["content-disposition"].endswith(f'filename="Template_CAPEX_2027_{CC}_Rev0.xlsx"')
     content = resp.content
     result = parse_capex_template(load_sheets(content, "export.xlsx"), {})
     assert result.meta["system_export"]["cost_center"] == CC and result.meta["parts"]["capex_items"] == n_items

@@ -63,7 +63,7 @@ def test_cycle_parameters_and_lookups(client, admin):
     assert client.post(f"/api/v1/cycles/{cycle['id']}/open", headers=admin).json()["status"] == "OPEN"
     assert client.post(f"/api/v1/cycles/{cycle['id']}/open", headers=admin).status_code == 409
     versions = client.get(f"/api/v1/cycles/{cycle['id']}/versions", headers=admin).json()
-    assert versions[0]["label"] == "1.0"
+    assert versions[0]["label"] == "Revisão 0"
     types = client.get("/api/v1/lookups", headers=admin, params={"domain": "CAPEX_PROJECT_TYPE"}).json()
     assert len(types) == 8
     contracts = {c["code"]: c for c in client.get("/api/v1/contract-types", headers=admin).json()}

@@ -292,7 +292,7 @@ def _full_replace_ok(export: dict, cc_code: str, recs: list, ctx) -> bool:
                 "antes de reimportar (nenhum lançamento deste CC é substituído enquanto houver erro)",
             )
         return False
-    if ctx is not None and export.get("version") and export["version"] != ctx.version.label:
+    if ctx is not None and export.get("version") and export["version"] not in (ctx.version.file_tag, ctx.version.label):
         for r in recs:
             r.error(
                 "EXPORT_OTHER_VERSION",

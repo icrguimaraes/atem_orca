@@ -415,7 +415,7 @@ def export_xlsx(
     version = _version(db, ctx, version_id)
     scope = _scope(db, user, company_id, cost_center_id)
     content = exports.budget_workbook(db, ctx, version, scope, user)
-    name = f"Orcamento_{ctx.target_year}_v{version.label}.xlsx"
+    name = f"Orcamento_{ctx.target_year}_{version.file_tag}.xlsx"
     return StreamingResponse(
         iter([content]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

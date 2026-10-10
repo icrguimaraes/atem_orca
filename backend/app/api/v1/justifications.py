@@ -106,7 +106,7 @@ def save(body: SaveIn, request: Request, db: Session = Depends(get_db), user: Us
 def export(cost_center_id: int | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     ctx, items = _items(db, user, cost_center_id)
     content = svc.export_workbook(items, ctx.target_year, ctx.ref_year)
-    name = f"Justificativas_{ctx.target_year}_v{ctx.version.label}.xlsx"
+    name = f"Justificativas_{ctx.target_year}_{ctx.version.file_tag}.xlsx"
     return StreamingResponse(
         iter([content]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -56,7 +56,7 @@ def test_overview_export_freeze_and_revision(client, admin, run_worker):
         "50000.00",
         "469350.00",
     )
-    assert ov["total"] == "524750.00" and ov["version"]["label"] == "1.0"
+    assert ov["total"] == "524750.00" and ov["version"]["label"] == "Revisão 0"
     assert m["OPEX"]["ref_annualized"] == "18000.00"  # (1000 + 500) × 8 meses → anualizado
     row = next(r for r in ov["matrix"] if r["code"] == CC)
     assert row["status"] == {"OPEX": "IN_PROGRESS", "CAPEX": "IN_PROGRESS", "PERSONNEL": "IN_PROGRESS"}
@@ -104,7 +104,7 @@ def test_overview_export_freeze_and_revision(client, admin, run_worker):
     _, mgr = _user(client, admin, "gestor@t.com", ["MANAGER"])
     assert client.post("/api/v1/consolidation/freeze", headers=mgr, json={}).status_code == 403
     fz = client.post("/api/v1/consolidation/freeze", headers=admin, json={"reason": "Fechamento"}).json()
-    assert fz["version"] == "1.0" and fz["total"] == "524750.00"
+    assert fz["version"] == "Revisão 0" and fz["total"] == "524750.00"
     resp = client.patch(f"/api/v1/opex/lines/{line['id']}", headers=admin, json={"values": {"1": 999}})
     assert resp.status_code == 409 and "congelada" in resp.json()["detail"]
     resp = client.post(f"/api/v1/opex/submissions/{opex_sub}/actions/submit", headers=admin, json={})
@@ -126,19 +126,19 @@ def test_overview_export_freeze_and_revision(client, admin, run_worker):
     # revisão: 1.1 em elaboração com tudo copiado; 1.0 continua consultável
     assert client.post("/api/v1/consolidation/revise", headers=admin, json={"reason": " "}).status_code == 409
     rv = client.post("/api/v1/consolidation/revise", headers=admin, json={"reason": "Ajuste de pessoal"}).json()
-    assert rv["version"] == "1.1" and [v["status"] for v in rv["versions"]] == ["FROZEN", "WORKING"]
+    assert rv["version"] == "Revisão 1" and [v["status"] for v in rv["versions"]] == ["FROZEN", "WORKING"]
     head = client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=admin).json()
-    assert head["version"] == "1.1" and head["submission_id"] != opex_sub and head["permissions"]["edit"]
+    assert head["version"] == "Revisão 1" and head["submission_id"] != opex_sub and head["permissions"]["edit"]
     lines = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()
     assert len(lines) == 1 and lines[0]["total"] == "5400.00"
     capex_head = client.get(f"/api/v1/capex/cost-centers/{cc['id']}", headers=admin).json()
     view = client.get(f"/api/v1/capex/submissions/{capex_head['submission_id']}/view", headers=admin).json()
     assert view["totals"]["proposed"] == "50000.00"
     ov11 = client.get("/api/v1/consolidation/overview", headers=admin).json()
-    assert ov11["version"]["label"] == "1.1"
+    assert ov11["version"]["label"] == "Revisão 1"
     # só ANA ficou ativa no quadro (226.800) + a vaga, que foi copiada da 1.0 para a revisão (34.020)
     assert ov11["modules"]["PERSONNEL"]["proposed"] == "260820.00"
-    v10 = next(v for v in ov11["versions"] if v["label"] == "1.0")
+    v10 = next(v for v in ov11["versions"] if v["label"] == "Revisão 0")
     old = client.get(f"/api/v1/consolidation/overview?version_id={v10['id']}", headers=admin).json()
     assert old["total"] == "524750.00" and old["version"]["status"] == "FROZEN"
 
@@ -161,7 +161,7 @@ def test_delete_all_resets_versions(client, admin, run_worker):
     r = client.delete("/api/v1/datasets/all", headers=admin, params={"confirm": "EXCLUIR"})
     assert r.status_code == 200, r.text
     ov = client.get("/api/v1/consolidation/overview", headers=admin).json()
-    assert [(v["label"], v["status"]) for v in ov["versions"]] == [("1.0", "WORKING")]
+    assert [(v["label"], v["status"]) for v in ov["versions"]] == [("Revisão 0", "WORKING")]
     assert ov["total"] == "0.00"
 
 
@@ -188,11 +188,11 @@ def test_delete_all_with_two_revisions(client, admin, run_worker):
         client.post("/api/v1/consolidation/freeze", headers=admin, json={})
         assert client.post("/api/v1/consolidation/revise", headers=admin, json={"reason": f"r{n}"}).status_code == 200
     labels = [v["label"] for v in client.get("/api/v1/consolidation/overview", headers=admin).json()["versions"]]
-    assert labels == ["1.0", "1.1", "1.2"]
+    assert labels == ["Revisão 0", "Revisão 1", "Revisão 2"]
     r = client.delete("/api/v1/datasets/all", headers=admin, params={"confirm": "EXCLUIR"})
     assert r.status_code == 200, r.text
     assert [v["label"] for v in client.get("/api/v1/consolidation/overview", headers=admin).json()["versions"]] == [
-        "1.0"
+        "Revisão 0"
     ]
 
 
@@ -200,7 +200,7 @@ def test_compare_versions(client, admin, run_worker):
     cc, _, line = _setup(client, admin, run_worker)
     client.post("/api/v1/consolidation/freeze", headers=admin, json={})
     rv = client.post("/api/v1/consolidation/revise", headers=admin, json={"reason": "ajuste"}).json()
-    v10, v11 = (next(v["id"] for v in rv["versions"] if v["label"] == lb) for lb in ("1.0", "1.1"))
+    v10, v11 = (next(v["id"] for v in rv["versions"] if v["label"] == lb) for lb in ("Revisão 0", "Revisão 1"))
     head = client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=admin).json()
     new_line = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()[0]
     client.patch(f"/api/v1/opex/lines/{new_line['id']}", headers=admin, json={"values": {"1": 1450}})  # +1.000 em JAN

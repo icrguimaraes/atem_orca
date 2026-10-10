@@ -331,7 +331,7 @@ def get_submission(submission_id: int, db: Session = Depends(get_db), user: User
 def template_xlsx(submission_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     ctx, sub, access = _load(db, user, submission_id)
     content = template_export.opex_template_workbook(db, ctx, sub)
-    name = f"Template_OPEX_{ctx.target_year}_{access.cc.code}_v{ctx.version.label}.xlsx"
+    name = f"Template_OPEX_{ctx.target_year}_{access.cc.code}_{ctx.version.file_tag}.xlsx"
     return StreamingResponse(
         iter([content]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

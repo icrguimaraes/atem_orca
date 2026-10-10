@@ -65,7 +65,7 @@ def _key(company: str, branch: str | None, cc: str, account: str) -> str:
 def _instructions(wb: Workbook, title: str, ctx: Context, cc: CostCenter, sub: BudgetSubmission, notes: list[str]):
     ws = wb.active
     ws.title = "Instruções"
-    ws["A1"] = export_marker(sub.module, cc.code, ctx.version.label)  # lido pelo importador; não alterar
+    ws["A1"] = export_marker(sub.module, cc.code, ctx.version.file_tag)  # lido pelo importador; não alterar
     ws["A1"].font = Font(size=8, color="AAAAAA")
     ws["B2"], ws["B2"].font = title, TITLE_FONT
     ws["B3"] = f"Centro de custo {cc.company.code} · {cc.code} · {cc.name} · gestor {cc.manager_name or '—'}"

@@ -308,7 +308,7 @@ def export_xlsx(db: Session = Depends(get_db), user: User = Depends(get_current_
     scope = visible_cost_center_ids(db, user)
     found = svc.collect(db, ctx, scope, svc.kept_keys(db, ctx), structure=is_global(user))
     content = svc.workbook(ctx, found, svc.reviews(db, ctx, scope))
-    name = f"Apontamentos_{ctx.target_year}_v{ctx.version.label}.xlsx"
+    name = f"Apontamentos_{ctx.target_year}_{ctx.version.file_tag}.xlsx"
     return StreamingResponse(
         iter([content]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

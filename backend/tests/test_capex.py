@@ -205,7 +205,7 @@ def test_capex_template_import(client, admin, run_worker):
     assert (found["reviews"][0]["action"], found["reviews"][0]["note"]) == ("KEPT", "Licença perpétua")
     report = client.get("/api/v1/findings/export.xlsx", headers=admin)
     assert report.status_code == 200
-    assert report.headers["content-disposition"].endswith('filename="Apontamentos_2027_v1.0.xlsx"')
+    assert report.headers["content-disposition"].endswith('filename="Apontamentos_2027_Rev0.xlsx"')
     wb = load_workbook(io.BytesIO(report.content))
     assert wb.sheetnames == ["Resumo", "Pendentes", "Corrigidos e mantidos"]
     done = wb["Corrigidos e mantidos"]

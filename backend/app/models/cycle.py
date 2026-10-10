@@ -93,4 +93,11 @@ class BudgetVersion(Base):
 
     @property
     def label(self) -> str:
-        return f"{self.major}.{self.minor}"
+        """Rótulo da versão (09/10/2026): "Revisão 0" é a apresentada ao VP, depois Revisão 1, 2…; uma revisão maior
+        (major > 1) conta a partir dela ("Revisão 2.0")."""
+        return f"Revisão {self.minor}" if self.major == 1 else f"Revisão {self.major}.{self.minor}"
+
+    @property
+    def file_tag(self) -> str:
+        """Sufixo em nomes de arquivo: Rev0, Rev1… (sem espaço nem acento)."""
+        return f"Rev{self.minor}" if self.major == 1 else f"Rev{self.major}.{self.minor}"
