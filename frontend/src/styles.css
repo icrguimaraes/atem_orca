@@ -1112,10 +1112,10 @@ tr.saving { opacity: 0.6; }
 .stat-value { font-size: clamp(19px, 1.5vw, 24px); overflow-wrap: anywhere; }
 /* tabela do Painel (09/10/2026): subtotais (área/setor, nível 0) com fundo próprio; linhas alternadas só entre
    irmãs do mesmo nível, sutis, para não brigar com os subtotais */
-.drill-table tbody tr.drill-level-0 td { background: var(--surface-2); font-weight: 600; }
+.drill-table tbody tr.drill-level-0 td { background: color-mix(in srgb, var(--text) 8%, var(--surface)); font-weight: 600; }
 .drill-table tbody tr.drill-level-1 td, .drill-table tbody tr.drill-level-2 td, .drill-table tbody tr.drill-level-3 td { background: transparent; }
-.drill-table tbody tr.drill-alt:not(.drill-level-0) td { background: color-mix(in srgb, var(--surface-2) 40%, transparent); }
-.drill-table tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 100%, transparent); }
+.drill-table tbody tr.drill-alt:not(.drill-level-0) td { background: color-mix(in srgb, var(--text) 4%, var(--surface)); }
+.drill-table tbody tr:hover td { background: color-mix(in srgb, var(--text) 10%, var(--surface)); }
 
 /* ---------- Painel (10/10/2026): execução do orçamento, composição e maiores desvios */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
