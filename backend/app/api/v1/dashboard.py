@@ -549,6 +549,155 @@ def _base_sums(f: Facts, P: Period, key: str) -> dict:
     return {}
 
 
+def _closed_by_company(db: Session, dataset_type: str, year: int) -> dict[str, int]:
+    """Último mês de cada empresa no conjunto vigente (escopo ACTUAL:2026:1001 / PROJECTION:2026:1001)."""
+    out: dict[str, int] = {}
+    rows = db.execute(
+        select(DatasetVersion.scope_key, DatasetVersion.last_closed_period).where(
+            DatasetVersion.dataset_type == dataset_type,
+            DatasetVersion.is_current,
+            DatasetVersion.scope_key.like(f"{dataset_type}:{year}:%"),
+        )
+    )
+    for scope, closed in rows:
+        if closed:
+            company = scope.split(":")[2]
+            out[company] = max(out.get(company, 0), int(closed))
+    return out
+
+
+def _actual_only(f: Facts, years: list[int], keys: tuple[str, ...], cap: int | None) -> dict[tuple, Decimal]:
+    """Realizado contábil (sem as linhas da projeção do gestor), por grupo, até o mês `cap`."""
+    out: dict[tuple, Decimal] = defaultdict(lambda: ZERO)
+    for *key, projected, amount in f.sums(ActualEntry, years, *keys, "projected", max_period=cap):
+        if not projected:
+            out[tuple(key)] += amount or ZERO
+    return out
+
+
+@dataclass
+class ExecutionScope:
+    """Recorte da execução do orçamento: um único ano com realizado e orçado; `closed` = último mês contábil."""
+
+    year: int
+    closed: int
+
+    @property
+    def cap(self) -> int | None:
+        return self.closed if self.closed < 12 else None
+
+    @property
+    def suffix(self) -> str:
+        return f" até {MONTH_ABBR[self.closed - 1]}" if self.closed < 12 else ""
+
+
+def _execution_scope(db: Session, P: Period) -> tuple[ExecutionScope | None, str | None]:
+    """Execução só faz sentido com um ano de realizado (não o ano do ciclo) e o mês contábil conhecido."""
+    if len(P.years) != 1:
+        return None, "A execução do orçamento é calculada para um único ano: selecione só um ano."
+    year = P.years[0]
+    if year not in P.actual_years:
+        return None, f"Sem realizado de {year} carregado."
+    closed = max(_closed_by_company(db, "ACTUAL", year).values(), default=0)
+    if not closed:
+        return None, f"O realizado de {year} não informa o último mês fechado."
+    return ExecutionScope(year, closed), None
+
+
+def _execution(db: Session, f: Facts, P: Period) -> dict:
+    """Execução do orçamento do ano (Painel, 10/10/2026): realizado contábil até o último mês fechado (sem a projeção)
+    × orçado no mesmo período, % executado do orçado do ano e projeção de fechamento = realizado + projeção do gestor.
+    A projeção só é mostrada quando cobre todos os meses que faltam em todas as empresas com realizado no recorte;
+    caso contrário, vem indisponível com o motivo — nada é estimado."""
+    scope, reason = _execution_scope(db, P)
+    if scope is None:
+        return {"available": False, "reason": reason}
+    year, cap = scope.year, scope.cap
+    budget_year = f.total(ReferenceBudgetEntry, [year])
+    if not budget_year:
+        return {"available": False, "year": year, "reason": f"Sem orçado {year} carregado para este recorte."}
+    budget_ytd = f.total(ReferenceBudgetEntry, [year], cap)
+    split = _actual_only(f, [year], (), cap)
+    actual_ytd = split.get((), ZERO)
+
+    # projeção de fechamento: meses do filtro (ou o ano) ainda sem realizado contábil
+    wanted = sorted(P.months) if P.months else list(range(1, 13))
+    remaining = [m for m in wanted if m > scope.closed]
+    forecast: dict = {"available": False, "value": None, "projected": None, "var": None, "var_pct": None}
+    if not remaining:
+        forecast |= {"available": True, "kind": "closed", "value": _money(actual_ytd), "projected": _money(ZERO)}
+        forecast_value = actual_ytd
+    else:
+        actual_by_company = _closed_by_company(db, "ACTUAL", year)
+        projection = _closed_by_company(db, "PROJECTION", year)
+        companies = {c.id: c.code for c in db.scalars(select(Company))}
+        in_scope = {companies[i] for i in f.company_ids if i in companies} or set(actual_by_company)
+        missing = sorted(c for c in in_scope & set(actual_by_company) if projection.get(c, 0) < max(remaining))
+        forecast_value = None
+        if not projection:
+            first = MONTH_ABBR[remaining[0] - 1]
+            last = MONTH_ABBR[remaining[-1] - 1]
+            span = first if first == last else f"{first}–{last}"
+            forecast["reason"] = f"Sem projeção do gestor carregada para {span} de {year}."
+        elif missing:
+            names = {c.code: c.short_name or c.name for c in db.scalars(select(Company))}
+            forecast["reason"] = (
+                f"A projeção do gestor não cobre até {MONTH_ABBR[max(remaining) - 1]} em "
+                f"{', '.join(names.get(c, c) for c in missing)}."
+            )
+        else:
+            projected = sum(
+                (
+                    amount
+                    for flag, amount in f.sums(ActualEntry, [year], "projected")
+                    if flag  # só as linhas da projeção (meses sem realizado contábil)
+                ),
+                ZERO,
+            )
+            forecast_value = actual_ytd + projected
+            forecast |= {
+                "available": True,
+                "kind": "projection",
+                "value": _money(forecast_value),
+                "projected": _money(projected),
+                "from_month": MONTH_ABBR[remaining[0] - 1],
+                "to_month": MONTH_ABBR[remaining[-1] - 1],
+            }
+    if forecast_value is not None:
+        forecast["var"] = _money(forecast_value - budget_year)
+        forecast["var_pct"] = _pct(forecast_value, budget_year)
+    return {
+        "available": True,
+        "reason": None,
+        "year": year,
+        "closed": scope.closed,
+        "closed_month": MONTH_ABBR[scope.closed - 1],
+        "actual_label": f"Realizado {year}{scope.suffix}",
+        "budget_ytd_label": f"Orçado {year}{scope.suffix}",
+        "budget_label": f"Orçado {year}",
+        "budget_year": _money(budget_year),
+        "budget_ytd": _money(budget_ytd),
+        "actual_ytd": _money(actual_ytd),
+        "var": _money(actual_ytd - budget_ytd),
+        "var_pct": _pct(actual_ytd, budget_ytd),
+        "execution_pct": _share(actual_ytd, budget_year),
+        "budget_phase_pct": _share(budget_ytd, budget_year),  # quanto do orçado do ano cabe até o mês fechado
+        "monthly_avg": _money(actual_ytd / len([m for m in wanted if m <= scope.closed]))
+        if any(m <= scope.closed for m in wanted)
+        else None,
+        "forecast": forecast,
+    }
+
+
+def _thresholds(db: Session) -> tuple[float, float]:
+    """Limiares do semáforo do ciclo (alert.growth_pct / alert.reduction_pct)."""
+    try:
+        ctx = opex_svc.context(db)
+        return float(ctx.param("alert.growth_pct", 0.2)), float(ctx.param("alert.reduction_pct", 0.3))
+    except opex_svc.OpexError:
+        return 0.2, 0.3
+
+
 @router.get("/overview", summary="KPIs, evolução mensal e rankings do período (anos somados × meses × tipos)")
 def overview(
     company_id: str | None = None,
@@ -612,6 +761,8 @@ def overview(
             "budget_unscheduled": _money(f.unscheduled_total() if P.target_year in P.years else ZERO),
         },
         "by_module": _by_module(f, P),
+        # execução do orçamento (realizado contábil × orçado no mesmo período, % executado, projeção de fechamento)
+        "execution": _execution(db, f, P),
         "monthly": _monthly(f, P),
         "top_cost_centers": _ranking(db, f, P, "cost_center_id", CostCenter),
         "top_accounts": _ranking(db, f, P, "account_id", Account),
@@ -944,11 +1095,7 @@ def breakdown(
             }
         )
     rows.sort(key=lambda r: Decimal(r["ref"]), reverse=True)
-    try:
-        ctx = opex_svc.context(db)
-        growth, reduction = float(ctx.param("alert.growth_pct", 0.2)), float(ctx.param("alert.reduction_pct", 0.3))
-    except opex_svc.OpexError:
-        growth, reduction = 0.2, 0.3
+    growth, reduction = _thresholds(db)
     return {
         "group_by": group_by,
         "reference_year": max(P.years),
@@ -966,6 +1113,130 @@ def breakdown(
             "var": _money(total_cur - total_base),
             "var_pct": _pct(total_cur, total_base) if P.base_kind else None,
         },
+    }
+
+
+DEVIATION_GROUPS = {
+    "pair": ("cost_center_id", "account_id"),
+    "cost_center": ("cost_center_id",),
+    "account": ("account_id",),
+}
+
+
+@router.get("/deviations", summary="Maiores desvios do recorte: conta × centro de custo, por CC e por conta")
+def deviations(
+    company_id: str | None = None,
+    cost_center_id: int | None = None,
+    package_id: int | None = None,
+    account_id: int | None = None,
+    department_id: str | None = None,
+    years: str | None = None,
+    months: str | None = None,
+    modules: str | None = None,
+    compare: bool = True,
+    same_period: bool = True,
+    limit: int = Query(8, ge=1, le=30),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Maiores diferenças (em valor absoluto) com os mesmos filtros do Painel. Com um ano de realizado e orçado
+    (`basis = "execution"`): realizado contábil até o último mês fechado (sem a projeção do gestor) × orçado no mesmo
+    período. Sem isso, a série principal do Painel × a base de comparação (`basis = "period"`). `out_of_range` usa os
+    limiares do ciclo (os mesmos do semáforo da tabela)."""
+    P = _period(db, years, months, modules, compare, same_period)
+    f = Facts(db, user, company_id, cost_center_id, package_id, P, account_id=account_id, department_id=department_id)
+    scope, _ = _execution_scope(db, P)
+    use_execution = scope is not None and f.total(ReferenceBudgetEntry, [scope.year]) != ZERO
+
+    def grouped(rows) -> dict[tuple, Decimal]:
+        out: dict[tuple, Decimal] = defaultdict(lambda: ZERO)
+        for *key, amount in rows:
+            out[tuple(key)] += amount or ZERO
+        return out
+
+    def series(keys: tuple[str, ...]) -> tuple[dict, dict]:
+        if use_execution:
+            main = _actual_only(f, [scope.year], keys, scope.cap)
+            base = grouped(f.sums(ReferenceBudgetEntry, [scope.year], *keys, max_period=scope.cap))
+            return main, base
+        main = grouped(f.sums(_main_model(P), P.main_years, *keys))
+        if P.base_kind == "prev":
+            base = grouped(f.sums(ActualEntry, P.prev_years, *keys, max_period=P.base_cap))
+        elif P.base_kind == "budget":
+            base = grouped(f.sums(ReferenceBudgetEntry, P.years, *keys, max_period=P.base_cap))
+        elif P.base_kind == "actual":
+            base = grouped(f.sums(ActualEntry, P.actual_selected, *keys))
+        else:
+            base = {}
+        if P.base_kind in ("prev", "actual") and P.base_scale != 1:
+            base = {k: v * P.base_scale for k, v in base.items()}
+        return main, base
+
+    if use_execution:
+        main_label, base_label = f"Realizado {scope.year}{scope.suffix}", f"Orçado {scope.year}{scope.suffix}"
+    else:
+        main_label, base_label = P.main_label, P.base_label
+    growth, reduction = _thresholds(db)
+    has_base = use_execution or bool(P.base_kind)
+
+    ccs = {c.id: c for c in db.scalars(select(CostCenter))}
+    accounts = {a.id: a for a in db.scalars(select(Account))}
+    companies = {c.id: c for c in db.scalars(select(Company))}
+
+    def cc_out(i):
+        c = ccs.get(i)
+        if not c:
+            return None
+        company = companies.get(c.company_id)
+        return {
+            "id": c.id,
+            "code": c.code,
+            "name": c.name,
+            "company": (company.short_name or company.name) if company else None,
+        }
+
+    def account_out(i):
+        a = accounts.get(i)
+        return {"id": a.id, "code": a.code, "name": a.name} if a else None
+
+    groups = {}
+    for name, keys in DEVIATION_GROUPS.items():
+        main, base = series(keys)
+        items = []
+        for key in set(main) | set(base):
+            if any(k is None for k in key):  # sem CC ou conta cadastrada: não há como filtrar nem rastrear
+                continue
+            m, b = main.get(key, ZERO), base.get(key, ZERO)
+            var = m - b
+            if not var or not has_base:
+                continue
+            ratio = (var / abs(b)) if b else None
+            items.append((abs(var), key, m, b, var, ratio))
+        items.sort(key=lambda x: (-x[0], x[1]))
+        rows = []
+        for _, key, m, b, var, ratio in items[:limit]:
+            attrs = dict(zip(keys, key, strict=True))
+            rows.append(
+                {
+                    "cost_center": cc_out(attrs["cost_center_id"]) if "cost_center_id" in attrs else None,
+                    "account": account_out(attrs["account_id"]) if "account_id" in attrs else None,
+                    "main": _money(m),
+                    "base": _money(b),
+                    "var": _money(var),
+                    "var_pct": _pct(m, b),
+                    # sem base (item novo) também pede atenção; fora da faixa = acima do crescimento ou queda forte
+                    "out_of_range": ratio is None or ratio > Decimal(str(growth)) or ratio < -Decimal(str(reduction)),
+                }
+            )
+        groups[name] = rows
+    return {
+        "basis": "execution" if use_execution else "period",
+        "main_label": main_label,
+        "base_label": base_label,
+        "main_series": "actual" if use_execution else P.main,
+        "base_series": "budget" if use_execution else P.base_kind,
+        "thresholds": {"growth": growth, "reduction": reduction},
+        "groups": groups,
     }
 
 

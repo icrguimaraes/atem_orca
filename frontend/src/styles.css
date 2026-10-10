@@ -1116,3 +1116,83 @@ tr.saving { opacity: 0.6; }
 .drill-table tbody tr.drill-level-1 td, .drill-table tbody tr.drill-level-2 td, .drill-table tbody tr.drill-level-3 td { background: transparent; }
 .drill-table tbody tr.drill-alt:not(.drill-level-0) td { background: color-mix(in srgb, var(--surface-2) 40%, transparent); }
 .drill-table tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 100%, transparent); }
+
+/* ---------- Painel (10/10/2026): execução do orçamento, composição e maiores desvios */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.page-header .page-context { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.active-filters-label { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
+/* KPIs do Painel: sem sombra nem "levantar" no hover (número não é clicável) */
+.panel-body .stat { box-shadow: none; border-top-width: 1px; }
+.panel-body .stat:hover { box-shadow: none; transform: none; }
+.kpi-subhead { margin: 0 0 -16px; font: 700 15px/22px var(--font-display); color: var(--text); }
+.kpi-composition .kpi-subhead { margin: 0; }
+.kpi-note { margin: 0; }
+.kpi-band { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+.kpi-band-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 14px; }
+.kpi-band-head h2 { margin: 0; font: 700 17px/24px var(--font-display); }
+.kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); row-gap: 18px; }
+.kpi { display: grid; align-content: start; gap: 4px; padding: 0 18px; border-left: 1px solid var(--border); min-width: 0; }
+.kpi:first-child { border-left: 0; padding-left: 0; }
+.kpi-label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
+.kpi-value { font: 800 clamp(18px, 1.55vw, 24px)/1.3 var(--font-display); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kpi-value.up { color: var(--bad); }
+.kpi-value.down { color: var(--good); }
+.kpi-value.muted { color: var(--muted); font-size: 18px; }
+.kpi-hint { font-size: 12.5px; line-height: 17px; color: var(--muted); }
+.kpi-hint strong { color: var(--text); font-weight: 600; }
+.kpi-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex: none; vertical-align: baseline; }
+.kpi-swatch.actual { background: var(--series-1); }
+.kpi-swatch.budget { background: var(--series-3); }
+.kpi-swatch.prev { background: var(--series-past); }
+.kpi-swatch.proj { background: #e24b4a; }
+.kpi-meter { position: relative; display: block; height: 8px; border-radius: 4px; background: var(--grid); margin: 4px 0 6px; }
+.kpi-meter-fill { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 4px; background: var(--series-1); }
+.kpi-meter-mark { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--series-3-ink); }
+.dev-tag { font-weight: 650; white-space: nowrap; }
+.dev-tag.up { color: var(--bad); }
+.dev-tag.down { color: var(--good); }
+@media (max-width: 1280px) {
+  .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .kpi:nth-child(3n + 1) { border-left: 0; padding-left: 0; }
+}
+/* maiores desvios */
+.dev-head { display: grid; gap: 8px; margin-bottom: 8px; }
+.dev-basis { margin: 0; line-height: 20px; }
+.seg-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg-tabs button { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: 500 13px/18px var(--font-body); padding: 7px 12px; min-height: 36px; cursor: pointer; }
+.seg-tabs button.active { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
+.dev-list { list-style: none; margin: 0; padding: 0; }
+.dev-row { display: grid; grid-template-columns: 28px minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 4px 16px; align-items: start; padding: 12px 8px; border-top: 1px solid var(--border); }
+.dev-row .right { text-align: right; }
+.dev-row-head { border-top: 0; padding-top: 4px; padding-bottom: 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--muted); }
+.dev-row.picked { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--series-1); }
+.dev-rank { font: 700 14px/22px var(--font-display); color: var(--muted); font-variant-numeric: tabular-nums; }
+.dev-item { min-width: 0; }
+.dev-name { font-weight: 600; font-size: 14.5px; line-height: 22px; }
+.dev-sub { display: block; }
+.dev-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; }
+.dev-flag { font-size: 11.5px; font-weight: 600; color: var(--bad); border: 1px solid currentColor; border-radius: var(--radius-sm); padding: 1px 6px; }
+.dev-val { font-size: 14px; line-height: 22px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dev-val-label { display: none; }
+.dev-var { display: grid; justify-items: end; gap: 2px; font-size: 14px; line-height: 22px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dev-var .dev-tag { font-size: 12.5px; line-height: 16px; }
+.dev-var.up strong { color: var(--bad); }
+.dev-var.down strong { color: var(--good); }
+@media (max-width: 860px) {
+  .kpi-band { padding: 16px 14px; }
+  .kpi-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); row-gap: 16px; }
+  .kpi { border-left: 0; padding: 0 0 0 12px; }
+  .kpi:nth-child(odd) { padding-left: 0; padding-right: 12px; }
+  .kpi .dev-tag { white-space: normal; }
+  .kpi:nth-child(even) { border-left: 1px solid var(--border); }
+  .kpi:last-child:nth-child(odd) { grid-column: 1 / -1; padding-right: 0; }
+  .kpi-value { font-size: 18px; }
+  .dev-row { grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr); gap: 6px 12px; padding: 12px 4px; }
+  .dev-row-head { display: none; }
+  .dev-item { grid-column: 2 / -1; }
+  .dev-row .dev-val { grid-column: 2; text-align: left; white-space: normal; }
+  .dev-row .dev-val + .dev-val { grid-column: 3; }
+  .dev-val-label { display: block; font-size: 11px; line-height: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; color: var(--muted); }
+  .dev-row .dev-var { grid-column: 2 / -1; justify-items: start; text-align: left; }
+}

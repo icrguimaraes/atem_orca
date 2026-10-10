@@ -225,11 +225,37 @@ export interface Overview {
     annualized_vs_prev_pct: string | null; budget_total: string; budget_ytd: string; budget_consumption_pct: string | null;
     budget_unscheduled: string;
   };
-  monthly: { month: number; prev: string; ref: string; budget: string }[];
+  monthly: { month: number; prev: string; ref: string; budget: string; proj?: string }[];
   top_cost_centers: Ranked[];
   top_accounts: Ranked[];
   heatmap: { year: number; years: number[]; rows: { id: number; code: string | null; name: string; values: string[]; total: string }[] };
   budget_progress: BudgetProgress | null;
+  execution?: Execution;
+}
+
+/** Execução do orçamento do ano (realizado contábil × orçado no mesmo período; projeção só a do gestor, completa). */
+export interface Execution {
+  available: boolean; reason: string | null; year?: number; closed?: number; closed_month?: string;
+  actual_label?: string; budget_ytd_label?: string; budget_label?: string;
+  budget_year?: string; budget_ytd?: string; actual_ytd?: string; var?: string; var_pct?: string | null;
+  execution_pct?: string | null; budget_phase_pct?: string | null; monthly_avg?: string | null;
+  forecast?: {
+    available: boolean; kind?: "closed" | "projection"; value: string | null; projected: string | null;
+    var: string | null; var_pct: string | null; reason?: string; from_month?: string; to_month?: string;
+  };
+}
+
+/** Maiores desvios do recorte (GET /dashboard/deviations). */
+export interface DeviationRow {
+  cost_center: { id: number; code: string; name: string; company: string | null } | null;
+  account: { id: number; code: string; name: string } | null;
+  main: string; base: string; var: string; var_pct: string | null; out_of_range: boolean;
+}
+export interface Deviations {
+  basis: "execution" | "period"; main_label: string; base_label: string | null;
+  main_series: "actual" | "budget"; base_series: "prev" | "budget" | "actual" | null;
+  thresholds: { growth: number; reduction: number };
+  groups: { pair: DeviationRow[]; cost_center: DeviationRow[]; account: DeviationRow[] };
 }
 
 /** Período do painel: anos somados × meses, comparação opcional com o ano anterior. */

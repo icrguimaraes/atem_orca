@@ -8,9 +8,11 @@ import { CriteriaCard } from "../components/CriteriaCard";
 import { ManagerTasks, PackageReviews, PainelBase, QuestionsInbox } from "../components/PainelBlocks";
 import { FilterBar } from "../components/FilterBar";
 import { DrillTable } from "../components/DrillTable";
+import { DeviationHighlights } from "../components/DeviationHighlights";
+import { ExecutionKpis } from "../components/ExecutionKpis";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
-import { MONTHS, fmtMoney, fmtPct, fmtSignedMoney, byDepartment } from "../labels";
+import { MONTHS, fmtMoney, fmtPct, fmtShare, fmtSignedMoney, byDepartment } from "../labels";
 
 /**
  * Painel (rota /): filtros, números, blocos e tabela, com os gráficos em Plotly montados no backend
@@ -34,6 +36,7 @@ const SECTIONS = [
   { key: "table", label: "Tabela por pacote, conta e centro de custo" },
   { key: "cumulative", label: "Total acumulado" },
   { key: "top", label: "Maiores centros de custo" },
+  { key: "deviations", label: "Maiores desvios" },
 ];
 
 function Delta({ pct }: { pct: string | null }) {
@@ -168,6 +171,11 @@ export default function Painel2() {
     else if (level === "account") setAccount((a) => (a?.id === id ? null : { id, label: row.code ? `${row.name} · ${row.code}` : row.name }));
     else if (level === "cost_center") toggleCostCenter(id);
   }
+  // maiores desvios: a linha filtra o CC e/ou a conta; clicar de novo na linha filtrada desmarca
+  function onDeviation(cc: number | null, acc: { id: number; label: string } | null, unpick: boolean) {
+    if (cc !== null) setFilters((f) => ({ ...f, cost_center_id: unpick ? "" : String(cc) }));
+    if (acc) setAccount(unpick ? null : acc);
+  }
   function clearAll() {
     setFilters({ company_id: "", cost_center_id: "", package_id: "" });
     setAccount(null);
@@ -207,20 +215,35 @@ export default function Painel2() {
   const overview = useLoad(() => api<OverviewWithFigures>(`/dashboard/overview?figures=true${query ? `&${query}` : ""}`), [query]);
 
   if (!base.data) return <Loading />;
-  const { companies, ccs, packages, departments } = base.data;
+  const { cycle, companies, ccs, packages, departments } = base.data;
   const o = overview.data;
   const f = o?.figures;
   const period = o?.period;
   const monthsTxt = months.length ? ` · ${monthsLabel(months)}` : "";
   const typesTxt = modules.length ? ` · ${modules.map((m) => BUDGET_TYPES.find((b) => b.key === m)?.label ?? m).join(" + ")}` : "";
-  const mainLabel = period ? `${period.main_label}${monthsTxt}` : "";
+  // com a projeção do gestor no período, os totais do realizado a incluem: o rótulo diz isso (o mensal a separa em vermelho)
+  const withProjection = period?.main === "actual" && (o?.monthly ?? []).some((r) => Number(r.proj ?? 0) > 0);
+  const mainLabel = period ? `${period.main_label}${withProjection ? " + projeção" : ""}${monthsTxt}` : "";
   const baseLabel = period?.base_label ?? "";
   const budgetLabel = period?.budget_label ?? "Orçado";
   const isBudgetMain = period?.main === "budget";
   const hasBase = Boolean(period?.base_kind);
   const hasData = Boolean(o && (o.has_actual || o.has_budget));
   const shownYears = years.length ? years : (o?.selected_years ?? []);
+  // execução do orçamento: realizado contábil × orçado (bloco novo); na comparação orçado × realizado ele substitui
+  // os cards repetidos (base, principal, variação, média, orçado); com o ano anterior, os cards dele continuam
+  const ex = o?.execution;
+  const execOn = Boolean(ex?.available && !isBudgetMain);
+  const supersede = execOn && period?.base_kind === "budget";
+  const modulesTotal = (o?.by_module ?? []).reduce((acc, m) => acc + Number(m.main), 0);
   const filtered = Boolean(filters.company_id || filters.cost_center_id || filters.package_id || account || modules.length);
+  // chip de filtro ativo, removível um a um (o "Resetar filtros" da barra limpa todos)
+  const chip = (text: string, remove: () => void) => (
+    <span className="filter-chip">
+      {text}
+      <button type="button" aria-label={`Remover filtro ${text}`} title="Remover este filtro" onClick={remove}>×</button>
+    </span>
+  );
   const unpick = (label: string, clear: () => void) => (
     <button type="button" className="btn btn-ghost btn-sm" onClick={clear}>{label}</button>
   );
@@ -229,7 +252,20 @@ export default function Painel2() {
     <>
       <PageHeader
         title="Painel"
-        subtitle={<p className="greeting">{greeting()}, {user?.name.split(" ")[0]}!</p>}
+        subtitle={
+          <>
+            <p className="greeting">{greeting()}, {user?.name.split(" ")[0]}!</p>
+            <p className="page-context">
+              {[
+                cycle && `Ciclo orçamentário ${cycle.fiscal_year}`,
+                o?.execution?.available
+                  ? `realizado ${o.execution.year} até ${o.execution.closed_month}`
+                  : o?.has_actual && period?.closed_month && (period.closed ?? 12) < 12 && `realizado até ${period.closed_month}`,
+                isController ? "todos os centros de custo" : "seus centros de custo",
+              ].filter(Boolean).join(" · ")}
+            </p>
+          </>
+        }
         actions={
           <>
             {isPlanner && <Link to="/pessoal/simulacao" className="btn btn-ghost">Simular cenário de pessoal</Link>}
@@ -373,22 +409,15 @@ export default function Painel2() {
           </div>
           {activeFilters > 0 && (
             <div className="active-filters" aria-label="Filtros ativos">
-              <span className="muted small">Filtros ativos (guardados da sua última visita):</span>
-              {filters.company_id && <span className="filter-chip">Empresa: {filters.company_id.split(",").map((i) => companies.find((c) => String(c.id) === i)?.short_name ?? i).join(" + ")}</span>}
-              {department && <span className="filter-chip">Área: {department.split(",").map((i) => departments.find((d) => String(d.id) === i)?.name ?? i).join(" + ")}</span>}
-              {filters.cost_center_id && <span className="filter-chip">Centro de custo: {ccs.find((c) => String(c.id) === filters.cost_center_id)?.code ?? filters.cost_center_id}</span>}
-              {modules.length > 0 && <span className="filter-chip">Tipo: {modules.map((m) => BUDGET_TYPES.find((b) => b.key === m)?.label ?? m).join(" + ")}</span>}
-              {months.length > 0 && <span className="filter-chip">Mês: {months.map((m) => MONTHS[m - 1]).join(", ")}</span>}
-              {filters.package_id && <span className="filter-chip">Pacote: {packages.find((p) => String(p.id) === filters.package_id)?.name ?? filters.package_id}</span>}
-              <button type="button" className="btn btn-ghost btn-sm" onClick={clearAll}>Limpar tudo</button>
-            </div>
-          )}
-          {account && (
-            <div className="active-filters" aria-label="Filtros aplicados por clique">
-              <span className="filter-chip">
-                Conta: {account.label}
-                <button type="button" aria-label="Remover o filtro de conta" title="Remover o filtro de conta" onClick={() => setAccount(null)}>×</button>
-              </span>
+              <span className="active-filters-label">Filtros ativos</span>
+              {filters.company_id && chip(`Empresa: ${filters.company_id.split(",").map((i) => companies.find((c) => String(c.id) === i)?.short_name ?? i).join(" + ")}`, () => setFilters((f) => ({ ...f, company_id: "", cost_center_id: "" })))}
+              {department && chip(`Área: ${department.split(",").map((i) => departments.find((d) => String(d.id) === i)?.name ?? i).join(" + ")}`, () => setDepartment(""))}
+              {filters.cost_center_id && chip(`Centro de custo: ${ccs.find((c) => String(c.id) === filters.cost_center_id)?.name ?? filters.cost_center_id}`, () => setFilters((f) => ({ ...f, cost_center_id: "" })))}
+              {modules.length > 0 && chip(`Tipo: ${modules.map((m) => BUDGET_TYPES.find((b) => b.key === m)?.label ?? m).join(" + ")}`, () => setModules([]))}
+              {years.length > 0 && chip(`Ano: ${years.join(" + ")}`, () => setYears([]))}
+              {months.length > 0 && chip(`Mês: ${months.map((m) => MONTHS[m - 1]).join(", ")}`, () => setMonths([]))}
+              {filters.package_id && chip(`Pacote: ${packages.find((p) => String(p.id) === filters.package_id)?.name ?? filters.package_id}`, () => setFilters((f) => ({ ...f, package_id: "" })))}
+              {account && chip(`Conta: ${account.label}`, () => setAccount(null))}
             </div>
           )}
           <div className="section-tools">
@@ -427,7 +456,14 @@ export default function Painel2() {
         </Alert>
       ) : (
         <div className={`panel-body${overview.loading ? " is-loading" : ""}`} aria-busy={overview.loading}>
-          <div className="stats">
+          {execOn && ex && (
+            <ExecutionKpis ex={ex} monthsTxt={monthsTxt} linear={supersede && Number(o.kpis.ref_annualized) > 0 ? o.kpis.ref_annualized : null} />
+          )}
+          {!execOn && ex?.reason && o.has_actual && !isBudgetMain && (
+            <p className="muted small kpi-note">Execução do orçamento indisponível: {ex.reason}</p>
+          )}
+          {execOn && !supersede && hasBase && <h2 className="kpi-subhead">Comparação com {baseLabel}</h2>}
+          {!supersede && <div className="stats">
             {period?.base_kind === "prev" && !period.annualized_base && o.kpis.prev_total !== o.kpis.prev_ytd && (
               <Stat label={`Realizado ${o.previous_year} (ano cheio)`} value={fmtMoney(o.kpis.prev_total)} />
             )}
@@ -449,7 +485,7 @@ export default function Painel2() {
                 </span>
               </div>
             )}
-            {o.has_actual && o.selected_years.length === 1 && o.last_closed_period && !months.length && (
+            {!execOn && o.has_actual && o.selected_years.length === 1 && o.last_closed_period && !months.length && (
               <Stat
                 label="Média mensal"
                 value={fmtMoney(Number(o.kpis.actual_total) / o.last_closed_period)}
@@ -467,7 +503,7 @@ export default function Painel2() {
                 )}
               />
             )}
-            {o.has_budget && !isBudgetMain && (period?.base_kind !== "budget" || o.kpis.budget_total !== o.kpis.prev_ytd) && (
+            {!execOn && o.has_budget && !isBudgetMain && (period?.base_kind !== "budget" || o.kpis.budget_total !== o.kpis.prev_ytd) && (
               <Stat
                 label={budgetLabel}
                 value={fmtMoney(o.kpis.budget_total)}
@@ -477,21 +513,25 @@ export default function Painel2() {
                 )}
               />
             )}
-          </div>
+          </div>}
           {o.by_module.length > 0 && (
+            <div className="kpi-composition">
+            <h2 className="kpi-subhead">Composição por tipo · {mainLabel}</h2>
             <div className="stats stats-modules">
               {o.by_module.map((m) => (
                 <Stat
                   key={m.module}
-                  label={`${m.label} · ${mainLabel}`}
+                  label={m.label}
                   value={fmtMoney(m.main)}
                   hint={lines(
+                    modulesTotal > 0 && `${fmtShare(String(Number(m.main) / modulesTotal))} do total`,
                     hasBase && m.var_pct !== null && Number(m.base) > 0 &&
                       `${fmtPct(m.var_pct)} (${fmtSignedMoney(Number(m.main) - Number(m.base))}) vs ${baseLabel}`,
                     Number(m.unscheduled) > 0 && `inclui ${fmtMoney(m.unscheduled)} sem cronograma mensal`,
                   )}
                 />
               ))}
+            </div>
             </div>
           )}
 
@@ -565,9 +605,25 @@ export default function Painel2() {
               </Card>,
             )}
 
+            {shell("deviations",
+              <Card
+                title={`Maiores desvios${typesTxt}`}
+                actions={filters.cost_center_id || account
+                  ? unpick("Desmarcar", () => { setFilters((cur) => ({ ...cur, cost_center_id: "" })); setAccount(null); })
+                  : undefined}
+              >
+                <DeviationHighlights
+                  query={query}
+                  selectedCostCenter={filters.cost_center_id}
+                  selectedAccount={account?.id ?? null}
+                  onPick={onDeviation}
+                />
+              </Card>,
+            )}
           </div>
         </div>
       )}
+      <p className="sr-only" aria-live="polite">{overview.loading ? "Atualizando o Painel…" : o ? "Painel atualizado." : ""}</p>
       <CriteriaCard />
       {o?.budget_progress && o.budget_progress.total_cost_centers > 0 && <BudgetProgressCard progress={o.budget_progress} figures={f ? { rank: f.budget_progress, total: f.budget_progress_total } : undefined} />}
       <PainelBase />

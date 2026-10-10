@@ -95,6 +95,15 @@ def _labels(o: dict) -> dict:
     }
 
 
+def _projection_name(proj: list[float]) -> str:
+    """Legenda da projeção com os meses que ela realmente cobre ("Projeção out–dez (gestor)")."""
+    months = [i for i, v in enumerate(proj) if v]
+    if not months:
+        return "Projeção (gestor)"
+    first, last = MONTHS[months[0]].lower(), MONTHS[months[-1]].lower()
+    return f"Projeção {first if first == last else f'{first}–{last}'} (gestor)"
+
+
 def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | None = None) -> dict:
     """Comparativo mensal: colunas lado a lado (ano anterior, realizado, orçado) em cor sólida, com o valor em cada
     coluna quando cabe. customdata = [valor, mês (o clique filtra), linhas do tooltip]."""
@@ -111,7 +120,7 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
     proj = [_num(r.get("proj", 0)) for r in rows]
     if any(proj) and o["has_actual"]:
         # logo depois do realizado: a coluna de 2026 vem antes da de 2027 também de out a dez
-        series.insert([k for k, _, _ in series].index("ref") + 1, ("proj", "Projeção out–dez (gestor)", PROJETADO))
+        series.insert([k for k, _, _ in series].index("ref") + 1, ("proj", _projection_name(proj), PROJETADO))
     picked = set(months or [])
     opacity = [1.0 if (not picked or m in picked) else 0.3 for m in range(1, 13)]
     values_by = {key: [_num(r[key]) for r in rows] for key, _, _ in series}
@@ -194,10 +203,19 @@ def fig_monthly_total(o: dict) -> dict:
     unscheduled = _num(o["kpis"].get("budget_unscheduled"))
     if "budget" in totals:
         totals["budget"] += unscheduled
+    # projeção do gestor: empilhada sobre o realizado também na coluna TOTAL (antes ficava dentro da barra azul)
+    proj = [_num(r.get("proj", 0)) for r in o["monthly"]]
+    proj_total = sum(proj)
+    if proj_total and "ref" in totals:
+        series.insert([k for k, _, _ in series].index("ref") + 1, ("proj", _projection_name(proj), PROJETADO))
+        totals["proj"] = proj_total
     data = []
     for key, name, color in series:
         v = totals[key]
-        lines = [[f"{name}: {fmt_money(v)}", color]]
+        shown = v - proj_total if (key == "ref" and "proj" in totals) else v
+        lines = [[f"{name}: {fmt_money(shown)}", color]]
+        if key == "ref" and "proj" in totals:
+            lines.append([f"Com a projeção: {fmt_money(v)}", ""])
         if key == "ref" and v:
             prev, budget = totals.get("prev", 0.0), totals.get("budget", 0.0)
             if prev:
@@ -208,26 +226,34 @@ def fig_monthly_total(o: dict) -> dict:
                 )
         if key == "budget" and unscheduled:
             lines.append([f"inclui {fmt_money(unscheduled)} de CAPEX sem cronograma mensal", ""])
+        stack = {"offsetgroup": "ref" if key == "proj" else key}
+        if key == "proj":
+            stack["base"] = [totals["ref"] - proj_total]
         data.append(
             go.Bar(
                 x=["TOTAL"],
-                y=[v],
+                y=[shown],
                 name=name,
+                **stack,
                 marker={"color": color, "cornerradius": 4},
-                text=[_short(v) if v > 0 else ""],
-                textposition="outside",
+                text=[_short(shown) if shown > 0 else ""],
+                # realizado com a projeção empilhada em cima: o rótulo vai dentro da barra (fora, a projeção o cobriria)
+                textposition="inside" if (key == "ref" and "proj" in totals) else "outside",
+                insidetextanchor="end",
+                textangle=0,
                 cliponaxis=False,
                 constraintext="none",
-                textfont={"size": 14, "color": INK[color]},
-                customdata=[[fmt_money(v), lines]],
+                textfont={"size": 14, "color": "#ffffff" if (key == "ref" and "proj" in totals) else INK[color]},
+                customdata=[[fmt_money(shown), lines]],
                 hovertemplate=name + ": <b>%{customdata[0]}</b><extra></extra>",
             )
         )
     top = max(list(totals.values()) + [0.0])
     layout = _layout(
         barmode="group",
-        bargap=0.3,
-        bargroupgap=0.12,
+        # com a projeção empilhada, colunas mais largas: o rótulo do realizado cabe dentro da barra, na horizontal
+        bargap=0.2 if "proj" in totals else 0.3,
+        bargroupgap=0.08 if "proj" in totals else 0.12,
         hovermode="x unified",
         showlegend=False,
         yaxis={"visible": False, "range": [0, (top or 1) * 1.15], "fixedrange": True},
