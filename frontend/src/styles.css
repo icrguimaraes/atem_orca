@@ -1198,3 +1198,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-
 }
 .active-filters-reset { margin-left: 4px; }
 @media (max-width: 860px) { .active-filters-reset { display: none; } }
+/* títulos dos cards um pouco maiores; ferramentas da tabela alinhadas (10/10/2026) */
+.card-head h2, .card > h2 { font-size: 20px; line-height: 28px; }
+.drill-tools { align-items: center; }
+.drill-help { font-size: 14px; line-height: 20px; }
+.drill-tools .inline-controls { align-items: center; gap: 12px; }
+.drill-sort { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); font-weight: 600; margin: 0; }
+.drill-tools .drill-search, .drill-tools .drill-sort select { min-height: 40px; height: 40px; }

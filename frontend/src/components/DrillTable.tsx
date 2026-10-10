@@ -213,8 +213,8 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
 
   return (
     <>
-      <div className="section-tools">
-        <span className="muted small">
+      <div className="section-tools drill-tools">
+        <span className="muted drill-help">
           {onSelect ? "Clique no + para detalhar (área → setor → pacote → conta) e no nome do pacote ou da conta para filtrar o painel." : "Clique em + para detalhar (área → setor → pacote → conta)."} AV %: participação no total da coluna.
           {hasBase && (
             <>
@@ -234,8 +234,8 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
             aria-label="Filtrar linhas da tabela"
             title="Filtra as linhas carregadas (abra com + para buscar dentro de um nível)"
           />
-          <label className="small muted">
-            Ordenar{" "}
+          <label className="drill-sort">
+            <span>Ordenar</span>
             <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Ordenar linhas">
               {(Object.keys(SORT_LABELS) as Sort[]).map((k) => (
                 <option key={k} value={k}>
