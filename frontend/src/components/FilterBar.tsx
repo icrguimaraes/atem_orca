@@ -17,13 +17,14 @@ export interface FilterField {
  * (um toque em qualquer campo abre a folha inferior com todos os filtros, "Limpar" e "Aplicar").
  * `onApply` recebe todos os valores de uma vez (evita setState em cascata); sem ele, aplica campo a campo.
  */
-export function FilterBar({ fields, lead, extra, onApply, onReset, resetCount }: {
+export function FilterBar({ fields, lead, extra, onApply, onReset, resetCount, desktopReset = true }: {
   fields: FilterField[];
   lead?: ReactNode;         // controles antes dos selects (ex.: botões de empresa no Painel)
   extra?: ReactNode;
   onApply?: (values: Record<string, string>) => void;
   onReset?: () => void;     // botão "Resetar filtros" (sempre visível; desabilitado sem filtro ativo)
   resetCount?: number;      // filtros ativos além dos selects (botões, busca…); sem ele, conta os selects
+  desktopReset?: boolean;   // false: a página mostra o "Resetar filtros" em outro lugar no desktop (ex.: Painel, junto dos filtros ativos)
 }) {
   const [open, setOpen] = useState(false);
   const current = Object.fromEntries(fields.map((f) => [f.key, f.value]));
@@ -69,7 +70,7 @@ export function FilterBar({ fields, lead, extra, onApply, onReset, resetCount }:
           </select>
         ))}
         {extra}
-        {reset}
+        {desktopReset && reset}
       </div>
 
       <div className="filter-summary" role="group" aria-label="Filtros">

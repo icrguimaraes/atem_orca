@@ -281,6 +281,7 @@ export default function Painel2() {
         onApply={(v) => setFilters({ ...filters, cost_center_id: v.cost_center_id })}
         onReset={clearAll}
         resetCount={activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1)}
+        desktopReset={false}
         lead={
           <>
             <div className="chip-group">
@@ -407,7 +408,7 @@ export default function Painel2() {
               </select>
             </div>
           </div>
-          {activeFilters > 0 && (
+          {activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1) > 0 && (
             <div className="active-filters" aria-label="Filtros ativos">
               <span className="active-filters-label">Filtros ativos</span>
               {filters.company_id && chip(`Empresa: ${filters.company_id.split(",").map((i) => companies.find((c) => String(c.id) === i)?.short_name ?? i).join(" + ")}`, () => setFilters((f) => ({ ...f, company_id: "", cost_center_id: "" })))}
@@ -418,6 +419,10 @@ export default function Painel2() {
               {months.length > 0 && chip(`Mês: ${months.map((m) => MONTHS[m - 1]).join(", ")}`, () => setMonths([]))}
               {filters.package_id && chip(`Pacote: ${packages.find((p) => String(p.id) === filters.package_id)?.name ?? filters.package_id}`, () => setFilters((f) => ({ ...f, package_id: "" })))}
               {account && chip(`Conta: ${account.label}`, () => setAccount(null))}
+              {/* "Resetar filtros" junto dos filtros ativos (10/10/2026), não solto no canto da faixa */}
+              <button type="button" className="btn btn-ghost btn-sm active-filters-reset" onClick={clearAll}>
+                Resetar filtros ({activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1)})
+              </button>
             </div>
           )}
           <div className="section-tools">
