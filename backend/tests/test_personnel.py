@@ -227,7 +227,7 @@ def test_quadro_pending_cost_center_and_salary(client, admin, run_worker):
     a informar em Apontamentos; quem não tem setor com CC fica sem CC (aviso)."""
     import_and_load(client, admin, run_worker, builders.opex_template_bd(), "bd.xlsx", dataset_type="MASTER_DATA")
     ccs = {c["code"]: c for c in client.get("/api/v1/cost-centers", headers=admin).json()}
-    contab = next(a for a in client.get("/api/v1/areas", headers=admin).json() if a["name"] == "Contabilidade")
+    contab = next(a for a in client.get("/api/v1/areas", headers=admin).json() if a["name"] == "CONTABILIDADE")
     client.patch(
         f"/api/v1/cost-centers/{ccs[CC1]['id']}",
         headers=admin,
@@ -405,7 +405,7 @@ def test_findings_bulk_fix_keep_and_sector(client, admin, run_worker):
     assert [d["note"] for d in fixed.json()["done"]] == ["Mês da ação: MAI", "Mês da ação: MAI"]
     assert [f["key"] for f in fixed.json()["failed"]] == ["0:X:1:Y"]
 
-    sector = next(s for s in data["sectors"] if s["label"].endswith("› Contabilidade"))
+    sector = next(s for s in data["sectors"] if s["label"].upper().endswith("› CONTABILIDADE"))
     bad = client.post("/api/v1/findings/fix", headers=admin, json={"key": structure[0]["key"]})
     assert bad.status_code == 422
     ok = client.post("/api/v1/findings/fix", headers=admin, json={"key": structure[0]["key"], "area_id": sector["id"]})

@@ -12,6 +12,8 @@ def test_why_and_question_flow(client, admin, run_worker):
     w = why.json()
     assert w["total"]["proposed"] != "0.00" and w["by_module"][0]["module"] == "OPEX"
     assert w["drivers"]["accounts"] and w["opex"]
+    # limiares do semáforo do ciclo, os mesmos da tabela do Painel (alert.growth_pct / alert.reduction_pct)
+    assert set(w["thresholds"]) == {"growth", "reduction"} and w["thresholds"]["growth"] > 0
     assert w["missing"] == sum(1 for i in w["opex"] if not i["justified"]) > 0
     scope = w["scope"]["cost_center_ids"]
     assert scope

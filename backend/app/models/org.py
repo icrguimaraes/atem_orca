@@ -1,5 +1,5 @@
 from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.models.base import Base, TimestampMixin
 
@@ -43,6 +43,12 @@ class Area(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200))
+
+    @validates("name")
+    def _upper_name(self, _key, value):
+        """Nomes sempre em MAIÚSCULAS (10/10/2026), venham da tela, da importação ou do seed."""
+        return value.strip().upper() if isinstance(value, str) else value
+
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"))
 
 
@@ -54,6 +60,12 @@ class CostCenter(TimestampMixin, Base):
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), index=True)
     code: Mapped[str] = mapped_column(String(20), index=True)
     name: Mapped[str] = mapped_column(String(200))
+
+    @validates("name")
+    def _upper_name(self, _key, value):
+        """Nomes sempre em MAIÚSCULAS (10/10/2026), venham da tela, da importação ou do seed."""
+        return value.strip().upper() if isinstance(value, str) else value
+
     manager_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     manager_name: Mapped[str | None] = mapped_column(String(200))
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"))

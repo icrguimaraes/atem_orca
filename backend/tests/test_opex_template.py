@@ -54,7 +54,7 @@ def test_ream_template_without_key_column(client, admin, run_worker):
     run_worker()
     assert status(client, admin, batch_id)["status"] == "COMPLETED"
     cc = next(c for c in client.get("/api/v1/cost-centers", headers=admin).json() if c["code"] == "RFM6003000")
-    assert cc["name"] == "Custos"
+    assert cc["name"] == "CUSTOS"
     head = client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=admin).json()
     lines = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()
     assert len(lines) == 3

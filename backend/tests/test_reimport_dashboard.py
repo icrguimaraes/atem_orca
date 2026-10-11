@@ -385,9 +385,9 @@ def test_breakdown_by_area_and_sector(client, admin, run_worker):
     assert {"Controladoria", "Tributos"} <= set(depts)
     dept = depts["Tributos"]
     sectors_by_name = {a["name"]: a for a in client.get("/api/v1/areas", headers=admin).json()}
-    sector = sectors_by_name["Fiscal"]
+    sector = sectors_by_name["FISCAL"]
     assert sector["department_id"] == dept["id"]
-    assert sectors_by_name["Dados"]["department_id"] == depts["Controladoria"]["id"]
+    assert sectors_by_name["DADOS"]["department_id"] == depts["Controladoria"]["id"]
     # nova área (ex.: Projeção) e setor criados pelo cadastro
     projecao = client.post("/api/v1/departments", headers=admin, json={"name": "Projeção"})
     assert projecao.status_code in (200, 201), projecao.text
@@ -408,7 +408,7 @@ def test_breakdown_by_area_and_sector(client, admin, run_worker):
     sectors = client.get(
         f"/api/v1/dashboard/breakdown?group_by=area&parent_department_id={dept['id']}&{q}", headers=admin
     ).json()
-    assert [(r["name"], r["ref"]) for r in sectors["rows"]] == [("Fiscal", "350.00")]
+    assert [(r["name"], r["ref"]) for r in sectors["rows"]] == [("FISCAL", "350.00")]
     packages = client.get(
         f"/api/v1/dashboard/breakdown?group_by=package&parent_department_id={dept['id']}"
         f"&parent_area_id={sector['id']}&{q}",
