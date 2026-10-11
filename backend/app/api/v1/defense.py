@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.v1.dashboard import Facts, _ints, _last_closed, _period
+from app.api.v1.dashboard import Facts, _ints, _last_closed, _period, _thresholds
 from app.core.deps import client_ip, get_current_user, is_global, visible_cost_center_ids
 from app.db import get_db
 from app.models import (
@@ -316,6 +316,8 @@ def why(
         "by_module": by_module,
         "drivers": {"accounts": acc_drivers[:10], "cost_centers": cc_drivers[:10] if len(cc_drivers) > 1 else []},
         "alerts": alerts,
+        # limiares do semáforo do ciclo (os mesmos da tabela do Painel): a variação só fica vermelha fora da faixa
+        "thresholds": dict(zip(("growth", "reduction"), _thresholds(db), strict=True)),
         "opex": opex_items[:20],
         "opex_count": len(opex_items),
         "personnel": personnel_items[:30],
