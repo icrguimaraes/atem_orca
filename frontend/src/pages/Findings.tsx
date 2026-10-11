@@ -132,7 +132,7 @@ export default function Findings() {
     <>
       <PageHeader
         title="Apontamentos"
-        subtitle="Fila de correção dos orçamentos em aberto: escolha o centro de custo e resolva por tipo, na própria linha ou em lote. Críticos bloqueiam o envio; avisos podem ser mantidos com justificativa."
+        subtitle={`Versão ${data.version} · fila de correção dos orçamentos em aberto, por centro de custo e tipo; críticos bloqueiam o envio, avisos podem ser mantidos com o motivo.`}
         actions={
           <>
             <button type="button" className="btn" onClick={() => save("/findings/export.xlsx", `Apontamentos_${tag}.xlsx`)}>Relatório (Excel)</button>
@@ -143,7 +143,7 @@ export default function Findings() {
       <div className="stats">
         <Stat label="Pendentes" value={fmtInt(shown.length)} hint={filtered ? `de ${fmtInt(items.length)} no total` : `versão ${data.version}`} />
         <Stat label="Críticos" value={fmtInt(critical)} tone={critical ? "bad" : "good"} hint="bloqueiam o envio" />
-        <Stat label="Avisos" value={fmtInt(shown.length - critical)} tone={shown.length - critical ? "warn" : undefined} hint="para a análise" />
+        <Stat label="Avisos" value={fmtInt(shown.length - critical)} hint="não bloqueiam; para a análise" />
         <Stat label="Centros de custo" value={fmtInt(new Set(shown.map((i) => i.cost_center_id)).size)} hint="com pendência" />
         <Stat
           label="Resolvidos"
@@ -177,6 +177,7 @@ export default function Findings() {
           { key: "cc", label: "Centro de custo", value: cc, onChange: setCc, options: ccOptions, wide: true },
         ]}
         extra={<SearchBox value={search} onChange={setSearch} placeholder="Buscar item, pessoa, conta…" />}
+        chips={search ? [{ label: `Busca: “${search}”`, onRemove: () => setSearch("") }] : []}
       />
       {msg && <Alert tone={msg.tone}>{msg.text}</Alert>}
       {tab === "open" && (

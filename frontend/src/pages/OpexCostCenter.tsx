@@ -6,8 +6,8 @@ import { EventPanel } from "../components/opex/EventPanel";
 import { LinesGrid } from "../components/opex/LinesGrid";
 import { TravelPanel } from "../components/opex/TravelPanel";
 import { Legend, MonthlyBars, PairedBars, SERIES } from "../components/charts";
-import { Alert, BackButton, Badge, Card, Loading, Modal, PageHeader, Stat } from "../components/ui";
-import { REVIEW_STATUS, SUBMISSION_STATUS, fmtCompact, fmtDate, fmtDateTime, fmtMoney, fmtPct } from "../labels";
+import { Alert, BackButton, Badge, Card, Empty, Loading, Modal, PageHeader, Stat } from "../components/ui";
+import { REVIEW_STATUS, SUBMISSION_STATUS, fmtCompact, fmtDate, fmtDateTime, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
 
 type Tab = "accounts" | "fill" | "history";
 
@@ -124,7 +124,7 @@ export default function OpexCostCenter() {
     <>
       <PageHeader
         title={head.cost_center.name}
-        subtitle={`Centro de custo ${head.cost_center.company_code} · ${head.cost_center.code} · gestor ${head.cost_center.manager_name ?? "—"} · ${head.cycle.name} (versão ${head.version}) · prazo ${fmtDate(head.cycle.deadline)}`}
+        subtitle={`Orçamento OPEX ${y.target} · CC ${head.cost_center.code} · empresa ${head.cost_center.company_code} · gestor ${head.cost_center.manager_name ?? "—"} · versão ${head.version} · prazo ${fmtDate(head.cycle.deadline)}`}
         actions={
           <>
             <BackButton />
@@ -155,7 +155,7 @@ export default function OpexCostCenter() {
         {editable ? <span className="muted small">alterações são salvas automaticamente</span> : <span className="muted small">somente leitura</span>}
       </div>
       {head.permissions.frozen && <Alert tone="info">A versão {head.version} do orçamento está <strong>congelada</strong> (consolidada). Para alterar, a Controladoria abre uma revisão em Consolidação.</Alert>}
-      {head.permissions.cycle_blocked && <Alert tone="warn">O ciclo ainda não foi aberto pela Controladoria. Você pode consultar o histórico, mas não editar.</Alert>}
+      {head.permissions.cycle_blocked && <Alert tone="info">O ciclo ainda não foi aberto pela Controladoria. Você pode consultar o histórico, mas não editar.</Alert>}
       {lastAdjustment && (
         <Alert tone="bad">
           <strong>Ajuste solicitado</strong> por {lastAdjustment.user ?? "—"} em {fmtDateTime(lastAdjustment.created_at)}: {lastAdjustment.comment}
@@ -163,11 +163,12 @@ export default function OpexCostCenter() {
       )}
       {error && <Alert>{error}</Alert>}
 
+      {/* valores por extenso; a variação vem sempre com a diferença em R$ (etapa 3, 10/10/2026) */}
       <div className="stats">
-        <Stat label={`${y.prev} realizado`} value={fmtCompact(accounts.totals.prev_actual ?? 0)} />
-        <Stat label={`${y.ref} anualizado`} value={fmtCompact(annualized)} hint={accounts.closed_period ? `realizado até o mês ${accounts.closed_period}` : "sem realizado"} />
-        <Stat label={`${y.ref} orçado`} value={fmtCompact(accounts.totals.ref_budget ?? 0)} />
-        <Stat label={`${y.target} proposto`} value={fmtCompact(totalProposed)} tone="warn" hint={annualized ? `${fmtPct(String(totalProposed / annualized - 1))} vs ${y.ref} anualizado` : undefined} />
+        <Stat label={`${y.prev} realizado`} value={fmtMoney(accounts.totals.prev_actual ?? 0)} />
+        <Stat label={`${y.ref} anualizado`} value={fmtMoney(annualized)} hint={accounts.closed_period ? `realizado até o mês ${accounts.closed_period}, × 12 / ${accounts.closed_period}` : "sem realizado"} />
+        <Stat label={`${y.ref} orçado`} value={fmtMoney(accounts.totals.ref_budget ?? 0)} />
+        <Stat label={`${y.target} proposto`} value={fmtMoney(totalProposed)} tone="budget" hint={annualized ? `${fmtSignedMoney(totalProposed - annualized)} (${fmtPct(String(totalProposed / annualized - 1))}) vs ${y.ref} anualizado` : undefined} />
         <Stat label="Justificativas pendentes" value={accounts.pending_justifications} tone={accounts.pending_justifications ? "bad" : "good"} hint="obrigatórias para enviar" />
       </div>
 
@@ -218,7 +219,7 @@ export default function OpexCostCenter() {
                 { label: `${y.prev} realizado`, color: SERIES.past },
                 { label: `${y.ref} realizado`, color: SERIES.ref },
                 { label: `${y.target} proposto`, color: SERIES.budget },
-                ...(Number(accounts.totals.ref_budget) ? [{ label: `${y.ref} orçado`, color: "var(--muted)", line: true }] : []),
+                ...(Number(accounts.totals.ref_budget) ? [{ label: `${y.ref} orçado`, color: "var(--series-3-ink)", line: true }] : []),
               ]}
             />
             <MonthlyBars
@@ -228,12 +229,13 @@ export default function OpexCostCenter() {
                 { label: `${y.ref} realizado`, color: SERIES.ref, values: accounts.monthly.ref.map(Number) },
                 { label: `${y.target} proposto`, color: SERIES.budget, values: accounts.monthly.proposed.map(Number) },
               ]}
-              line={Number(accounts.totals.ref_budget) ? { label: `${y.ref} orçado`, color: "var(--muted)", values: accounts.monthly.budget.map(Number) } : undefined}
+              line={Number(accounts.totals.ref_budget) ? { label: `${y.ref} orçado`, color: "var(--series-3-ink)", values: accounts.monthly.budget.map(Number) } : undefined}
             />
           </Card>
           <Card title={`Por pacote · ${y.ref} anualizado × ${y.target} proposto`}>
-            <Legend items={[{ label: `${y.ref} anualizado`, color: SERIES.past }, { label: `${y.target} proposto`, color: SERIES.ref }]} />
+            <Legend items={[{ label: `${y.ref} anualizado`, color: SERIES.past }, { label: `${y.target} proposto`, color: SERIES.budget }]} />
             <PairedBars
+              refColor={SERIES.budget}
               prevLabel={`${y.ref} anualizado`}
               refLabel={`${y.target} proposto`}
               rows={Object.values(
@@ -246,7 +248,7 @@ export default function OpexCostCenter() {
                 }, {}),
               )
                 .sort((a, b) => Math.max(b.prev, b.ref) - Math.max(a.prev, a.ref))
-                .map((r) => ({ ...r, note: r.prev && r.ref ? fmtPct(String(r.ref / r.prev - 1)) : undefined }))}
+                .map((r) => ({ ...r, note: r.prev && r.ref ? `${fmtPct(String(r.ref / r.prev - 1))} (${r.ref - r.prev >= 0 ? "+" : "−"}${fmtCompact(Math.abs(r.ref - r.prev))})` : undefined }))}
             />
           </Card>
         </div>
@@ -264,7 +266,7 @@ export default function OpexCostCenter() {
             {options.packages.map((p) => (
               <button key={p.id} className={p.id === pkg.id ? "active" : ""} onClick={() => goToPackage(p.id)}>
                 <span>{p.roman ? `${p.roman} · ` : ""}{p.name}</span>
-                <span className="muted small">{pkgTotal(p.id) ? fmtCompact(pkgTotal(p.id)) : "—"}{p.package_type === 1 ? " · T1" : ""}</span>
+                <span className="muted small">{pkgTotal(p.id) ? fmtMoney(pkgTotal(p.id)) : "—"}{p.package_type === 1 ? " · Tipo 1" : ""}</span>
               </button>
             ))}
           </nav>
@@ -301,7 +303,7 @@ export default function OpexCostCenter() {
       {tab === "history" && (
         <Card>
           {events.length === 0 ? (
-            <p className="muted">Nenhuma movimentação ainda.</p>
+            <Empty>Nenhuma movimentação ainda.</Empty>
           ) : (
             <ol className="timeline">
               {events.map((e, i) => (

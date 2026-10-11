@@ -258,7 +258,7 @@ export function PersonnelWhatIf({ premises }: { premises: PersonnelPremises }) {
         <>
           <div className="stats" style={{ marginTop: 16 }}>
             <Stat label={`Atual ${year}`} value={fmtMoney(total.current)} />
-            <Stat label="Simulado" value={fmtMoney(total.simulated)} tone={changed ? "warn" : undefined} />
+            <Stat label="Simulado" value={fmtMoney(total.simulated)} tone={changed ? "budget" : undefined} />
             <Stat
               label="Diferença"
               value={diff ? fmtSignedMoney(diff) : "—"}

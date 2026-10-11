@@ -244,7 +244,8 @@ export function ItemContext({ item }: { item: QuestionItem }) {
       </div>
       <div className="small">
         {s.total !== null && <>{label} na pergunta: <strong>{fmtMoney(s.total)}</strong></>}
-        {c && c.total !== null && item.changed && <> · atual: <strong>{fmtMoney(c.total)}</strong></>}
+        {c && c.total !== null && item.changed && <> · atual: <strong>{fmtMoney(c.total)}</strong>
+          {s.total !== null && <span className="muted"> ({fmtSignedMoney(Number(c.total) - Number(s.total))}{Number(s.total) ? `; ${fmtPct(String(Number(c.total) / Number(s.total) - 1))}` : ""})</span>}</>}
         {c && !item.changed && s.total !== null && <span className="muted"> (sem alteração)</span>}
       </div>
       {item.moved && c && <div className="small"><strong>Lançamento movido para {c.cost_center}.</strong></div>}

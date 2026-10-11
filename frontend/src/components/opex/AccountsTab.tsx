@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { api, type OpexAccountRow, type OpexAccounts } from "../../api";
-import { FLAG_LABELS, MONTHS, fmtMoney, fmtPct } from "../../labels";
+import { FLAG_LABELS, MONTHS, fmtMoney, fmtPct, fmtSignedMoney } from "../../labels";
 import { Sparkline } from "../charts";
 import { Alert, Badge, Empty } from "../ui";
 
@@ -9,7 +9,7 @@ function Monthly({ submissionId, accountId, years }: { submissionId: number; acc
   useEffect(() => {
     api<Record<string, Record<string, string>>>(`/opex/submissions/${submissionId}/accounts/${accountId}/monthly`).then(setData);
   }, [submissionId, accountId]);
-  if (!data) return <div className="muted small">Carregando…</div>;
+  if (!data) return <div className="muted small" role="status">Carregando…</div>;
   const series: [string, string][] = [
     [`${years.prev} realizado`, "prev_actual"],
     [`${years.ref} realizado`, "ref_actual"],
@@ -28,7 +28,7 @@ function Monthly({ submissionId, accountId, years }: { submissionId: number; acc
             <td className="nowrap">{label}</td>
             {MONTHS.map((_, i) => {
               const v = Number(data[key][String(i + 1)]);
-              return <td key={i} className="right">{v ? v.toLocaleString("pt-BR", { maximumFractionDigits: 0 }) : "—"}</td>;
+              return <td key={i} className="right">{v ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}</td>;
             })}
           </tr>
         ))}
@@ -135,7 +135,7 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
                 <th className="right">{years.ref} anualizado</th>
                 {showBudget && <th className="right">{years.ref} orçado</th>}
                 <th className="right">{years.target} proposto</th>
-                <th className="right">Var.</th>
+                <th className="right" title={`Variação do proposto sobre a referência (${years.ref} anualizado; na falta, orçado ${years.ref} ou realizado ${years.prev})`}>Variação</th>
                 <th>Justificativa</th>
               </tr>
             </thead>
@@ -176,7 +176,14 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
                         </div>
                       )}
                     </td>
-                    <td className="right nowrap">{fmtPct(r.variation_pct)}</td>
+                    <td className="right nowrap">
+                      {r.variation_pct !== null ? (
+                        <>
+                          <div className={r.flags.includes("GROWTH_ABOVE") || r.flags.includes("REDUCTION_ABOVE") ? "just-var out" : undefined}>{fmtPct(r.variation_pct)}</div>
+                          <div className="small muted">{fmtSignedMoney(Number(r.proposed) - Number(r.variation_base))}</div>
+                        </>
+                      ) : "—"}
+                    </td>
                     <td className="just-cell">
                       <Justification row={r} submissionId={submissionId} editable={editable} onSaved={onChanged} />
                     </td>
@@ -200,7 +207,12 @@ export function AccountsTab({ submissionId, data, years, editable, onChanged, on
                   <td key={k} className="right"><strong>{fmtMoney(data.totals[k] ?? 0)}</strong></td>
                 ))}
                 <td className="right">
-                  {Number(data.totals.ref_annualized) ? fmtPct(String(Number(data.totals.proposed) / Number(data.totals.ref_annualized) - 1)) : "—"}
+                  {Number(data.totals.ref_annualized) ? (
+                    <>
+                      <div>{fmtPct(String(Number(data.totals.proposed) / Number(data.totals.ref_annualized) - 1))}</div>
+                      <div className="small muted">{fmtSignedMoney(Number(data.totals.proposed) - Number(data.totals.ref_annualized))}</div>
+                    </>
+                  ) : "—"}
                 </td>
                 <td />
               </tr>

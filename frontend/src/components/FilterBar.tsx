@@ -17,7 +17,30 @@ export interface FilterField {
  * (um toque em qualquer campo abre a folha inferior com todos os filtros, "Limpar" e "Aplicar").
  * `onApply` recebe todos os valores de uma vez (evita setState em cascata); sem ele, aplica campo a campo.
  */
-export function FilterBar({ fields, lead, extra, onApply, onReset, resetCount, desktopReset = true }: {
+export interface ActiveChip { label: string; onRemove: () => void }
+
+/** Linha "Filtros ativos" (padrão do Painel): chips removíveis um a um e "Resetar filtros (n)" ao lado; some sem filtro.
+ * Só no desktop — no celular o resumo em grade do FilterBar já mostra os valores e tem o próprio reset. */
+export function ActiveFilters({ chips, onReset, resetCount }: { chips: ActiveChip[]; onReset?: () => void; resetCount?: number }) {
+  const n = resetCount ?? chips.length;
+  if (!chips.length && !n) return null;
+  return (
+    <div className="active-filters desktop-active" aria-label="Filtros ativos">
+      <span className="active-filters-label">Filtros ativos</span>
+      {chips.map((c) => (
+        <span key={c.label} className="filter-chip">
+          {c.label}
+          <button type="button" aria-label={`Remover filtro ${c.label}`} title="Remover este filtro" onClick={c.onRemove}>×</button>
+        </span>
+      ))}
+      {onReset && n > 0 && (
+        <button type="button" className="btn btn-ghost btn-sm active-filters-reset" onClick={onReset}>Resetar filtros ({n})</button>
+      )}
+    </div>
+  );
+}
+
+export function FilterBar({ fields, lead, extra, onApply, onReset, resetCount, desktopReset = true, showActive = true, chips = [] }: {
   fields: FilterField[];
   lead?: ReactNode;         // controles antes dos selects (ex.: botões de empresa no Painel)
   extra?: ReactNode;
@@ -25,6 +48,8 @@ export function FilterBar({ fields, lead, extra, onApply, onReset, resetCount, d
   onReset?: () => void;     // botão "Resetar filtros" (sempre visível; desabilitado sem filtro ativo)
   resetCount?: number;      // filtros ativos além dos selects (botões, busca…); sem ele, conta os selects
   desktopReset?: boolean;   // false: a página mostra o "Resetar filtros" em outro lugar no desktop (ex.: Painel, junto dos filtros ativos)
+  showActive?: boolean;     // desktop: linha "Filtros ativos" com chips removíveis e o reset ao lado (padrão do Painel); false = a página monta a sua
+  chips?: ActiveChip[];     // filtros fora dos selects (busca, botões…) que também viram chip removível
 }) {
   const [open, setOpen] = useState(false);
   const current = Object.fromEntries(fields.map((f) => [f.key, f.value]));
@@ -60,17 +85,42 @@ export function FilterBar({ fields, lead, extra, onApply, onReset, resetCount, d
     });
   }
 
+  // padrão do Painel (etapa 3, 10/10/2026): no desktop, os filtros aplicados aparecem como chips removíveis numa linha
+  // logo abaixo dos selects, com "Resetar filtros" ao lado; sem filtro ativo, a linha não aparece
+  const activeChips: ActiveChip[] = [
+    ...fields.filter((f) => f.value !== "").map((f) => ({ label: `${f.label}: ${labelOf(f, current)}`, onRemove: () => f.onChange("") })),
+    ...chips,
+  ];
+  const activeRow = showActive && <ActiveFilters chips={activeChips} onReset={onReset} resetCount={resetN} />;
+
   return (
     <>
-      <div className="filters desktop-filters">
-        {lead}
-        {fields.map((f) => (
-          <select key={f.key} value={f.value} onChange={(e) => f.onChange(e.target.value)} aria-label={f.ariaLabel ?? f.label}>
-            {optionsOf(f, current).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        ))}
-        {extra}
-        {desktopReset && reset}
+      <div className={`desktop-filters ${showActive ? "filters-block" : "filters"}`}>
+        {showActive ? (
+          <>
+            <div className="filters">
+              {lead}
+              {fields.map((f) => (
+                <select key={f.key} value={f.value} onChange={(e) => f.onChange(e.target.value)} aria-label={f.ariaLabel ?? f.label}>
+                  {optionsOf(f, current).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              ))}
+              {extra}
+            </div>
+            {activeRow}
+          </>
+        ) : (
+          <>
+            {lead}
+            {fields.map((f) => (
+              <select key={f.key} value={f.value} onChange={(e) => f.onChange(e.target.value)} aria-label={f.ariaLabel ?? f.label}>
+                {optionsOf(f, current).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            ))}
+            {extra}
+            {desktopReset && reset}
+          </>
+        )}
       </div>
 
       <div className="filter-summary" role="group" aria-label="Filtros">

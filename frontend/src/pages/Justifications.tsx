@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, download } from "../api";
 import { FilterBar } from "../components/FilterBar";
-import { Alert, Badge, Card, Empty, Loading, PageHeader, SearchBox, Stat, useLoad } from "../components/ui";
+import { Alert, Card, Empty, Loading, PageHeader, SearchBox, Stat, useLoad } from "../components/ui";
 import { fmtInt, fmtMoney, fmtPct } from "../labels";
 import { usePersistentState } from "../persist";
 import { Subject } from "../components/WhyPanel";
@@ -50,9 +50,10 @@ function Values({ item, refYear, target }: { item: JustItem; refYear: number; ta
     <div className="just-values">
       {base !== null && <span><span className="muted">{refYear} anual.</span> {fmtMoney(base)}</span>}
       {prop !== null && <span><span className="muted">{target}</span> <strong>{fmtMoney(prop)}</strong></span>}
+      {/* vermelho só fora da faixa do ciclo (flag do sistema); senão, a variação é informação, não alerta */}
       {pct !== null && (
-        <span className={pct > 0 ? "error-text" : "good-text"}>
-          {fmtPct(String(pct))} ({prop! - base! >= 0 ? "+" : "−"}{fmtMoney(Math.abs(prop! - base!))})
+        <span className={`just-var${item.flags.includes("GROWTH_ABOVE") || item.flags.includes("REDUCTION_ABOVE") ? " out" : ""}`}>
+          {pct > 0 ? "▲" : pct < 0 ? "▼" : "•"} {fmtPct(String(pct))} ({prop! - base! >= 0 ? "+" : "−"}{fmtMoney(Math.abs(prop! - base!))})
         </span>
       )}
     </div>
@@ -96,7 +97,7 @@ function ItemRow({ item, refYear, target, onSaved }: { item: JustItem; refYear: 
             {item.flags.map((f) => <span key={f}> · {FLAG_LABEL[f] ?? f}</span>)}
           </div>
         </div>
-        <Badge tone={item.justified ? "good" : "bad"}>{item.justified ? "Justificado" : "Falta justificar"}</Badge>
+        <span className={`state ${item.justified ? "ok" : "missing"}`}>{item.justified ? "Justificado" : "Falta justificar"}</span>
       </div>
       <Values item={item} refYear={refYear} target={target} />
       {item.details.length > 0 && (
@@ -177,7 +178,7 @@ export default function Justifications() {
     <>
       <PageHeader
         title="Justificativas"
-        subtitle="Regra do ciclo: tudo o que compõe o orçamento precisa de justificativa — contas do OPEX, movimentações de pessoal e solicitações de CAPEX. Quem defende o número é o gestor da área."
+        subtitle={`Orçamento ${data.target_year}, versão ${data.version} · contas do OPEX, movimentações de pessoal e solicitações de CAPEX precisam de justificativa do gestor da área; o que falta bloqueia o envio.`}
         actions={
           <button
             type="button"
@@ -212,6 +213,7 @@ export default function Justifications() {
           },
         ]}
         extra={<SearchBox value={search} onChange={setSearch} placeholder="Buscar conta, pessoa, projeto…" />}
+        chips={search ? [{ label: `Busca: “${search}”`, onRemove: () => setSearch("") }] : []}
       />
       {groups.size === 0 ? (
         <Empty>{status === "missing" && !needle ? "Tudo justificado nos filtros escolhidos." : "Nada encontrado nos filtros escolhidos."}</Empty>
@@ -228,7 +230,7 @@ export default function Justifications() {
                 title={`${first.cost_center}${first.sector ? ` · ${first.department ?? ""} › ${first.sector}` : ""}`}
                 actions={
                   <div className="inline-controls">
-                    <Badge tone={ccMissing ? "bad" : "good"}>{ccMissing ? `${ccMissing} faltando` : "tudo justificado"}</Badge>
+                    <span className={`state ${ccMissing ? "missing" : "ok"}`}>{ccMissing ? `${ccMissing} faltando` : "tudo justificado"}</span>
                     {opex && (
                       <button type="button" className="btn btn-sm" onClick={() => getFile(`/opex/submissions/${opex}/template.xlsx`, `Template_OPEX_${data.target_year}_${code(first.cost_center)}_v${data.version}.xlsx`)}>
                         Template OPEX
@@ -252,7 +254,7 @@ export default function Justifications() {
         </div>
       )}
       <p className="muted small">
-        Atualizar a lista: <button type="button" className="link" onClick={() => { setItems(null); reload(); }}>recarregar</button>. Os templates OPEX
+        Atualizar a lista: <button type="button" className="btn-link link" onClick={() => { setItems(null); reload(); }}>recarregar</button>. Os templates OPEX
         baixados aqui trazem a justificativa da conta nas linhas sem justificativa própria; o CAPEX traz a justificativa de cada solicitação.
       </p>
     </>

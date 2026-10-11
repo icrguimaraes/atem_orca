@@ -282,6 +282,7 @@ export default function Painel2() {
         onReset={clearAll}
         resetCount={activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1)}
         desktopReset={false}
+        showActive={false}
         lead={
           <>
             <div className="chip-group">

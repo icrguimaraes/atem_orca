@@ -4,7 +4,7 @@ import { api, type OpexAction, type PersonnelHeader, type PersonnelOptions, type
 import { HireForm, MovementForm } from "../components/personnel/PersonnelForms";
 import { Legend, MonthlyBars, RankBars, SERIES, Sparkline } from "../components/charts";
 import { Alert, BackButton, Badge, Card, Empty, Loading, Modal, PageHeader, SearchBox, Stat } from "../components/ui";
-import { MONTHS, MOVEMENT_LABELS, REVIEW_STATUS, SUBMISSION_STATUS, fmtCompact, fmtDate, fmtDateTime, fmtInt, fmtMoney, fmtPct } from "../labels";
+import { MONTHS, MOVEMENT_LABELS, REVIEW_STATUS, SUBMISSION_STATUS, fmtDate, fmtDateTime, fmtInt, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
 
 type Tab = "roster" | "summary" | "history";
 
@@ -136,7 +136,7 @@ export default function PersonnelCostCenter() {
     <>
       <PageHeader
         title={`Pessoal · ${head.cost_center.name}`}
-        subtitle={`Centro de custo ${head.cost_center.company_code} · ${head.cost_center.code} · gestor ${head.cost_center.manager_name ?? "—"} · ${head.cycle.name} (versão ${head.version})${head.cycle.deadline ? ` · prazo ${fmtDate(head.cycle.deadline)}` : ""}`}
+        subtitle={`Orçamento de pessoal ${y.target} · CC ${head.cost_center.code} · empresa ${head.cost_center.company_code} · gestor ${head.cost_center.manager_name ?? "—"} · versão ${head.version}${head.cycle.deadline ? ` · prazo ${fmtDate(head.cycle.deadline)}` : ""}`}
         actions={
           <>
             <BackButton />
@@ -159,7 +159,7 @@ export default function PersonnelCostCenter() {
         <span className="muted small">· cenário {view.scenario.name}: reajuste {fmtPct(view.scenario.salary_adjustment_pct)} em {MONTHS[view.scenario.adjustment_month - 1]}, CLT × {Number(view.scenario.multipliers.CLT ?? 1).toLocaleString("pt-BR")}</span>
       </div>
       {head.permissions.frozen && <Alert tone="info">A versão {head.version} do orçamento está <strong>congelada</strong> (consolidada). Para alterar, a Controladoria abre uma revisão em Consolidação.</Alert>}
-      {head.permissions.cycle_blocked && <Alert tone="warn">O ciclo ainda não foi aberto pela Controladoria. Você pode consultar, mas não editar.</Alert>}
+      {head.permissions.cycle_blocked && <Alert tone="info">O ciclo ainda não foi aberto pela Controladoria. Você pode consultar, mas não editar.</Alert>}
       {lastAdjustment && (
         <Alert tone="bad"><strong>Ajuste solicitado</strong> por {lastAdjustment.user ?? "—"} em {fmtDateTime(lastAdjustment.created_at)}: {lastAdjustment.comment}</Alert>
       )}
@@ -169,7 +169,7 @@ export default function PersonnelCostCenter() {
         <Stat label="Headcount" value={`${fmtInt(t.headcount_start)} → ${fmtInt(t.headcount_end)}`} hint={`janeiro → dezembro/${y.target}`} />
         <Stat label="Admissões" value={fmtInt(t.hires + t.transfers_in)} tone={t.hires ? "good" : undefined} hint={`${fmtInt(t.hires)} vaga(s) · ${fmtInt(t.transfers_in)} transferência(s)`} />
         <Stat label="Saídas" value={fmtInt(t.terminations + t.transfers_out)} tone={t.terminations ? "bad" : undefined} hint={`${fmtInt(t.terminations)} desligamento(s) · ${fmtInt(t.transfers_out)} transferência(s)`} />
-        <Stat label={`Custo ${y.target}`} value={fmtCompact(annual)} tone="warn" hint={ref ? `${fmtPct(String(annual / ref - 1))} vs ${y.ref} anualizado (${fmtCompact(ref)})` : "sem realizado de pessoal"} />
+        <Stat label={`Custo ${y.target}`} value={fmtMoney(annual)} tone="budget" hint={ref ? `${fmtSignedMoney(annual - ref)} (${fmtPct(String(annual / ref - 1))}) vs ${y.ref} anualizado (${fmtMoney(ref)})` : "sem realizado de pessoal"} />
         <Stat label="Justificativas pendentes" value={fmtInt(missingReasons)} tone={missingReasons ? "bad" : "good"} hint="admissões, desligamentos e transferências" />
       </div>
 
@@ -265,12 +265,12 @@ export default function PersonnelCostCenter() {
 
       {tab === "summary" && (
         <>
-          <Card title={`Custo mensal ${y.target}`} actions={<span className="muted small">salário {fmtCompact(t.salary_total)} · encargos e benefícios {fmtCompact(t.charges_total)}{Number(t.severance_total) ? ` · rescisões ${fmtCompact(t.severance_total)}` : ""}</span>}>
-            <Legend items={[{ label: "Salário (com reajuste)", color: SERIES.ref }, { label: "Encargos e benefícios (multiplicador)", color: SERIES.prev }, ...(ref ? [{ label: `${y.ref} média mensal`, color: "var(--muted)", line: true }] : [])]} />
+          <Card title={`Custo mensal ${y.target}`} actions={<span className="muted small">salário {fmtMoney(t.salary_total)} · encargos e benefícios {fmtMoney(t.charges_total)}{Number(t.severance_total) ? ` · rescisões ${fmtMoney(t.severance_total)}` : ""}</span>}>
+            <Legend items={[{ label: "Salário (com reajuste)", color: SERIES.budget }, { label: "Encargos e benefícios (multiplicador)", color: SERIES.prev }, ...(ref ? [{ label: `${y.ref} média mensal`, color: "var(--muted)", line: true }] : [])]} />
             <MonthlyBars
               height={220}
               series={[
-                { label: "Salário", color: SERIES.ref, values: t.salary_monthly.map(Number) },
+                { label: "Salário", color: SERIES.budget, values: t.salary_monthly.map(Number) },
                 { label: "Encargos e benefícios", color: SERIES.prev, values: t.charges_monthly.map(Number) },
               ]}
               line={ref ? { label: `${y.ref} média mensal`, color: "var(--muted)", values: Array(12).fill(ref / 12) } : undefined}

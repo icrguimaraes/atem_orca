@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, download, type Company, type CostCenter, type Department, type Package, type TraceEntries, type TraceLevel, type TraceRecord, type TraceRow, type TraceTree } from "../api";
 import { useAuth } from "../auth";
-import { FilterBar } from "../components/FilterBar";
+import { ActiveFilters, FilterBar, type ActiveChip } from "../components/FilterBar";
 import { Alert, Card, Empty, Loading, PageHeader, useLoad } from "../components/ui";
 import { MONTHS, byDepartment, deptRank, fmtDateTime, fmtMoney, fmtShare } from "../labels";
 import { usePersistentState } from "../persist";
@@ -170,16 +170,33 @@ export default function Trace() {
   const t = tree.data && tree.data.level === level ? tree.data : null; // nunca mostrar o nível anterior enquanto carrega
   const rows = t ? [...t.rows].sort((a, b) => (t.level === "department" ? deptRank(a.name) - deptRank(b.name) : 0) || Number(b.value) - Number(a.value)) : [];
 
+  // filtros ativos como chips removíveis (mesmo padrão do Painel); a conta vinda do Painel tem chip próprio abaixo
+  const names = <T extends { id: number }>(list: T[], ids: string, get: (x: T) => string) =>
+    ids.split(",").map((i) => { const x = list.find((o) => String(o.id) === i); return x ? get(x) : i; }).join(" + ");
+  const chips: ActiveChip[] = [
+    ...(filters.company_id ? [{ label: `Empresa: ${names(companies, filters.company_id, (c) => c.short_name ?? c.name)}`, onRemove: () => setFilters({ ...filters, company_id: "", cost_center_id: "" }) }] : []),
+    ...(department ? [{ label: `Área: ${names(departments, department, (d) => d.name)}`, onRemove: () => setDepartment("") }] : []),
+    ...(filters.cost_center_id ? [{ label: `Centro de custo: ${names(ccs, filters.cost_center_id, (c) => c.name)}`, onRemove: () => setFilters({ ...filters, cost_center_id: "" }) }] : []),
+    ...(modules.length ? [{ label: `Tipo: ${modules.map((m) => BUDGET_TYPES.find((b) => b.key === m)?.label ?? m).join(" + ")}`, onRemove: () => setModules([]) }] : []),
+    ...(years.length ? [{ label: `Ano: ${years.join(" + ")}`, onRemove: () => setYears([]) }] : []),
+    ...(months.length ? [{ label: `Mês: ${months.map((m) => MONTHS[m - 1]).join(", ")}`, onRemove: () => setMonths([]) }] : []),
+    ...(filters.package_id ? [{ label: `Pacote: ${names(packages, filters.package_id, (p) => p.name)}`, onRemove: () => setFilters({ ...filters, package_id: "" }) }] : []),
+    ...(series ? [{ label: `Série: ${series === "budget" ? period?.budget_label ?? "orçado" : period?.actual_label ?? "realizado"}`, onRemove: () => setSeries("") }] : []),
+    ...(crumbs.length ? [{ label: `Trilha: ${crumbs[crumbs.length - 1].name}`, onRemove: () => backTo(0) }] : []),
+  ];
+
   return (
     <>
       <PageHeader
         title="Rastro"
-        subtitle="Do total do Painel ao lançamento: área → setor → centro de custo → pacote → conta → registro de origem. Clique na linha para descer; nas migalhas para voltar."
+        subtitle="Do total do Painel ao lançamento: área → setor → centro de custo → pacote → conta → registro de origem · clique na linha para descer e na trilha para voltar."
       />
       <FilterBar
         onApply={(v) => setFilters({ ...filters, cost_center_id: v.cost_center_id })}
         onReset={clearAll}
         resetCount={activeFilters + crumbs.length}
+        showActive={false}
+        desktopReset={false}
         lead={
           <>
             <div className="chip-group">
@@ -314,6 +331,7 @@ export default function Trace() {
           )}
         </div>
       )}
+      <ActiveFilters chips={chips} onReset={clearAll} resetCount={activeFilters + crumbs.length} />
       {accountId && (
         <div className="active-filters" aria-label="Filtro por conta (veio do Painel)">
           <span className="filter-chip">Conta filtrada no Painel · <Link to={`/rastro?${qs.replace(/(^|&)account_id=[^&]*/, "")}`}>remover</Link></span>

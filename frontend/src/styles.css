@@ -25,13 +25,13 @@
   --rail-pop: #ffffff;       /* menu da conta, acima do trilho */
   --good: #008a05;
   --good-bg: #e8f5e9;
-  --warn: #b4600e;           /* #E07912 em texto pequeno fica abaixo de 4,5:1; usado em bordas e barras */
-  --warn-line: #e07912;
-  --warn-bg: #fdf0e3;
+  --warn: #4a4a4a;           /* sem laranja (10/10/2026): "atenção" é neutro escuro; vermelho só para crítico/fora da faixa */
+  --warn-line: #8a8a8a;
+  --warn-bg: #f0f0f0;
   --bad: #c13515;
   --bad-bg: #fbeae6;
-  --info: #00786e;
-  --info-bg: #e3f5f3;
+  --info: #3f5873;           /* ardósia: o verde-água fica só para orçamento */
+  --info-bg: #eef2f7;
   --neutral: #5e5e5e;
   --neutral-bg: #f0f0f0;
   --radius: 12px;
@@ -72,13 +72,13 @@
     --rail-pop: #242424;
     --good: #57c45a;
     --good-bg: #16301a;
-    --warn: #f0a050;
-    --warn-line: #f0a050;
-    --warn-bg: #362411;
+    --warn: #d0d0d0;
+    --warn-line: #9a9a9a;
+    --warn-bg: #2c2c2c;
     --bad: #f08068;
     --bad-bg: #3b1a12;
-    --info: #4fd1c5;
-    --info-bg: #10302d;
+    --info: #a9bdd6;
+    --info-bg: #1e2733;
     --neutral: #c4c4c4;
     --neutral-bg: #2c2c2c;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -113,13 +113,13 @@
     --rail-pop: #242424;
     --good: #57c45a;
     --good-bg: #16301a;
-    --warn: #f0a050;
-    --warn-line: #f0a050;
-    --warn-bg: #362411;
+    --warn: #d0d0d0;
+    --warn-line: #9a9a9a;
+    --warn-bg: #2c2c2c;
     --bad: #f08068;
     --bad-bg: #3b1a12;
-    --info: #4fd1c5;
-    --info-bg: #10302d;
+    --info: #a9bdd6;
+    --info-bg: #1e2733;
     --neutral: #c4c4c4;
     --neutral-bg: #2c2c2c;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -796,13 +796,13 @@ label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(-
 /* paleta dos gráficos: azul (ano em foco) e verde-água (orçado) como no painel de Custeio em Power BI; laranja só para categorias */
 /* ano anterior em roxo (fora do azul do realizado e do verde do orçamento); *-ink = tom escuro para rótulos;
    --axis = eixos e legendas, mais forte que --muted sem chegar ao texto */
-:root { --series-1: #4472c4; --series-2: #eb6834; --series-3: #4fa894; --series-past: #8a6bbf; --grid: #eceef1;
+:root { --series-1: #4472c4; --series-2: #7f8a99; --series-3: #4fa894; --series-past: #8a6bbf; --grid: #eceef1;
   --series-1-ink: #3a64b4; --series-3-ink: #2b7a68; --series-past-ink: #6a4c9c; --axis: #4a4a4a; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { --series-1: #5b8ad6; --series-2: #d95926; --series-3: #6fbfb0; --series-past: #a08ad4; --grid: #262b34;
+  :root:not([data-theme="light"]) { --series-1: #5b8ad6; --series-2: #9aa5b3; --series-3: #6fbfb0; --series-past: #a08ad4; --grid: #262b34;
     --series-1-ink: #8fb0ea; --series-3-ink: #7fd0bd; --series-past-ink: #c3b0ea; --axis: #cfcfcf; }
 }
-  :root[data-theme="dark"] { --series-1: #5b8ad6; --series-2: #d95926; --series-3: #6fbfb0; --series-past: #a08ad4; --grid: #262b34;
+  :root[data-theme="dark"] { --series-1: #5b8ad6; --series-2: #9aa5b3; --series-3: #6fbfb0; --series-past: #a08ad4; --grid: #262b34;
     --series-1-ink: #8fb0ea; --series-3-ink: #7fd0bd; --series-past-ink: #c3b0ea; --axis: #cfcfcf; }
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -1039,7 +1039,7 @@ tr.saving { opacity: 0.6; }
 .statusbar-wrap { display: grid; gap: 8px; }
 .statusbar { display: flex; height: 22px; border-radius: 6px; overflow: hidden; gap: 2px; background: var(--surface-2); }
 .sb-seg { display: grid; place-items: center; font-size: 11.5px; font-weight: 700; color: #fff; min-width: 4px; }
-.sb-neutral { background: #9aa1ad; } .sb-info { background: #2a78d6; } .sb-warn { background: #eda100; color: #1a1a1a; }
+.sb-neutral { background: #c9ced6; color: #222222; } .sb-info { background: #8a96a6; } .sb-warn { background: #5c6b7e; }
 .sb-bad { background: #e34948; } .sb-good { background: #1d7f4e; }
 @media (max-width: 860px) { .wf-row, .dv-row { grid-template-columns: minmax(90px, 36%) 1fr 76px; } }
 
@@ -1323,3 +1323,111 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-
 .drill-tools .inline-controls { align-items: center; gap: 12px; }
 .drill-sort { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); font-weight: 600; margin: 0; }
 .drill-tools .drill-search, .drill-tools .drill-sort select { min-height: 40px; height: 40px; }
+
+/* ---------- Etapa 3 do redesenho (10/10/2026): o sistema visual do Painel aplicado às demais telas.
+   Sóbrio e consistente: menos caixas, sombras e selos; cabeçalhos de tabela em negrito; zebra sutil; dinheiro alinhado;
+   sem laranja (atenção = neutro escuro; vermelho só para crítico/fora da faixa); verde-água só para orçamento. */
+:root { --zebra: color-mix(in srgb, var(--text) 3.5%, var(--surface)); --row-hover: color-mix(in srgb, var(--text) 7%, var(--surface)); --head-bg: var(--surface-2); --focus: var(--text); }
+/* cabeçalho da página: título, contexto curto e ações */
+.page-header h1 { font-size: 30px; line-height: 38px; }
+.page-header p.muted { font-size: 14px; line-height: 21px; }
+.page-header .page-context { line-height: 20px; }
+@media (max-width: 860px) { .page-header h1 { font-size: 24px; line-height: 32px; } }
+/* cards: só a borda (sem sombra) — a hierarquia vem do título e do espaço */
+.card { box-shadow: none; }
+.card-head { margin-bottom: 14px; }
+/* indicadores: planos (sem sombra nem "levantar"), borda superior fina só quando há tom */
+.stat, .stat:hover { box-shadow: none; transform: none; }
+.stat { border-top-width: 1px; gap: 2px; padding: 14px 16px; }
+.stat-warn { border-top-color: var(--border); }
+.stat-budget { border-top: 2px solid var(--series-3); }
+.stat-good, .stat-bad { border-top-width: 2px; }
+.stat-value { font-size: clamp(18px, 1.4vw, 22px); line-height: 1.35; }
+/* selos: retângulo com cantos de 8 px (não pílula), discretos; "atenção" é contorno neutro, sem cor */
+.badge { border-radius: var(--radius-sm); padding: 2px 8px; font-size: 12px; line-height: 18px; font-weight: 600; }
+.badge-warn { background: transparent; color: var(--text); box-shadow: inset 0 0 0 1px var(--warn-line); }
+.badge-info { background: var(--neutral-bg); color: var(--text); }
+.tabs .count { border-radius: 6px; }
+.validation-tabs .count-warn { background: var(--neutral-bg); color: var(--text); }
+/* avisos: faixa com filete à esquerda; vermelho só no erro */
+.alert { border-left: 3px solid currentColor; border-radius: var(--radius-sm); line-height: 20px; }
+.alert-warn, .alert-info { background: var(--surface-2); color: var(--text); border-left-color: var(--warn-line); }
+.alert-good { border-left-color: var(--good); }
+/* estados vazios e carregando: texto discreto, sem caixa */
+.empty { padding: 20px 4px; text-align: left; font-size: 14px; }
+/* tabelas: cabeçalho em negrito sobre fundo leve e linha de base forte; zebra sutil; dinheiro com algarismos tabulares */
+.table th { font-weight: 700; color: var(--text); background: var(--head-bg); border-bottom: 2px solid var(--text); letter-spacing: 0.03em; font-size: 11.5px; }
+.table thead th:first-child { border-top-left-radius: var(--radius-sm); }
+.table thead th:last-child { border-top-right-radius: var(--radius-sm); }
+.table td { padding: 10px 12px; }
+.table td.right, .table th.right { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.table:not(.drill-table) > tbody > tr:nth-child(even):not(.sub-row):not(.row-alert):not(.row-highlight) > td { background: var(--zebra); }
+.table:not(.drill-table) > tbody > tr:hover > td { background: var(--row-hover); }
+.table tbody tr:hover { background: transparent; }
+.table tfoot td { font-weight: 700; border-top: 2px solid var(--border); border-bottom: 0; }
+.table-compact td { padding: 6px 10px; }
+.grid-table th { background: var(--head-bg); }
+.table tr.row-highlight > td, .grid-table tr.row-highlight > td.sticky-col { background: color-mix(in srgb, var(--series-1) 12%, var(--surface)); }
+.row-alert > td { background: color-mix(in srgb, var(--bad-bg) 55%, var(--surface)); }
+/* campos e busca: mesmo desenho dos selects (sem pílula nem sombra) */
+.search { border-radius: var(--radius-sm); box-shadow: none; padding-left: 12px; }
+.theme-switch, .theme-switch button { border-radius: var(--radius-sm); }
+.palette-chips button { border-radius: 6px; }
+summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+/* filtros ativos (FilterBar): mesma linha do Painel, chips removíveis e "Resetar filtros" ao lado */
+.filters-block { display: grid; gap: 10px; min-width: 0; }
+.filters-block .active-filters-reset { margin-left: 4px; }
+/* formulários de cálculo (viagem, evento): bloco cinza sem tracejado */
+.calc-form { border: 0; border-radius: var(--radius-sm); padding: 16px; }
+/* listas de navegação (pacotes do OPEX, fila de CCs dos Apontamentos): itens planos, ativo com filete à esquerda */
+.package-nav { gap: 0; border-top: 1px solid var(--border); }
+.package-nav button { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: none; padding: 10px 12px; }
+.package-nav button.active { box-shadow: inset 3px 0 0 var(--text); background: var(--surface-2); }
+.package-nav button .muted { font-variant-numeric: tabular-nums; }
+.cc-queue { gap: 0; border-top: 1px solid var(--border); }
+.cc-queue button { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: none; }
+.cc-queue button:hover { background: var(--surface-2); border-color: var(--border); }
+.cc-queue button.active { box-shadow: inset 3px 0 0 var(--text); background: var(--surface-2); border-color: var(--border); }
+.cc-queue .progress > span { background: var(--text); opacity: 0.55; }
+.bulk-bar { background: var(--surface-2); }
+.finding-rules { border: 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; padding: 10px 0; }
+@media (max-width: 860px) { .package-nav { border-top: 0; gap: 6px; } .package-nav button { border: 1px solid var(--border); border-radius: var(--radius-sm); } }
+/* listas de itens (justificativas, perguntas): linhas separadas por filetes, sem uma caixa por item */
+.just-list { gap: 0; border-top: 1px solid var(--border); }
+.just-item, .just-list > .question { border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 14px 0; }
+.just-item.missing { border-left: 0; box-shadow: inset 3px 0 0 var(--bad); padding-left: 14px; }
+.just-subject { font-size: 14.5px; }
+.just-values { font-variant-numeric: tabular-nums; }
+.just-var { white-space: nowrap; }
+.just-var.out { color: var(--bad); font-weight: 600; }
+.answer { border-left-color: var(--border); }
+/* situação com ponto + texto (mesmo desenho do "Por que mudou?") fora do painel */
+.state { display: inline-flex; align-items: center; gap: 6px; font: 500 12.5px/18px var(--font-body); color: var(--muted); white-space: nowrap; }
+.state::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: none; }
+.state.missing { color: var(--bad); }
+.state.missing::before { background: var(--bad); }
+.state.pending { color: var(--text); }
+.state.pending::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text); }
+.state.ok, .state.answered { color: var(--text); }
+.state.ok::before, .state.answered::before { background: var(--good); }
+.state.closed::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+/* CAPEX: cartões de projeto sem sombra */
+.capex-project, .capex-project:hover { box-shadow: none; }
+.capex-project.has-critical { border-left-width: 3px; }
+/* menu lateral: 4 grupos, respiro um pouco menor; folha "Mais" do celular com os mesmos grupos */
+.sidebar nav { gap: 14px; }
+.sheet-group { padding: 12px 14px 4px; font: 700 11px/14px var(--font-body); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+@media (max-width: 860px) { .desktop-active { display: none; } }
+.paired-value .delta.up, .paired-value .delta.down { color: var(--muted); font-weight: 500; }
+.grid-table .col-branch { min-width: 160px; } .grid-table .col-supplier { min-width: 170px; }
+.paired-row { grid-template-columns: minmax(140px, 36%) minmax(0, 1fr) auto; }
+@media (max-width: 860px) { .paired-row { grid-template-columns: minmax(84px, 32%) minmax(0, 1fr) auto; gap: 8px; } .paired-value .delta { display: block; margin-left: 0; } }
+/* celular: indicadores em linhas compactas (rótulo à esquerda, valor por extenso à direita, contexto embaixo) */
+@media (max-width: 860px) {
+  .stats { gap: 8px; }
+  .stats .stat { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; padding: 10px 14px; }
+  .stats .stat-label { grid-column: 1; }
+  .stats .stat-value { grid-column: 2; grid-row: 1; text-align: right; font-size: 17px; line-height: 24px; white-space: nowrap; overflow-wrap: normal; }
+  .stats .stat-hint { grid-column: 1 / -1; }
+  .card-head h2, .card > h2 { font-size: 17px; line-height: 24px; }
+}

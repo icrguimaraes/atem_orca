@@ -3,7 +3,7 @@ import { api, type PersonnelOptions, type PersonnelScenario, type WhatIfResult }
 import { useAuth } from "../auth";
 import { DivergingBars, Legend, MonthlyBars, SERIES } from "../components/charts";
 import { Alert, BackButton, Badge, Card, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
-import { MONTHS, fmtCompact, fmtInt, fmtMoney, fmtPct } from "../labels";
+import { MONTHS, fmtInt, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
 
 /** What-if de pessoal: multiplicador por contrato, reajuste e data-base, comparados ao cenário base. */
 export default function PersonnelSimulation() {
@@ -155,18 +155,18 @@ export default function PersonnelSimulation() {
       {result && (
         <>
           <div className="stats">
-            <Stat label={result.baseline.name === "Base" ? "Cenário base" : `Base · ${result.baseline.name}`} value={fmtCompact(result.base.annual)} hint={`${fmtInt(result.base.headcount_start)} → ${fmtInt(result.base.headcount_end)} pessoas`} />
-            <Stat label="Simulado" value={fmtCompact(result.simulation.annual)} tone="warn" />
-            <Stat label="Impacto no ano" value={`${diff > 0 ? "+" : ""}${fmtCompact(diff)}`} tone={diff > 0 ? "bad" : diff < 0 ? "good" : undefined} hint={result.difference_pct ? `${fmtPct(result.difference_pct)} sobre a base` : undefined} />
+            <Stat label={result.baseline.name === "Base" ? "Cenário base" : `Base · ${result.baseline.name}`} value={fmtMoney(result.base.annual)} hint={`${fmtInt(result.base.headcount_start)} → ${fmtInt(result.base.headcount_end)} pessoas`} />
+            <Stat label="Simulado" value={fmtMoney(result.simulation.annual)} tone="budget" />
+            <Stat label="Impacto no ano" value={fmtSignedMoney(diff)} tone={diff > 0 ? "bad" : diff < 0 ? "good" : undefined} hint={result.difference_pct ? `${fmtPct(result.difference_pct)} sobre a base` : undefined} />
             <Stat label="Sem multiplicador" value={result.simulated.ignored_multiplier_for.join(", ") || "—"} hint="contratos fora da simulação de encargos" />
           </div>
           <Card title="Custo mensal · base × simulado">
-            <Legend items={[{ label: "Base", color: SERIES.past }, { label: "Simulado", color: SERIES.ref }]} />
+            <Legend items={[{ label: "Base", color: SERIES.past }, { label: "Simulado", color: SERIES.budget }]} />
             <MonthlyBars
               height={220}
               series={[
                 { label: "Base", color: SERIES.past, values: result.base.monthly.map(Number) },
-                { label: "Simulado", color: SERIES.ref, values: result.simulation.monthly.map(Number) },
+                { label: "Simulado", color: SERIES.budget, values: result.simulation.monthly.map(Number) },
               ]}
             />
           </Card>

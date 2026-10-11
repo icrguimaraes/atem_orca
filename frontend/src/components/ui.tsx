@@ -35,7 +35,8 @@ export function lines(...parts: (string | null | false | undefined)[]): ReactNod
   return items.length ? items.map((p, i) => <span key={i} className="stat-line">{p}</span>) : undefined;
 }
 
-export function Stat({ label, value, tone, hint }: { label: string; value: ReactNode; tone?: Tone; hint?: ReactNode }) {
+/** `tone="budget"`: indicador de orçamento (filete verde-água, a cor do orçamento em todo o sistema). */
+export function Stat({ label, value, tone, hint }: { label: string; value: ReactNode; tone?: Tone | "budget"; hint?: ReactNode }) {
   return (
     <div className={`stat ${tone ? `stat-${tone}` : ""}`}>
       <span className="stat-label">{label}</span>
@@ -60,7 +61,7 @@ export function Card({ title, actions, children }: { title?: string; actions?: R
 }
 
 export function Alert({ tone = "bad", children }: { tone?: Tone; children: ReactNode }) {
-  return <div className={`alert alert-${tone}`}>{children}</div>;
+  return <div className={`alert alert-${tone}`} role={tone === "bad" ? "alert" : undefined}>{children}</div>;
 }
 
 export function Empty({ children }: { children: ReactNode }) {
@@ -68,7 +69,7 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 export function Loading() {
-  return <div className="empty">Carregando…</div>;
+  return <div className="empty" role="status" aria-live="polite">Carregando…</div>;
 }
 
 /** Carrega dados de uma função assíncrona e expõe recarga. */

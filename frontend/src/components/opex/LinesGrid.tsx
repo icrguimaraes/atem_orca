@@ -157,7 +157,7 @@ export function LinesGrid({ submissionId, packageId, lines, options, companyId, 
                       )}
                       <TextCell value={line.description} placeholder="Descrição / contrato" disabled={!editable} onCommit={(v) => patch(line, { description: v })} />
                     </td>
-                    <td>
+                    <td className="col-branch">
                       <select value={line.branch_id ?? ""} disabled={!editable} onChange={(e) => patch(line, { branch_id: e.target.value ? Number(e.target.value) : null })}>
                         <option value="">—</option>
                         {branches.map((b) => (
@@ -166,7 +166,7 @@ export function LinesGrid({ submissionId, packageId, lines, options, companyId, 
                       </select>
                     </td>
                     {showSupplier && (
-                      <td>
+                      <td className="col-supplier">
                         <TextCell value={line.supplier} placeholder="Fornecedor" disabled={!editable} onCommit={(v) => patch(line, { supplier: v })} />
                       </td>
                     )}
@@ -189,9 +189,9 @@ export function LinesGrid({ submissionId, packageId, lines, options, companyId, 
                     {actions && (
                       <td className="nowrap">
                         {canAsk && <button className="btn btn-ghost btn-sm" title="Questionar o gestor sobre este lançamento" onClick={() => { setNotice(null); setAsking(line); }}>Questionar</button>}
-                        {editable && <button className="btn btn-ghost btn-sm" title="Distribuir valor anual pelos 12 meses" onClick={() => spread(line)}>÷12</button>}
-                        {editable && canMove && costCenterId && <button className="btn btn-ghost btn-sm" title="Mover para outro centro de custo" onClick={() => setMoving(line)}>⇄</button>}
-                        {editable && <button className="btn btn-ghost btn-sm danger" title="Excluir linha" onClick={() => remove(line)}>✕</button>}
+                        {editable && <button className="btn btn-ghost btn-sm" title="Distribuir valor anual pelos 12 meses" aria-label="Distribuir valor anual pelos 12 meses" onClick={() => spread(line)}>÷12</button>}
+                        {editable && canMove && costCenterId && <button className="btn btn-ghost btn-sm" title="Mover para outro centro de custo" aria-label="Mover para outro centro de custo" onClick={() => setMoving(line)}>⇄</button>}
+                        {editable && <button className="btn btn-ghost btn-sm danger" title="Excluir linha" aria-label="Excluir linha" onClick={() => remove(line)}>✕</button>}
                       </td>
                     )}
                   </tr>

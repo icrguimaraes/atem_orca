@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { FilterBar } from "../components/FilterBar";
-import { Alert, Badge, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
+import { Alert, Empty, Loading, PageHeader, Stat, useLoad } from "../components/ui";
 import { ItemContext, WhyDrawer, type Question } from "../components/WhyPanel";
 import { fmtDateTime, fmtInt } from "../labels";
 import { usePersistentState } from "../persist";
@@ -41,7 +41,7 @@ function Card({ q, onChange }: { q: Question; onChange: (q: Question) => void })
           <div className="just-subject">{q.subject}</div>
           <div className="muted small">{q.asked_by ?? "—"} · {fmtDateTime(q.asked_at)}</div>
         </div>
-        <Badge tone={q.status === "OPEN" ? "warn" : q.status === "ANSWERED" ? "info" : "neutral"}>{q.status_label}</Badge>
+        <span className={`state ${q.status === "OPEN" ? "pending" : q.status === "ANSWERED" ? "answered" : "closed"}`}>{q.status_label}</span>
       </div>
       {q.item && <ItemContext item={q.item} />}
       <div className="question-text">{q.question}</div>
@@ -60,7 +60,7 @@ function Card({ q, onChange }: { q: Question; onChange: (q: Question) => void })
         </div>
       )}
       <div className="inline-controls">
-        {whyQs && <button type="button" className="btn btn-sm" onClick={() => setWhy(true)}>Ver o "por quê?"</button>}
+        {whyQs && <button type="button" className="btn btn-sm btn-ghost" onClick={() => setWhy(true)}>Ver o "por quê?"</button>}
         {q.can_close && q.status !== "CLOSED" && <button type="button" className="btn btn-sm btn-ghost" onClick={() => act("close")}>Encerrar</button>}
       </div>
       {err && <div className="error-text">{err}</div>}
@@ -83,17 +83,17 @@ export default function Questions() {
     <>
       <PageHeader
         title="Perguntas"
-        subtitle={'Defesa do orçamento: perguntas sobre um lançamento do orçamento (linha do OPEX, movimentação de pessoal ou CAPEX), feitas no "por quê?" do Painel ou no orçamento do CC. Quem responde é o gestor do CC; tudo fica registrado.'}
+        subtitle={'Defesa do orçamento · perguntas sobre lançamentos (OPEX, pessoal ou CAPEX) feitas no "por quê?" do Painel ou no orçamento do CC; quem responde é o gestor do CC, e tudo fica registrado.'}
       />
       <div className="stats">
-        <Stat label="Para eu responder" value={fmtInt(toAnswer)} tone={toAnswer ? "warn" : "good"} />
+        <Stat label="Para eu responder" value={fmtInt(toAnswer)} hint={toAnswer ? "aguardam a sua resposta" : "nada pendente"} />
         <Stat label="Aguardando resposta" value={fmtInt(all.filter((q) => q.status === "OPEN").length)} />
         <Stat label="Respondidas" value={fmtInt(all.filter((q) => q.status === "ANSWERED").length)} />
       </div>
       <FilterBar
         onReset={() => setStatus("")}
         resetCount={status ? 1 : 0}
-        fields={[{ key: "status", label: "Situação", value: status, onChange: setStatus, options: STATUS }]}
+        fields={[{ key: "status", label: "Situação", value: status, onChange: setStatus, options: STATUS, wide: true }]}
       />
       {shown.length === 0 ? (
         <Empty>Nenhuma pergunta nesta situação. Para perguntar, abra o "por quê?" na tabela do Painel e use "Questionar" no lançamento.</Empty>

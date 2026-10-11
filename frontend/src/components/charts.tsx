@@ -336,7 +336,7 @@ export function TopBars({ rows, label, prevLabel, prevColor = SERIES.past, color
   );
 }
 
-export function PairedBars({ rows, prevLabel, refLabel, prevColor = SERIES.past }: { rows: CompareRow[]; prevLabel: string; refLabel: string; prevColor?: string }) {
+export function PairedBars({ rows, prevLabel, refLabel, prevColor = SERIES.past, refColor = SERIES.ref }: { rows: CompareRow[]; prevLabel: string; refLabel: string; prevColor?: string; refColor?: string }) {
   const [hover, setHover] = useState<number | null>(null);
   const max = Math.max(...rows.flatMap((r) => [r.prev, r.ref]), 0) || 1; // a maior barra ocupa a trilha inteira
   return (
@@ -346,7 +346,7 @@ export function PairedBars({ rows, prevLabel, refLabel, prevColor = SERIES.past 
           <div className="paired-label" title={r.label}>{r.label}</div>
           <div className="paired-bars">
             {prevLabel && <div className="paired-bar" style={{ width: `${(Math.max(r.prev, 0) / max) * 100}%`, background: prevColor }} />}
-            <div className="paired-bar" style={{ width: `${(Math.max(r.ref, 0) / max) * 100}%`, background: SERIES.ref }} />
+            <div className="paired-bar" style={{ width: `${(Math.max(r.ref, 0) / max) * 100}%`, background: refColor }} />
           </div>
           <div className="paired-value">
             {fmtCompact(r.ref)}
@@ -356,7 +356,7 @@ export function PairedBars({ rows, prevLabel, refLabel, prevColor = SERIES.past 
             <div className="tooltip tooltip-inline">
               <strong>{r.label}</strong>
               {prevLabel && <span><i style={{ background: prevColor }} />{prevLabel}: {fmtMoney(r.prev)}</span>}
-              <span><i style={{ background: SERIES.ref }} />{refLabel}: {fmtMoney(r.ref)}</span>
+              <span><i style={{ background: refColor }} />{refLabel}: {fmtMoney(r.ref)}</span>
             </div>
           )}
         </div>

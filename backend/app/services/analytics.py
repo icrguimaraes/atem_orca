@@ -69,19 +69,22 @@ DIMENSIONS = {
     "month": "Mês",
 }
 DRILL_ORDER = ("company", "department", "cost_center", "account", "month")
-# Paleta validada do app (styles.css): ano anterior laranja, referência azul, orçamento verde-água
-COLOR_PREV, COLOR_REF, COLOR_TARGET = "#eb6834", "#2a78d6", "#1baf7a"
+# Paleta do app (styles.css, etapa 3 de 10/10/2026 — sem laranja): realizado/referência azul, orçamento verde-água,
+# ano anterior roxo; COLOR_PREV (antigo laranja) passa a ser o roxo do ano anterior
+COLOR_PREV, COLOR_REF, COLOR_TARGET = "#8a6bbf", "#4472c4", "#4fa894"
 COLOR_PAST = "#8a6bbf"  # realizado do ano anterior: roxo, igual ao token --series-past do frontend
-COLOR_UP, COLOR_DOWN, COLOR_FLAT = "#e34948", "#2a78d6", "#9aa1ad"
-MODULE_COLORS = {"OPEX": COLOR_REF, "CAPEX": COLOR_PREV, "PERSONNEL": COLOR_TARGET}
+COLOR_UP, COLOR_DOWN, COLOR_FLAT = "#e34948", "#4472c4", "#9aa1ad"
+# composição do orçamento por tipo: tudo é orçamento, então o mesmo verde-água (o rótulo diz o tipo)
+MODULE_COLORS = {"OPEX": COLOR_TARGET, "CAPEX": COLOR_TARGET, "PERSONNEL": COLOR_TARGET}
+# situação dos orçamentos: rampa neutra até o envio, vermelho só para devolvido, verde para aprovado/consolidado
 STATUS_COLORS = {
-    "DRAFT": "#b8bec9",
-    "IN_PROGRESS": "#2a78d6",
+    "DRAFT": "#c9ced6",
+    "IN_PROGRESS": "#9aa5b3",
     "ADJUSTMENT_REQUESTED": "#e34948",
-    "SUBMITTED": "#e07912",
-    "UNDER_REVIEW": "#c9a227",
-    "APPROVED": "#1baf7a",
-    "CONSOLIDATED": "#0e8a62",
+    "SUBMITTED": "#6b7a8f",
+    "UNDER_REVIEW": "#46566b",
+    "APPROVED": "#4fa894",
+    "CONSOLIDATED": "#2b7a68",
 }
 STATUS_ORDER = ("DRAFT", "IN_PROGRESS", "ADJUSTMENT_REQUESTED", "SUBMITTED", "UNDER_REVIEW", "APPROVED", "CONSOLIDATED")
 FLAT_BAND = Decimal("0.05")  # ±5%: "estável" na análise por CC

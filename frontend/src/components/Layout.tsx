@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { BrandMark } from "./Brand";
@@ -44,30 +44,42 @@ const ICON = {
 const RAIL_KEY = "atem.sidebar.collapsed"; // menu recolhido: preferência do navegador (não some no login)
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
+// Menu (etapa 3, 10/10/2026): o cotidiano do gestor em cima (acompanhar e defender o orçamento), a Controladoria embaixo.
+// Nenhuma rota saiu nem mudou de endereço; só o agrupamento e a ordem.
 const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
-    title: "Orçamento",
+    title: "Acompanhamento",
     items: [
       { to: "/", label: "Painel", end: true, icon: ICON.painel },
       { to: "/analise", label: "Análise orçamentária", icon: ICON.analise },
       { to: "/rastro", label: "Rastro", icon: ICON.rastro },
       { to: "/consolidacao", label: "Consolidação e exportação", icon: ICON.consolidacao },
-      { to: "/apontamentos", label: "Apontamentos", icon: ICON.apontamentos },
+    ],
+  },
+  {
+    title: "Gestão do orçamento",
+    items: [
       { to: "/justificativas", label: "Justificativas", icon: ICON.justificativas },
       { to: "/perguntas", label: "Perguntas", icon: ICON.perguntas },
-      { to: "/validacao", label: "Validação", roles: ["CONTROLLER"], icon: ICON.validacao },
+      { to: "/apontamentos", label: "Apontamentos", icon: ICON.apontamentos },
       { to: "/pj", label: "Contratos PJ", pj: true, icon: ICON.pj },
+    ],
+  },
+  {
+    title: "Controladoria",
+    items: [
+      { to: "/validacao", label: "Validação", roles: ["CONTROLLER"], icon: ICON.validacao },
+      { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"], icon: ICON.importacoes },
+      { to: "/base", label: "Situação da base", roles: ["CONTROLLER"], icon: ICON.base },
+      { to: "/premissas-pessoal", label: "Premissas de pessoal", roles: ["CONTROLLER"], icon: ICON.premissas },
+      { to: "/ciclo", label: "Ciclo e parâmetros", roles: ["CONTROLLER"], icon: ICON.ciclo },
     ],
   },
   {
     title: "Administração",
     items: [
-      { to: "/importacoes", label: "Importação de dados", roles: ["CONTROLLER"], icon: ICON.importacoes },
-      { to: "/base", label: "Situação da base", roles: ["CONTROLLER"], icon: ICON.base },
       { to: "/cadastros", label: "Cadastros", roles: ["CONTROLLER"], icon: ICON.cadastros },
       { to: "/estrutura", label: "Áreas e setores", roles: ["CONTROLLER"], icon: ICON.estrutura },
-      { to: "/ciclo", label: "Ciclo e parâmetros", roles: ["CONTROLLER"], icon: ICON.ciclo },
-      { to: "/premissas-pessoal", label: "Premissas de pessoal", roles: ["CONTROLLER"], icon: ICON.premissas },
       { to: "/usuarios", label: "Usuários", roles: ["CONTROLLER"], icon: ICON.usuarios },
       { to: "/auditoria", label: "Auditoria", roles: ["CONTROLLER"], icon: ICON.auditoria },
     ],
@@ -332,12 +344,20 @@ function MobileTabs({ allowed, more, setMore, onPassword, onLogout, userName, th
           <div className="sheet" role="dialog" aria-label="Mais opções" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-handle" aria-hidden />
             <nav className="sheet-nav">
-              {rest.map((n) => (
-                <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")}>
-                  <Icon d={n.icon} size={20} />
-                  {n.label}
-                </NavLink>
-              ))}
+              {NAV_GROUPS.map((g) => {
+                const items = rest.filter((n) => g.items.includes(n));
+                return items.length ? (
+                  <Fragment key={g.title}>
+                    <div className="sheet-group">{g.title}</div>
+                    {items.map((n) => (
+                      <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")}>
+                        <Icon d={n.icon} size={20} />
+                        {n.label}
+                      </NavLink>
+                    ))}
+                  </Fragment>
+                ) : null;
+              })}
             </nav>
             <div className="sheet-foot">
               <span className="user-name">{userName}</span>

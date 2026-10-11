@@ -92,7 +92,7 @@ export function EventPanel({ submissionId, packageId, lines, options, editable, 
                 <td className="right">{l.attributes?.people}</td>
                 <td className="right"><strong>{fmtMoney(l.total)}</strong></td>
                 {editable && (
-                  <td><button className="btn btn-ghost btn-sm danger" onClick={async () => {
+                  <td><button className="btn btn-ghost btn-sm danger" aria-label="Excluir evento" title="Excluir evento" onClick={async () => {
                     if (window.confirm("Excluir este evento?")) { await api(`/opex/lines/${l.id}`, { method: "DELETE" }); onChanged(); }
                   }}>✕</button></td>
                 )}

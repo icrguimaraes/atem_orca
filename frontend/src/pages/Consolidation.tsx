@@ -6,11 +6,12 @@ import { useAuth } from "../auth";
 import { DivergingBars, Legend, MonthlyBars, PairedBars, SERIES, StatusBar, Waterfall } from "../components/charts";
 import { FilterBar } from "../components/FilterBar";
 import { Alert, Badge, Card, Empty, Loading, Modal, PageHeader, SearchBox, Stat, useLoad } from "../components/ui";
-import { FLAG_LABELS, SUBMISSION_STATUS, fmtCompact, fmtDateTime, fmtInt, fmtMoney, fmtPct } from "../labels";
+import { FLAG_LABELS, SUBMISSION_STATUS, fmtCompact, fmtDateTime, fmtInt, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
 
 const MODULES = ["OPEX", "CAPEX", "PERSONNEL"] as const;
 const MODULE_ROUTE: Record<string, string> = { OPEX: "/orcamento", CAPEX: "/capex", PERSONNEL: "/pessoal" };
-const MODULE_COLOR: Record<string, string> = { OPEX: SERIES.ref, CAPEX: SERIES.prev, PERSONNEL: SERIES.budget };
+// composição do orçamento (tudo é orçamento): tons de verde-água e ardósia, sem laranja (etapa 3)
+const MODULE_COLOR: Record<string, string> = { OPEX: SERIES.budget, CAPEX: SERIES.prev, PERSONNEL: "var(--series-3-ink)" };
 const ORDER = ["DRAFT", "IN_PROGRESS", "ADJUSTMENT_REQUESTED", "SUBMITTED", "UNDER_REVIEW", "APPROVED", "CONSOLIDATED"];
 const SEVERITY: Record<string, { label: string; tone: "bad" | "warn" | "neutral" | "info" }> = {
   high: { label: "Alta", tone: "bad" },
@@ -20,6 +21,8 @@ const SEVERITY: Record<string, { label: string; tone: "bad" | "warn" | "neutral"
 };
 
 const pct = (a: number, b: number) => (b ? fmtPct(String(a / b - 1)) : "—");
+/** Variação sempre com a diferença em R$ (etapa 3): "+R$ 1.234,56 (+3,2%)". */
+const diffTxt = (a: number, b: number) => `${fmtSignedMoney(a - b)} (${pct(a, b)})`;
 
 /** O que mudou entre duas versões: total, por módulo, por CC e por conta. */
 function VersionCompareCard({ versions, companyId }: { versions: VersionInfo[]; companyId: string }) {
@@ -46,9 +49,9 @@ function VersionCompareCard({ versions, companyId }: { versions: VersionInfo[]; 
       {error ? <Alert>{error}</Alert> : !data ? <Loading /> : (
         <div className="stack">
           <div className="stats stats-compact">
-            <Stat label={`Versão ${data.from.label}`} value={fmtCompact(data.from.total)} />
-            <Stat label={`Versão ${data.to.label}`} value={fmtCompact(data.to.total)} />
-            <Stat label="Diferença" value={`${Number(data.difference) > 0 ? "+" : ""}${fmtCompact(data.difference)}`} tone={Number(data.difference) > 0 ? "bad" : Number(data.difference) < 0 ? "good" : undefined} hint={fmtPct(data.difference_pct)} />
+            <Stat label={`Versão ${data.from.label}`} value={fmtMoney(data.from.total)} />
+            <Stat label={`Versão ${data.to.label}`} value={fmtMoney(data.to.total)} />
+            <Stat label="Diferença" value={fmtSignedMoney(data.difference)} hint={fmtPct(data.difference_pct)} />
             <Stat label="Contas alteradas" value={fmtInt(data.changed_accounts)} hint="CC × módulo × conta" />
           </div>
           {data.monthly_difference.some((v) => Number(v)) && (
@@ -213,7 +216,7 @@ export default function Consolidation() {
     <>
       <PageHeader
         title="Consolidação e exportação"
-        subtitle={`Orçamento ${y.target} completo (OPEX + CAPEX + Pessoal) por empresa, centro de custo, conta e mês, comparado a ${y.ref} anualizado e ${y.prev} realizado.`}
+        subtitle={`Orçamento ${y.target}, versão ${data.version.label} (${frozen ? "congelada" : "em elaboração"}) · OPEX + CAPEX + Pessoal por empresa, centro de custo, conta e mês, comparado a ${y.ref} anualizado e ${y.prev} realizado`}
         actions={
           <>
             <button className="btn" onClick={exportXlsx}>Exportar Excel</button>
@@ -243,16 +246,16 @@ export default function Consolidation() {
       {frozen && viewingCurrent && <Alert tone="info">Esta versão está congelada: os números vêm da fotografia gravada no congelamento e nenhum orçamento aceita alterações. Para ajustar, abra uma revisão.</Alert>}
 
       <div className="stats">
-        <Stat label={`Orçamento ${y.target}`} value={fmtCompact(total)} tone="warn" hint={refTotal ? `${pct(total, refTotal)} vs ${y.ref} anualizado (${fmtCompact(refTotal)})` : "sem realizado de referência"} />
+        <Stat label={`Orçamento ${y.target}`} value={fmtMoney(total)} tone="budget" hint={refTotal ? `${diffTxt(total, refTotal)} vs ${y.ref} anualizado (${fmtMoney(refTotal)})` : "sem realizado de referência"} />
         {MODULES.map((m) => {
           const mod = data.modules[m];
           const p = Number(mod.proposed);
           const r = Number(mod.ref_annualized);
           const u = Number(mod.unscheduled ?? 0);
-          const hint = [r ? `${pct(p, r)} vs ${y.ref} anualizado` : `${y.ref} sem realizado`, u > 0 ? `inclui ${fmtCompact(u)} sem cronograma mensal` : null]
+          const hint = [r ? `${diffTxt(p, r)} vs ${y.ref} anualizado` : `${y.ref} sem realizado`, u > 0 ? `inclui ${fmtMoney(u)} sem cronograma mensal` : null]
             .filter(Boolean)
             .join(" · ");
-          return <Stat key={m} label={mod.label} value={fmtCompact(p)} hint={hint} />;
+          return <Stat key={m} label={mod.label} value={fmtMoney(p)} hint={hint} />;
         })}
       </div>
 
@@ -273,13 +276,14 @@ export default function Consolidation() {
           </div>
           <div className="grid-2">
             <Card title={`Por pacote · ${y.ref} anualizado × ${y.target}`}>
-              <Legend items={[{ label: `${y.ref} anualizado`, color: SERIES.past }, { label: `${y.target} orçado`, color: SERIES.ref }]} />
+              <Legend items={[{ label: `${y.ref} anualizado`, color: SERIES.past }, { label: `${y.target} orçado`, color: SERIES.budget }]} />
               <PairedBars
+                refColor={SERIES.budget}
                 prevLabel={`${y.ref} anualizado`}
                 refLabel={`${y.target} orçado`}
                 rows={data.by_package.slice(0, 14).map((p) => {
                   const a = Number(p.ref_annualized), b = Number(p.proposed);
-                  return { label: p.label, prev: a, ref: b, note: a && b ? fmtPct(String(b / a - 1)) : undefined };
+                  return { label: p.label, prev: a, ref: b, note: a && b ? `${fmtPct(String(b / a - 1))} (${b - a >= 0 ? "+" : "−"}${fmtCompact(Math.abs(b - a))})` : undefined };
                 })}
               />
             </Card>
@@ -351,7 +355,7 @@ export default function Consolidation() {
                         <Link to={`${MODULE_ROUTE[m]}/${r.cost_center_id}`} className="nowrap" style={{ textDecoration: "none" }}>
                           <Badge tone={SUBMISSION_STATUS[r.status[m]]?.tone ?? "neutral"}>{SUBMISSION_STATUS[r.status[m]]?.label ?? r.status[m]}</Badge>
                         </Link>
-                        {Number(r.totals[m]) ? <div className="small">{fmtCompact(r.totals[m])}</div> : null}
+                        {Number(r.totals[m]) ? <div className="small nowrap">{fmtMoney(r.totals[m])}</div> : null}
                       </td>
                     ))}
                     <td className="right"><strong>{Number(r.total) ? fmtMoney(r.total) : "—"}</strong></td>

@@ -4,7 +4,7 @@ import { api, download, type CapexHeader, type CapexItem, type CapexIssue, type 
 import { ItemForm, ProjectForm } from "../components/capex/CapexForms";
 import { Legend, MonthlyBars, PairedBars, RankBars, SERIES } from "../components/charts";
 import { Alert, BackButton, Badge, Card, Empty, Loading, Modal, PageHeader, Stat } from "../components/ui";
-import { MONTHS, SUBMISSION_STATUS, fmtCompact, fmtDate, fmtDateTime, fmtInt, fmtMoney } from "../labels";
+import { MONTHS, SUBMISSION_STATUS, fmtDate, fmtDateTime, fmtInt, fmtMoney } from "../labels";
 
 type Tab = "requests" | "summary" | "history";
 
@@ -128,7 +128,7 @@ export default function CapexCostCenter() {
     <>
       <PageHeader
         title={`CAPEX · ${head.cost_center.name}`}
-        subtitle={`Centro de custo ${head.cost_center.company_code} · ${head.cost_center.code} · gestor ${head.cost_center.manager_name ?? "—"} · ${head.cycle.name} (versão ${head.version}) · prazo ${fmtDate(head.cycle.deadline)}`}
+        subtitle={`Orçamento CAPEX ${y.target} · CC ${head.cost_center.code} · empresa ${head.cost_center.company_code} · gestor ${head.cost_center.manager_name ?? "—"} · versão ${head.version} · prazo ${fmtDate(head.cycle.deadline)}`}
         actions={
           <>
             <BackButton />
@@ -159,7 +159,7 @@ export default function CapexCostCenter() {
         <span className="muted small">{editable ? "edição liberada" : "somente leitura"}</span>
       </div>
       {head.permissions.frozen && <Alert tone="info">A versão {head.version} do orçamento está <strong>congelada</strong> (consolidada). Para alterar, a Controladoria abre uma revisão em Consolidação.</Alert>}
-      {head.permissions.cycle_blocked && <Alert tone="warn">O ciclo ainda não foi aberto pela Controladoria. Você pode consultar, mas não editar.</Alert>}
+      {head.permissions.cycle_blocked && <Alert tone="info">O ciclo ainda não foi aberto pela Controladoria. Você pode consultar, mas não editar.</Alert>}
       {lastAdjustment && (
         <Alert tone="bad">
           <strong>Ajuste solicitado</strong> por {lastAdjustment.user ?? "—"} em {fmtDateTime(lastAdjustment.created_at)}: {lastAdjustment.comment}
@@ -170,18 +170,18 @@ export default function CapexCostCenter() {
       <div className="stats">
         <Stat
           label={`CAPEX solicitado ${y.target}`}
-          value={fmtCompact(total)}
-          tone="warn"
+          value={fmtMoney(total)}
+          tone="budget"
           hint={
             Number(view.totals.scheduled) !== total
-              ? `cronograma ${fmtCompact(view.totals.scheduled)} — a consolidação usa o cronograma; ajuste os meses`
+              ? `cronograma ${fmtMoney(view.totals.scheduled)} — a consolidação usa o cronograma; ajuste os meses`
               : `${fmtInt(view.totals.items)} itens em ${fmtInt(view.totals.requests)} solicitações`
           }
         />
-        <Stat label="Em projetos" value={fmtCompact(view.totals.projects_total)} hint={`${fmtInt(view.totals.projects)} projeto(s)`} />
-        <Stat label={`Realizado CAPEX ${y.ref}`} value={fmtCompact(view.totals.ref_actual)} hint={`${y.prev}: ${fmtCompact(view.totals.prev_actual)}`} />
+        <Stat label="Em projetos" value={fmtMoney(view.totals.projects_total)} hint={`${fmtInt(view.totals.projects)} projeto(s)`} />
+        <Stat label={`Realizado CAPEX ${y.ref}`} value={fmtMoney(view.totals.ref_actual)} hint={`${y.prev}: ${fmtMoney(view.totals.prev_actual)}`} />
         <Stat label="Pendências críticas" value={fmtInt(view.issues.critical)} tone={view.issues.critical ? "bad" : "good"} hint="bloqueiam envio e aprovação" />
-        <Stat label="Avisos" value={fmtInt(view.issues.warning)} tone={view.issues.warning ? "warn" : undefined} hint="enquadramento (valor, vida útil, conta)" />
+        <Stat label="Avisos" value={fmtInt(view.issues.warning)} hint="enquadramento (valor, vida útil, conta)" />
       </div>
 
       <div className="tabs">
@@ -294,7 +294,7 @@ export default function CapexCostCenter() {
         <>
           <Card title={`Cronograma de desembolso ${y.target}`}>
             {total > 0 ? (
-              <MonthlyBars height={220} series={[{ label: `CAPEX ${y.target}`, color: SERIES.ref, values: view.monthly.map(Number) }]} />
+              <MonthlyBars height={220} series={[{ label: `CAPEX ${y.target}`, color: SERIES.budget, values: view.monthly.map(Number) }]} />
             ) : (
               <Empty>Sem valores lançados.</Empty>
             )}
@@ -306,8 +306,9 @@ export default function CapexCostCenter() {
             <Card title={hasHistory ? `Por conta · ${y.ref} realizado × ${y.target} solicitado` : "Por conta de ativo"}>
               {hasHistory ? (
                 <>
-                  <Legend items={[{ label: `${y.ref} realizado`, color: SERIES.past }, { label: `${y.target} solicitado`, color: SERIES.ref }]} />
+                  <Legend items={[{ label: `${y.ref} realizado`, color: SERIES.past }, { label: `${y.target} solicitado`, color: SERIES.budget }]} />
                   <PairedBars
+                    refColor={SERIES.budget}
                     prevLabel={`${y.ref} realizado`}
                     refLabel={`${y.target} solicitado`}
                     rows={view.accounts.map((a) => ({ label: a.name, prev: Number(a.ref_actual), ref: Number(a.proposed) })).sort((a, b) => Math.max(b.prev, b.ref) - Math.max(a.prev, a.ref))}

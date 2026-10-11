@@ -140,7 +140,7 @@ export function TravelPanel({ submissionId, lines, options, editable, onChanged 
                     <td className="right">{fmtMoney(by("Diária"))}</td>
                     <td className="right">{fmtMoney(by("Hospedagem"))}</td>
                     <td className="right"><strong>{fmtMoney(total)}</strong></td>
-                    {editable && <td><button className="btn btn-ghost btn-sm danger" onClick={() => remove(group[0])}>✕</button></td>}
+                    {editable && <td><button className="btn btn-ghost btn-sm danger" aria-label="Excluir viagem" title="Excluir viagem" onClick={() => remove(group[0])}>✕</button></td>}
                   </tr>
                 );
               })}

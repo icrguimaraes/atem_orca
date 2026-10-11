@@ -75,3 +75,58 @@
 - Cores (verde = orçamento, azul = realizado, roxo = ano anterior, vermelho = projeção); sem laranja e sem degradê.
 - Anualização linear continua só como referência (rótulo "projeção linear"); a "Projeção de fechamento" é só a do gestor.
 - Nenhuma biblioteca de gráfico nova.
+
+## Etapa 3 — demais telas (10/10/2026)
+
+> Backup antes da mudança: tag `backup-antes-etapa3-2026-10-11`. Prioridade pelo uso dos gestores: orçamento OPEX do CC,
+> Justificativas, Perguntas, Apontamentos, Análise, Rastro, Consolidação, Pessoal/CAPEX do CC; admin só pelo CSS comum.
+
+### Diagnóstico
+
+1. **Laranja em toda parte**: tom `warn` (selos "Enviado", "Em análise", "Aviso", "Tipo 1"…, alertas, cards "proposto"),
+   `--series-2` nos gráficos (CAPEX/encargos), barra de situação e figuras da Análise (`analytics.py`: ano anterior e CAPEX
+   laranja, "Enviado" laranja, orçamento em verde `#1baf7a` e realizado em azul `#2a78d6` fora da paleta).
+2. **Cor semântica trocada**: "2027 proposto/orçado/solicitado/simulado" em azul (cor do realizado) nos gráficos de pacote,
+   CAPEX, pessoal, simulação e no fallback do card "Orçamento em construção"; todo aumento em vermelho mesmo dentro da faixa.
+3. **Valores abreviados nos cards** (`fmtCompact`: "R$ 13,7 mi") no OPEX, Pessoal, CAPEX, Consolidação, Análise e simulação;
+   variação só em % (sem a diferença em R$) nos cards, na coluna "Var." da visão por conta e nas listas de justificativas.
+4. **Caixas demais**: cada justificativa, pergunta, pacote do OPEX e CC da fila de Apontamentos numa caixa com borda; cards
+   e indicadores com sombra e "levantar" no hover; selos em pílula; busca em pílula com sombra.
+5. **Filtros**: sem a linha "Filtros ativos" do Painel — o "Resetar filtros" ficava solto no fim dos selects, sem dizer o que
+   estava aplicado; busca não aparecia como filtro.
+6. **Tabelas**: cabeçalho cinza claro em caixa alta fina (só a do Painel estava em negrito); sem zebra; colunas de filial e
+   fornecedor da grade mensal estreitas demais; botões de ícone (÷12, ⇄, ✕) sem rótulo acessível.
+7. **Celular**: indicadores um por linha em cartões altos (a regra de 2 por linha era sobrescrita); o "por pacote" do OPEX
+   estourava 22 px a 390 px.
+8. **Menu**: dois grupos ("Orçamento" com 9 itens misturando o dia a dia e a Controladoria; "Administração" com 8).
+
+### O que mudou
+
+- **CSS comum** (`styles.css`, bloco "Etapa 3" + tokens): sem laranja (`--warn*` neutros, `--info` ardósia, `--series-2`
+  ardósia, barra de situação neutra); selos retangulares de 8 px, "atenção" em contorno cinza; avisos com filete; cards e
+  indicadores sem sombra; cabeçalho de tabela em negrito com linha de base forte, zebra sutil, dinheiro tabular; vazio e
+  carregando sem caixa (`role="status"`); listas com filetes; foco visível em `summary`/`[tabindex]`; título de página 30 px.
+- **FilterBar**: linha "Filtros ativos" (chips removíveis + "Resetar filtros (n)") automática no desktop; `ActiveFilters`
+  exportado para Análise e Rastro (chips de empresa, área, CC, tipo, ano, mês, pacote, série, comparação, trilha).
+- **Indicadores**: `Stat tone="budget"` (filete verde-água) para o valor do orçamento; valores por extenso; variações com
+  "+R$ x (+y%)". No celular, uma linha por indicador.
+- **OPEX do CC**: contexto do cabeçalho (OPEX 2027 · CC · empresa · gestor · versão · prazo); cards por extenso; "por pacote"
+  com proposto em verde e nota "% (R$)"; linha do orçado em verde; coluna "Variação" com % e R$ (vermelho só fora da faixa);
+  mensal com centavos; navegação de pacotes plana com valor por extenso; filial/fornecedor mais largos; rótulos nos ícones.
+- **Justificativas / Perguntas**: listas em linhas; situação com ponto + texto (como o "Por que mudou?"); variação neutra com
+  ▲/▼ e R$, vermelha só fora da faixa; pergunta mostra "valor na pergunta × atual" com a diferença em R$ e %; busca vira chip.
+- **Apontamentos**: fila de CCs e regras sem caixas; avisos sem cor; contexto curto com a versão.
+- **Análise**: cards por extenso, variações em R$ com % no rodapé, sem vermelho/verde por sinal; figuras na paleta do app.
+- **Consolidação, Pessoal, CAPEX, simulação**: cards por extenso, orçamento em verde, composição sem laranja.
+- **Menu** (sem remover rota): Acompanhamento (Painel, Análise, Rastro, Consolidação) · Gestão do orçamento (Justificativas,
+  Perguntas, Apontamentos, Contratos PJ) · Controladoria (Validação, Importação, Situação da base, Premissas de pessoal,
+  Ciclo) · Administração (Cadastros, Áreas e setores, Usuários, Auditoria); a folha "Mais" do celular mostra os mesmos grupos.
+
+### O que não mudou, e por quê
+
+- Regras de negócio, permissões, auditoria, importações, cálculos e APIs (nenhuma rota nova; backend só trocou cores das
+  figuras da Análise). Nenhuma função removida.
+- Rótulos em cada ponto dos gráficos mensais em SVG (`MonthlyBars`) com 3 séries ainda se sobrepõem em meses próximos — é a
+  regra "maior e menor de cada série"; mudar exige decidir quais séries rotular (pendente, pedir à gestão).
+- Telas de administração receberam só o CSS comum (sem revisão tela a tela).
+

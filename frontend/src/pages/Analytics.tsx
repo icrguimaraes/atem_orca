@@ -3,7 +3,7 @@ import { usePersistentState } from "../persist";
 import { api, type Company, type Package } from "../api";
 import { useAuth } from "../auth";
 import { EvolutionCard } from "../components/EvolutionCard";
-import { FilterBar } from "../components/FilterBar";
+import { ActiveFilters, FilterBar, type ActiveChip } from "../components/FilterBar";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
 import { fmtInt, fmtMoney, fmtPct, fmtSignedMoney, byDepartment } from "../labels";
@@ -108,16 +108,34 @@ export default function Analytics() {
   const k = d.kpis;
   const active = Object.entries(filters).filter(([key, v]) => v && !(["version_id", "compare", "same_period"].includes(key))).length + (filters.compare === "true" ? 1 : 0) + (filters.same_period === "false" ? 1 : 0);
 
+  // filtros ativos como chips removíveis (mesmo padrão do Painel)
+  const nameOf = <T extends { id: number }>(list: T[] | undefined, ids: string, get: (x: T) => string) =>
+    ids.split(",").map((i) => { const x = list?.find((o) => String(o.id) === i); return x ? get(x) : i; }).join(" + ");
+  const chips: ActiveChip[] = [];
+  const chip = (label: string, onRemove: () => void) => chips.push({ label, onRemove: () => { onRemove(); setTrail([]); } });
+  if (filters.company_id) chip(`Empresa: ${nameOf(companies.data ?? [], filters.company_id, (c) => c.short_name ?? c.name)}`, () => set({ company_id: "", cost_center_id: "" }));
+  if (filters.department_id) chip(`Área: ${nameOf(opts.data?.departments, filters.department_id, (x) => x.name)}`, () => set({ department_id: "", cost_center_id: "" }));
+  if (filters.module) chip(`Tipo: ${MODULE_LABEL[filters.module] ?? filters.module}`, () => set({ module: "", package_id: "" }));
+  if (filters.cost_center_id) chip(`Centro de custo: ${nameOf(opts.data?.cost_centers, filters.cost_center_id, (c) => c.name)}`, () => set({ cost_center_id: "" }));
+  if (filters.account) chip(`Conta: ${opts.data?.accounts.find((a) => a.code === filters.account)?.name ?? filters.account}`, () => set({ account: "" }));
+  if (filters.year) chip(`Ano: ${filters.year}`, () => set({ year: "" }));
+  if (filters.months) chip(`Mês: ${filters.months.split(",").map((m) => MONTHS[Number(m) - 1]).join(", ")}`, () => set({ months: "" }));
+  if (filters.package_id) chip(`Pacote: ${nameOf(packages.data ?? [], filters.package_id, (p) => p.name)}`, () => set({ package_id: "" }));
+  if (filters.compare === "true") chip("Comparar com o ano anterior", () => set({ compare: "false" }));
+  if (filters.same_period === "false") chip("Período completo (sem “mesmo período”)", () => set({ same_period: "" }));
+
   return (
     <>
       <PageHeader
         title="Análise orçamentária"
-        subtitle={`Realizado ${y.prev} × Orçado ${y.ref} × Orçamento ${y.target} (versão ${d.version.label}). Os números são os mesmos do processo: OPEX, CAPEX e Pessoal consolidados por centro de custo, conta e mês.`}
+        subtitle={`Realizado ${y.prev} × Orçado ${y.ref} × Orçamento ${y.target} · versão ${d.version.label} · OPEX, CAPEX e Pessoal por centro de custo, conta e mês`}
       />
       <FilterBar
         onApply={(v) => { set({ ...v } as Partial<Filters>); setTrail([]); }}  // botões (empresa, área, tipo) aplicam na hora
         onReset={clear}
         resetCount={active}
+        showActive={false}
+        desktopReset={false}
         lead={
           <>
             <div className="chip-group">
@@ -245,6 +263,7 @@ export default function Analytics() {
           </div>
         </>
       )}
+      <ActiveFilters chips={chips} onReset={clear} resetCount={active} />
       {trail.length > 0 && (
         <nav className="breadcrumb" aria-label="Drill-down">
           <button className="btn-link link" onClick={clear}>Visão geral</button>
@@ -254,18 +273,19 @@ export default function Analytics() {
           <span className="muted small"> · nível atual: {d.dimensions[dimension]}</span>
         </nav>
       )}
-      {!d.has.target && !d.has.prev && !d.has.ref && <Alert tone="warn">Nenhum valor para os filtros escolhidos.</Alert>}
+      {!d.has.target && !d.has.prev && !d.has.ref && <Empty>Nenhum valor para os filtros escolhidos.</Empty>}
       {error && <Alert>{error}</Alert>}
 
       <div className="stats">
-        <Stat label={k.prev_actual.label} value={k.prev_actual.compact} hint={!d.has.prev ? "sem realizado carregado" : undefined} />
-        <Stat label={k.ref_budget.label} value={k.ref_budget.compact} hint={!d.has.ref ? "sem orçado de referência carregado" : undefined} />
-        <Stat label={k.target.label} value={k.target.compact} tone="warn" />
-        <Stat label={k.var_ref.label} value={k.var_ref.pct_label} tone={k.var_ref.pct ? (Number(k.var_ref.pct) > 0 ? "bad" : "good") : undefined} hint={k.var_ref.pct ? k.var_ref.compact : `sem orçado ${y.ref}`} />
-        <Stat label={k.var_prev.label} value={k.var_prev.pct_label} tone={k.var_prev.pct ? (Number(k.var_prev.pct) > 0 ? "bad" : "good") : undefined} hint={k.var_prev.pct ? k.var_prev.compact : `sem realizado ${y.prev}`} />
+        {/* valores por extenso; variação sempre com a diferença em R$ (etapa 3) */}
+        <Stat label={k.prev_actual.label} value={fmtMoney(k.prev_actual.value ?? 0)} hint={!d.has.prev ? "sem realizado carregado" : undefined} />
+        <Stat label={k.ref_budget.label} value={fmtMoney(k.ref_budget.value ?? 0)} hint={!d.has.ref ? "sem orçado de referência carregado" : undefined} />
+        <Stat label={k.target.label} value={fmtMoney(k.target.value ?? 0)} tone="budget" />
+        <Stat label={k.var_ref.label} value={k.var_ref.pct ? fmtSignedMoney(k.var_ref.value ?? 0) : "—"} hint={k.var_ref.pct ? `${k.var_ref.pct_label} sobre ${y.ref}` : `sem orçado ${y.ref}`} />
+        <Stat label={k.var_prev.label} value={k.var_prev.pct ? fmtSignedMoney(k.var_prev.value ?? 0) : "—"} hint={k.var_prev.pct ? `${k.var_prev.pct_label} sobre ${y.prev}` : `sem realizado ${y.prev}`} />
       </div>
       <div className="stats">
-        {(["opex", "capex", "personnel"] as const).map((m) => <Stat key={m} label={`${k[m].label} ${y.target}`} value={k[m].compact} hint={k[m].share !== "—" ? `${k[m].share} do orçamento` : undefined} />)}
+        {(["opex", "capex", "personnel"] as const).map((m) => <Stat key={m} label={`${k[m].label} ${y.target}`} value={fmtMoney(k[m].value ?? 0)} hint={k[m].share !== "—" ? `${k[m].share} do orçamento` : undefined} />)}
         <Stat label={k.filled_pct.label} value={k.filled_pct.compact} hint={k.filled_pct.hint} tone={k.filled_pct.value && Number(k.filled_pct.value) >= 1 ? "good" : undefined} />
         <Stat label={k.approved_pct.label} value={k.approved_pct.compact} hint={k.approved_pct.hint} tone={k.approved_pct.value && Number(k.approved_pct.value) >= 1 ? "good" : undefined} />
       </div>
@@ -334,7 +354,7 @@ export default function Analytics() {
         <Card title="Andamento do preenchimento" actions={<span className="muted small">{fmtInt(d.status.total)} centro(s) de custo no escopo</span>}>
           <div className="stats stats-compact">
             <Stat label="Preenchidos" value={fmtInt(d.status.filled)} tone="good" />
-            <Stat label="Pendentes" value={fmtInt(d.status.pending)} tone={d.status.pending ? "warn" : undefined} />
+            <Stat label="Pendentes" value={fmtInt(d.status.pending)} />
             <Stat label="Em validação" value={fmtInt(d.status.submitted)} />
             <Stat label="Devolvidos" value={fmtInt(d.status.returned)} tone={d.status.returned ? "bad" : undefined} />
             <Stat label="Aprovados" value={fmtInt(d.status.approved)} tone="good" />
