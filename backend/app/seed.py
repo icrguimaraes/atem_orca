@@ -4,7 +4,7 @@ import logging
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import seed_data as S
@@ -167,7 +167,10 @@ def _cost_center_structure(db: Session) -> None:
             dept = Department(name=dept_name)
             db.add(dept)
             db.flush()
-        sector = _get(db, Area, name=sector_name, department_id=dept.id)
+        # setores ficam em MAIÚSCULAS (migração 0013): procura sem diferenciar caixa, senão o seed recria e quebra
+        sector = db.scalar(
+            select(Area).where(func.upper(Area.name) == sector_name.upper(), Area.department_id == dept.id)
+        )
         if sector is None:
             sector = Area(name=sector_name, department_id=dept.id)
             db.add(sector)
