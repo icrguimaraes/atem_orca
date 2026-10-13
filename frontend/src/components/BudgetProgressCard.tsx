@@ -18,12 +18,16 @@ export function BudgetProgressCard({ progress, figures }: { progress: BudgetProg
       title={`Orçamento ${progress.target_year} em construção`}
       actions={
         <span className="muted small">
-          {fmtInt(progress.started_cost_centers)} de {fmtInt(progress.total_cost_centers)} CCs com lançamentos ·{" "}
+          {/* no Painel a contagem é de todos os tipos (OPEX, CAPEX e Pessoal); a barra de status abaixo é só do OPEX */}
+          {figures?.rank
+            ? `${fmtInt(progress.started_cost_centers)} CC${progress.started_cost_centers === 1 ? "" : "s"} com lançamentos (todos os tipos)`
+            : `${fmtInt(progress.started_cost_centers)} de ${fmtInt(progress.total_cost_centers)} CCs com lançamentos`} ·{" "}
           proposto <strong>{fmtMoneyPref(proposed)}</strong>
           {base ? <> ({fmtPct(String(proposed / base - 1))} vs {baseLabel} dos mesmos CCs)</> : null}
         </span>
       }
     >
+      {figures?.rank && <p className="muted small" style={{ margin: "0 0 6px" }}>Situação do orçamento OPEX por centro de custo</p>}
       <StatusBar
         items={ORDER.map((k) => ({ key: k, label: SUBMISSION_STATUS[k].label, count: progress.status_counts[k] ?? 0, tone: SUBMISSION_STATUS[k].tone }))}
       />
