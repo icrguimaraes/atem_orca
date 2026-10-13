@@ -11,7 +11,8 @@ from decimal import Decimal
 
 import plotly.graph_objects as go
 
-from app.services.analytics import _br, _fig, _layout, fmt_compact, fmt_money, fmt_pct, short
+from app.services.analytics import _fig, _layout
+from app.services.analytics_base import _br, fmt_compact, fmt_money, fmt_pct, short
 
 MONTHS = ("JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ")
 REALIZADO, ORCADO, ANTERIOR = "#4472c4", "#4fa894", "#8a6bbf"  # azul, verde-água (orçamento), roxo

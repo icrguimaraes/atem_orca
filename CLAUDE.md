@@ -33,9 +33,14 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   `PARAM_LABELS` no frontend.
 - Frontend: tokens de cor/fonte em `styles.css` (`:root`, claro e escuro); gráficos em `components/charts.tsx` com a paleta
   `SERIES`; coral só em ações primárias. Toda tabela nova vai dentro de `.table-wrap`; conferir celular (390px) sem overflow.
-- Gráficos analíticos: figuras Plotly são montadas **no backend** (`services/analytics.py`, uma base filtrada por request,
+- Gráficos analíticos: figuras Plotly são montadas **no backend** (`services/analytics.py` — figuras e `dashboard()`; constantes,
+  formatação pt-BR, filtros, `build` e agregações em `services/analytics_base.py` —, uma base filtrada por request,
   formatação pt-BR em rótulos/tooltips) e renderizadas por `components/PlotlyChart.tsx` (bundle `plotly.js-basic-dist-min`:
   barras, linhas e pizza; carregado só na Análise e no Painel). Novos gráficos: nova função `fig_*` + chave em `dashboard()['figures']`.
+- Módulos grandes foram divididos em 13/10/2026 sem mudar comportamento: Painel = `api/v1/dashboard.py` (rotas) +
+  `services/painel_facts.py` (Period/Facts) + `services/painel_metrics.py`; consolidação = `services/consolidation.py` +
+  `services/personnel_premises.py` (premissas e what-if de pessoal); Pessoal = `api/v1/personnel.py` + `api/v1/personnel_scenarios.py`
+  (cenários, what-if, premissas; mesmo prefixo, router próprio em `main.py`). Arquivo novo acima de ~700 linhas: dividir por assunto.
 - Painel (`pages/Painel2.tsx`, rota `/`; `/painel-2` redireciona): gráficos em Plotly com os números de `/dashboard/overview`,
   figuras em `services/painel_figures.py` (`overview?figures=true`, filtro extra `account_id`); tooltip próprio via `meta.tooltip`
   + linhas no fim do `customdata`; clique nos visuais filtra (o visual clicado destaca em vez de se filtrar — séries sem o

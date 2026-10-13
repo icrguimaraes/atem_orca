@@ -10,6 +10,7 @@ from app.core.deps import get_current_user, visible_cost_center_ids
 from app.db import get_db
 from app.models import Account, BudgetVersion, CostCenter, Department, User
 from app.services import analytics as svc
+from app.services import analytics_base as base
 from app.services import opex as opex_svc
 
 router = APIRouter(prefix="/analytics", tags=["Análise"])
@@ -94,8 +95,8 @@ def options(db: Session = Depends(get_db), user: User = Depends(get_current_user
             for c in ccs
         ],
         "departments": [{"id": d.id, "name": d.name} for d in departments],
-        "series": svc.series_options(db, ctx),
-        "years": svc.years_available(db, ctx),
+        "series": base.series_options(db, ctx),
+        "years": base.years_available(db, ctx),
         "target_year": ctx.target_year,
         "default_series": {"prev": f"actual:{ctx.prev_year}", "ref": f"budget:{ctx.ref_year}"},
         "accounts": [
