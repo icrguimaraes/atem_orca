@@ -132,7 +132,7 @@ def connect(timeout_ms: int = 30000) -> Any:
             password=s.hana_password,
             encrypt=True,
             sslValidateCertificate=True,
-            connectTimeout=15000,
+            connectTimeout=30000,
             communicationTimeout=timeout_ms,
         )
     except Exception as exc:  # hdbcli.dbapi.Error: a mensagem não traz a senha

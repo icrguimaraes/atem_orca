@@ -81,6 +81,8 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   `python -m app.sap_push` (atalho `scripts/sap-ksb1.cmd`), que lê o HANA no computador de quem tem acesso e envia a planilha a
   `POST /api/v1/sap/ksb1/push` com o token `SAP_PUSH_TOKEN` (cabeçalho `X-Push-Token`, comparação em tempo constante, 5 falhas
   por IP bloqueiam 15 min; sem o token configurado a rota não existe). Cria o mesmo lote em Importações; auditoria `SAP_PUSH`.
+  Versão leve para outro computador da rede (sem o projeto): `scripts/sap-ksb1-leve/` (um arquivo `sap_ksb1.py` + `.cmd` + LEIA-ME;
+  só `hdbcli` e `openpyxl`). Duplica os nomes de coluna de `KSB1_ALIASES`/`hana.TECHNICAL`; `tests/test_sap.py` falha se divergirem.
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

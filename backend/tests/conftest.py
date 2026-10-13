@@ -7,6 +7,9 @@ os.environ["UPLOAD_DIR"] = tempfile.mkdtemp(prefix="atem_uploads_")
 os.environ["ADMIN_PASSWORD"] = "Admin@12345"
 os.environ["ADMIN_EMAIL"] = "admin@test.com"
 os.environ["SECRET_KEY"] = "test-secret-key-with-at-least-32-bytes!!"
+# testes herméticos: o backend/.env de quem desenvolve (HANA_*, SAP_PUSH_*) não pode ligar integrações nos testes
+for _key in ("HANA_HOST", "HANA_USER", "HANA_PASSWORD", "SAP_PUSH_TOKEN", "SAP_PUSH_URL"):
+    os.environ[_key] = ""
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

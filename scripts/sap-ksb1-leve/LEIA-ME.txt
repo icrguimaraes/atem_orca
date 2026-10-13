@@ -1,0 +1,44 @@
+ENVIO DO KSB1 DO SAP HANA PARA O SISTEMA DE ORCAMENTO (versao leve)
+===================================================================
+
+Para que serve
+  Le a view do KSB1 no SAP HANA (somente leitura) e envia ao sistema de orcamento, que cria uma
+  importacao em "Importacao de dados". Nada entra na base sem a confirmacao na tela do sistema.
+  Rode este pacote num computador DA REDE DA ATEM (ou na VPN): o HANA so aceita IPs liberados.
+
+O que precisa
+  - Python 3.9 ou mais novo (python.org; marque "Add Python to PATH" ao instalar).
+  - Os pacotes hdbcli e openpyxl (o instalar.cmd instala).
+  - Um usuario do HANA somente leitura na view FD_S4HANA_PRD.VWG_FD_KSB1.
+  - O SAP_PUSH_TOKEN (o mesmo cadastrado no Railway do sistema). Peca ao Icaro; nao envie por e-mail/chat.
+
+Passo a passo (uma vez)
+  1. Copie esta pasta inteira para o computador (ex.: C:\sap-ksb1).
+  2. De dois cliques em  instalar.cmd.
+  3. De dois cliques em  testar.cmd. Na primeira vez ele cria o arquivo  sap_ksb1.env  e pede para preencher:
+        HANA_HOST       endereco do HANA (sem :443)
+        HANA_USER       usuario somente leitura
+        HANA_PASSWORD   senha
+        SAP_PUSH_TOKEN  o token do sistema
+     Abra o sap_ksb1.env no Bloco de Notas, preencha depois do "=" (sem aspas, sem espacos), salve e rode testar.cmd de novo.
+  4. O teste lista as colunas da view e mostra uma amostra. Se aparecer "Todos os campos necessarios foram
+     encontrados", esta pronto. Se aparecer "faltou coluna", mande ao Icaro os NOMES das colunas (sem os dados).
+
+Uso no dia a dia
+  enviar.cmd 2026          envia o ano de 2026 (todas as empresas)
+  enviar.cmd 2026 1001     envia 2026 so da empresa 1001 (ATEM); 1012 = NAVE; 2001 = REAM
+  Ao final, abra o link mostrado (ou o sistema, menu Importacao de dados), leia a previa e confirme.
+  Para a primeira validacao, comece por um ano/empresa que ja esta no sistema (ex.: 2025 da 1001).
+
+Seguranca
+  - A senha do HANA fica so no sap_ksb1.env deste computador. Nao copie esse arquivo para e-mail, Teams ou nuvem.
+  - Para o sistema vai apenas a planilha, com o token. 5 tentativas com token errado bloqueiam o IP por 15 minutos.
+  - O script so faz SELECT; nao altera nada no SAP.
+
+Problemas comuns
+  Connect timeout / socket closed ....... o computador nao esta na rede liberada do HANA: use a rede da ATEM ou VPN.
+  Driver do HANA nao instalado .......... rode instalar.cmd.
+  HTTP 401 .............................. SAP_PUSH_TOKEN diferente do cadastrado no Railway.
+  HTTP 404 em /sap/ksb1/push ............ o token ainda nao foi cadastrado no Railway (ou o servico nao reiniciou).
+  HTTP 429 .............................. muitas tentativas erradas: aguarde 15 minutos.
+  HTTP 413 .............................. arquivo grande: envie por empresa (enviar.cmd 2026 1001).

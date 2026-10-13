@@ -308,3 +308,72 @@ def test_script_multipart_is_accepted_by_the_server(client, admin, push_on):
     r = client.post(PUSH, headers={**push_on, "Content-Type": ctype}, content=body)
     assert r.status_code == 202, r.text
     assert r.json()["status"] == "UPLOADED" and r.json()["file_name"].startswith("SAP_HANA_KSB1_2026_1001_")
+
+
+# ---------------------------------------------------------------- versão leve (scripts/sap-ksb1-leve)
+
+
+@pytest.fixture
+def lite(monkeypatch, tmp_path):
+    """Carrega o script leve por caminho (não é um pacote) com ambiente e arquivo de configuração isolados."""
+    import importlib.util
+    import os
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "scripts" / "sap-ksb1-leve" / "sap_ksb1.py"
+    spec = importlib.util.spec_from_file_location("sap_ksb1_lite", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    monkeypatch.setattr(os, "environ", dict(os.environ))  # setdefault do script não vaza para os outros testes
+    monkeypatch.setattr(mod, "ENV_FILE", tmp_path / "sap_ksb1.env")
+    return mod
+
+
+def test_lite_script_stays_equal_to_the_backend_connector(lite):
+    from app.imports.parsers.financial import KSB1_ALIASES
+
+    assert lite.KSB1_ALIASES == KSB1_ALIASES and lite.TECHNICAL == hana.TECHNICAL and lite.REQUIRED == hana.REQUIRED
+    for names, override in (
+        (COLUMNS, None),
+        (["VALOR_TOTAL", "CC", "CONTA", "DATA"], {"amount": "VALOR_TOTAL", "cost_center": "CC"}),
+        (["Centro de custo", "Classe de custo", "Valor/moeda ACC", "Data de lançamento"], None),
+    ):
+        assert lite.resolver_colunas(names, override) == hana.resolve_columns(names, override)
+
+
+def test_lite_workbook_equals_backend_workbook(lite, monkeypatch):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    for k, v in (("HANA_HOST", "h"), ("HANA_USER", "u"), ("HANA_PASSWORD", "p")):
+        monkeypatch.setenv(k, v)
+    log: list = []
+    monkeypatch.setattr(lite, "conectar", lambda timeout_ms=30000: FakeConn(COLUMNS, DATA, log))
+    content, count = lite.montar_planilha(2026, "1001")
+    assert count == 2 and log[-1][1] == ["2026", "1001"] and "?" in log[-1][0]
+    mapping, _ = hana.resolve_columns(COLUMNS)
+    expected = hana.to_workbook(iter([list(r) for r in DATA if r[0] == "1001"]), COLUMNS, mapping)[0]
+
+    def cells(data: bytes):
+        return [list(r) for r in load_workbook(BytesIO(data), read_only=True).active.iter_rows(values_only=True)]
+
+    assert cells(content) == cells(expected)
+
+
+def test_lite_env_file_main_and_redaction(lite, monkeypatch, tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:  # primeira execução cria o modelo e pede para preencher
+        lite.carregar_env()
+    assert "Criei o arquivo" in str(exc.value) and "HANA_PASSWORD=" in lite.ENV_FILE.read_text(encoding="utf-8")
+    lite.ENV_FILE.write_text(
+        '# comentário\nHANA_HOST=hana.invalido.example\nHANA_USER=u\nHANA_PASSWORD="S3gredo"\n', encoding="utf-8"
+    )
+    lite.carregar_env()
+    assert lite.cfg("HANA_PASSWORD") == "S3gredo" and lite.faltando() == []
+    assert lite.redigir("falhou em hana.invalido.example 10.1.2.3:443") == "falhou em <host> <ip>"
+    monkeypatch.setattr(lite, "conectar", lambda timeout_ms=30000: FakeConn(COLUMNS, DATA, []))
+    out = tmp_path / "ksb1.xlsx"
+    assert lite.main(["--year", "2026", "--save", str(out), "--local-only"]) == 0
+    assert out.stat().st_size > 0 and "3 lançamentos" in capsys.readouterr().out
+    body, ctype = lite._multipart({"year": "2026"}, "k.xlsx", b"abc")
+    assert ctype.startswith("multipart/form-data; boundary=") and b'name="year"' in body and b"abc" in body
