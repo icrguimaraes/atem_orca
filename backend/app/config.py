@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     admin_name: str = "Administrador"
     # integração com o Movimentação de Pessoal (leitura do quadro); vazio = desligada
     movpessoal_token: str | None = None
+    # integração com o SAP HANA Cloud (KSB1 direto da view); vazio = desligada. Usuário e senha só por variável de
+    # ambiente (Railway) e de preferência um usuário somente leitura.
+    hana_host: str | None = None
+    hana_port: int = 443
+    hana_user: str | None = None
+    hana_password: str | None = None
+    hana_schema: str = "FD_S4HANA_PRD"
+    hana_view: str = "VWG_FD_KSB1"
 
     @property
     def sqlalchemy_url(self) -> str:

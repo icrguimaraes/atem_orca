@@ -47,6 +47,7 @@ const TABS = [
   ["fluxo", "Fluxo"],
   ["fontes", "Fontes"],
   ["etapas", "Etapas do ETL"],
+  ["sap", "SAP"],
   ["parametros", "Parâmetros"],
   ["historico", "Histórico"],
 ] as const;
@@ -483,6 +484,152 @@ function HistoryTab() {
   );
 }
 
+// ------------------------------------------------------------------ SAP HANA (KSB1 direto da view)
+
+interface SapStatus { configured: boolean; missing: string[]; host_set: boolean; port: number; schema: string; view: string }
+interface SapColumn { name: string; type: string; field: string | null }
+interface SapTest {
+  columns: SapColumn[]; mapping: Record<string, { label: string; column: string }>; missing: string[];
+  sample: { columns: string[]; rows: (string | number | null)[][] };
+}
+
+const SAP_FIELD_LABELS: Record<string, string> = {
+  "cost_center": "Centro de custo", "account": "Conta", "amount": "Valor", "year+period ou posting_date": "Ano e mês ou data de lançamento",
+};
+
+function SapTab() {
+  const status = useLoad(() => api<SapStatus>("/sap/status"));
+  const companies = useLoad(() => api<{ code: string; name: string }[]>("/companies"));
+  const [test, setTest] = useState<SapTest | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [year, setYear] = usePersistentState("atem.central.sap.year", String(new Date().getFullYear()));
+  const [company, setCompany] = usePersistentState("atem.central.sap.company", "");
+  const [mode, setMode] = usePersistentState<"MERGE" | "REPLACE">("atem.central.sap.mode", "MERGE");
+  const [fetching, setFetching] = useState(false);
+  const [batchId, setBatchId] = useState<number | null>(null);
+  const st = status.data;
+  if (status.error) return <Alert>{status.error}</Alert>;
+  if (!st) return <Loading />;
+
+  async function runTest() {
+    setTesting(true); setError(null); setTest(null);
+    try {
+      setTest(await api<SapTest>("/sap/test", { method: "POST" }));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setTesting(false);
+    }
+  }
+  async function runFetch() {
+    if (!window.confirm(`Buscar o KSB1 de ${year}${company ? ` (empresa ${company})` : ""} no SAP e criar uma importação para você revisar?`)) return;
+    setFetching(true); setError(null); setBatchId(null);
+    try {
+      const batch = await api<{ id: number }>("/sap/ksb1/fetch", {
+        method: "POST",
+        body: JSON.stringify({ year: Number(year), company_code: company || null, mode }),
+      });
+      setBatchId(batch.id);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setFetching(false);
+    }
+  }
+
+  return (
+    <div className="section-stack">
+      <Card title="SAP HANA · KSB1">
+        <p className="muted small">
+          Lê a view <span className="mono">{st.schema}.{st.view}</span> (somente leitura) e monta a importação do realizado, que passa pela
+          mesma validação e prévia dos arquivos: nada entra na base sem a sua confirmação em Importações.
+        </p>
+        {st.configured ? (
+          <p><Badge tone="good">Configurado</Badge> <span className="muted small">porta {st.port} · usuário e senha nas variáveis do Railway</span></p>
+        ) : (
+          <Alert tone="warn">
+            Falta configurar no Railway (Variables): {st.missing.map((m) => <span key={m} className="mono"> {m}</span>)}.
+            Use um usuário somente leitura do HANA; usuário e senha ficam só nas variáveis, nunca no sistema.
+          </Alert>
+        )}
+        <div className="dc-toolbar">
+          <button className="btn btn-primary" onClick={runTest} disabled={!st.configured || testing}>{testing ? "Conectando…" : "Testar conexão"}</button>
+        </div>
+      </Card>
+
+      {error && <Alert>{error}</Alert>}
+
+      {test && (
+        <Card title="Colunas da view">
+          {test.missing.length > 0 ? (
+            <Alert tone="warn">
+              Faltou coluna para: {test.missing.map((m) => SAP_FIELD_LABELS[m] ?? m).join(", ")}. Informe o nome da coluna no parâmetro{" "}
+              <span className="mono">sap.ksb1_columns</span> (aba Parâmetros), por exemplo {`{"cost_center": "NOME_DA_COLUNA"}`}.
+            </Alert>
+          ) : (
+            <Alert tone="good">Todos os campos necessários foram encontrados.</Alert>
+          )}
+          <div className="table-wrap">
+            <table className="table">
+              <thead><tr><th>Coluna da view</th><th>Tipo</th><th>Campo do sistema</th></tr></thead>
+              <tbody>
+                {test.columns.map((c) => (
+                  <tr key={c.name}>
+                    <td className="mono">{c.name}</td>
+                    <td className="muted small">{c.type}</td>
+                    <td>{c.field ? test.mapping[c.field]?.label : <span className="muted">— não usada</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <h3 className="section-title dc-sub">Amostra ({test.sample.rows.length} linhas)</h3>
+          <div className="table-wrap">
+            <table className="table">
+              <thead><tr>{test.sample.columns.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+              <tbody>
+                {test.sample.rows.map((r, i) => (
+                  <tr key={i}>{r.map((v, j) => <td key={j} className="small">{v === null ? "—" : String(v)}</td>)}</tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      <Card title="Buscar realizado">
+        <div className="form-row">
+          <label>Ano<input value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" /></label>
+          <label>
+            Empresa
+            <select value={company} onChange={(e) => setCompany(e.target.value)}>
+              <option value="">Todas</option>
+              {(companies.data ?? []).map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}
+            </select>
+          </label>
+          <label>
+            Como entra
+            <select value={mode} onChange={(e) => setMode(e.target.value as "MERGE" | "REPLACE")}>
+              <option value="MERGE">Atualizar (mantém o que não veio)</option>
+              <option value="REPLACE">Substituir a base da empresa no ano</option>
+            </select>
+          </label>
+        </div>
+        <div className="dc-toolbar">
+          <button className="btn btn-primary" onClick={runFetch} disabled={!st.configured || fetching || year.length !== 4}>{fetching ? "Buscando no SAP…" : "Buscar do SAP"}</button>
+          <span className="muted small">Depois, revise a prévia em Importações e confirme.</span>
+        </div>
+        {batchId && (
+          <Alert tone="good">
+            Importação #{batchId} criada. <Link to={`/importacoes/${batchId}`}>Revisar e confirmar</Link>
+          </Alert>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------ página
 
 export default function ControlCenter() {
@@ -498,6 +645,7 @@ export default function ControlCenter() {
       {tab === "fluxo" && <FlowTab go={setTab} />}
       {tab === "fontes" && <SourcesTab />}
       {tab === "etapas" && <StepsTab />}
+      {tab === "sap" && <SapTab />}
       {tab === "parametros" && <ParamsTab />}
       {tab === "historico" && <HistoryTab />}
     </>

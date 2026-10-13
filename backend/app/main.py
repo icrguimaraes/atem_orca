@@ -30,6 +30,7 @@ from app.api.v1 import (
     personnel_scenarios,
     pj,
     rules,
+    sap,
     trace,
     users,
     validation,
@@ -111,6 +112,7 @@ for module in (
     pj,
     trace,
     control,
+    sap,
 ):
     api.include_router(module.router)
 app.include_router(api)

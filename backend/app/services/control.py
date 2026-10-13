@@ -91,7 +91,8 @@ LAYOUTS = [
         "dataset": "ACTUAL",
         "title": "Realizado — exportação SAP KSB1",
         "read": "Partidas individuais de centro de custo: um lançamento por linha, com documento, fornecedor e texto. "
-        "O mês vem da data de lançamento (ou de exercício/período).",
+        "O mês vem da data de lançamento (ou de exercício/período). Pode vir de arquivo ou direto da view do SAP "
+        "HANA (aba SAP da Central de dados, que monta a planilha e segue este mesmo caminho).",
         "load": "Uma versão por empresa × ano. O maior mês carregado vira o último mês fechado — a projeção só "
         "preenche os meses depois dele.",
         "aliases": "KSB1_ALIASES",
@@ -442,6 +443,7 @@ GROUPS = [
     ("travel.", "Viagens"),
     ("capex.", "CAPEX"),
     ("budget.", "Painel"),
+    ("sap.", "SAP"),
 ]
 
 USED_IN = {
@@ -469,6 +471,7 @@ USED_IN = {
     "capex.min_unit_value": "CAPEX: enquadramento por valor unitário",
     "capex.min_useful_life_months": "CAPEX: enquadramento por vida útil",
     "budget.criteria": "Painel: card Critérios do orçamento",
+    "sap.ksb1_columns": "SAP HANA: colunas da view do KSB1 quando a detecção automática erra (aba SAP)",
 }
 
 

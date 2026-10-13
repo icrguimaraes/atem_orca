@@ -71,6 +71,12 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   etapas do ETL por layout (`control.LAYOUTS` + colunas aceitas lidas dos `*_ALIASES` dos parsers), parâmetros do ciclo com
   motivo obrigatório (reusa `cycles.apply_parameter`) e histórico. Acesso pessoal `users.can_control_data` (migração 0014;
   `core.deps.require_data_control`), concedido só por quem já o tem. Novo layout de importação entra também em `control.LAYOUTS`.
+- Integração SAP HANA (13/10/2026): aba SAP da Central de dados sobre `services/hana.py` + `api/v1/sap.py`. Lê a view do KSB1
+  (`HANA_SCHEMA`.`HANA_VIEW`, padrão `FD_S4HANA_PRD.VWG_FD_KSB1`) só com `SELECT` e filtros por parâmetro, monta uma planilha no
+  layout KSB1 e cria um lote em Importações (mesma validação/prévia/confirmação; nada grava antes). Credenciais só por variável
+  de ambiente (`HANA_HOST`, `HANA_USER`, `HANA_PASSWORD`; usuário somente leitura) — nunca em código, log, auditoria ou resposta.
+  Colunas da view detectadas por `KSB1_ALIASES` + nomes técnicos do SAP; o parâmetro `sap.ksb1_columns` corrige o que errar.
+  Driver `hdbcli` importado só na conexão; testes usam conexão simulada (`tests/test_sap.py`).
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

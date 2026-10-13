@@ -371,6 +371,12 @@ CYCLE_PARAMETERS = {
         "Critérios do orçamento (informativo, no Painel): lista de {item, texto}",
     ),
     "capex.min_useful_life_months": (12, "Vida útil mínima (meses) para CAPEX"),
+    # integração SAP HANA (13/10/2026): campo do sistema → coluna da view, só para o que a detecção automática errar
+    "sap.ksb1_columns": (
+        {},
+        "Colunas da view do KSB1 (SAP HANA) que a detecção automática não acerta: {campo: coluna}. "
+        "Campos: company, branch, cost_center, account, year, period, posting_date, document, amount, text…",
+    ),
     "personnel.salary_adjustment_pct": (0.05, "Premissa de reajuste salarial (template Pessoal, E9)"),
     "personnel.adjustment_month": (1, "Mês de aplicação do reajuste (data-base)"),
     # Consolidação: contas em que o custo de pessoal é lançado (confirmar com a contabilidade)
