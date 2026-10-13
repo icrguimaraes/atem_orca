@@ -274,7 +274,7 @@ export interface BreakdownRow {
 }
 export interface Breakdown {
   group_by: "department" | "area" | "package" | "account" | "cost_center"; reference_year: number; previous_year: number | null;
-  last_closed_period: number | null; period: PeriodInfo; base: "prev" | "budget" | null; base_label: string | null; main_label: string;
+  last_closed_period: number | null; period: PeriodInfo; base: "prev" | "budget" | "actual" | "version" | null; base_label: string | null; main_label: string;
   thresholds: { growth: number; reduction: number }; rows: BreakdownRow[];
   total: { ref: string; base: string; var: string; var_pct: string | null };
 }

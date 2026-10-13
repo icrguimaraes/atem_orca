@@ -40,15 +40,18 @@ function sortRows(rows: BreakdownRow[], sort: Sort): BreakdownRow[] {
 /** Semáforo da variação, com os limiares de alerta do ciclo (os mesmos do orçamento OPEX):
  * vermelho acima do limite de crescimento (`alert.growth_pct`), amarelo abaixo do limite de redução
  * (`alert.reduction_pct`, queda forte que pede atenção) e verde dentro da faixa. */
-function tone(pct: string | null, t: { growth: number; reduction: number }): "good" | "bad" | null {
+function tone(pct: string | null, t: { growth: number; reduction: number }, version = false): "good" | "bad" | null {
   if (pct === null) return null;
   const n = Number(pct);
+  // comparação com revisão congelada (13/10/2026): o que importa é a direção — subiu em relação à revisão = vermelho,
+  // caiu ou ficou igual = verde; os limites de alerta do ciclo não se aplicam
+  if (version) return n > 0 ? "bad" : "good";
   // só verde e vermelho (09/10/2026): fora da faixa, para cima ou para baixo, é vermelho
   return n > t.growth || n < -t.reduction ? "bad" : "good";
 }
 
-function VarCell({ pct, t }: { pct: string | null; t: { growth: number; reduction: number } }) {
-  const k = tone(pct, t);
+function VarCell({ pct, t, version }: { pct: string | null; t: { growth: number; reduction: number }; version?: boolean }) {
+  const k = tone(pct, t, version);
   return (
     <span className="var-cell">
       <span className={`dot ${k ?? "none"}`} aria-hidden="true" />
@@ -133,6 +136,7 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
   if (!root) return <Loading />;
   if (!root.rows.length) return <Empty>Sem dados para os filtros.</Empty>;
   const hasBase = root.base !== null;
+  const versionBase = root.base === "version"; // Revisão N (congelada) como base
   const expanded = Object.keys(children).length > 0;
   const th = root.thresholds;
   const pctLabel = (v: number) => `${Math.round(v * 100)}%`;
@@ -190,7 +194,7 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
           {hasBase && <td className="right nowrap">{fmtMoney(r.var)}</td>}
           {hasBase && (
             <td className="right nowrap">
-              <VarCell pct={r.var_pct} t={th} />
+              <VarCell pct={r.var_pct} t={th} version={versionBase} />
             </td>
           )}
         </tr>
@@ -216,7 +220,13 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
       <div className="section-tools drill-tools">
         <span className="muted drill-help">
           {onSelect ? "Clique no + para detalhar (área → setor → pacote → conta) e no nome do pacote ou da conta para filtrar o painel." : "Clique em + para detalhar (área → setor → pacote → conta)."} AV %: participação no total da coluna.
-          {hasBase && (
+          {hasBase && versionBase && (
+            <>
+              {" "}Semáforo: <span className="dot good" aria-hidden="true" />igual ou abaixo da revisão congelada,{" "}
+              <span className="dot bad" aria-hidden="true" />acima da revisão congelada.
+            </>
+          )}
+          {hasBase && !versionBase && (
             <>
               {" "}Semáforo: <span className="dot good" aria-hidden="true" />dentro da faixa (de −{pctLabel(th.reduction)} a +{pctLabel(th.growth)}),{" "}
               <span className="dot bad" aria-hidden="true" />fora da faixa (acima de +{pctLabel(th.growth)} ou queda maior que {pctLabel(th.reduction)})
@@ -283,7 +293,7 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
               {hasBase && <td className="right nowrap">{fmtMoney(root.total.var)}</td>}
               {hasBase && (
                 <td className="right nowrap">
-                  <VarCell pct={root.total.var_pct} t={th} />
+                  <VarCell pct={root.total.var_pct} t={th} version={versionBase} />
                 </td>
               )}
             </tr>

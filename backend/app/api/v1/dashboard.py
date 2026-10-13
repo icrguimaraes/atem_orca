@@ -447,7 +447,10 @@ def deviations(
                     "var": _money(var),
                     "var_pct": _pct(m, b),
                     # sem base (item novo) também pede atenção; fora da faixa = acima do crescimento ou queda forte
-                    "out_of_range": ratio is None or ratio > Decimal(str(growth)) or ratio < -Decimal(str(reduction)),
+                    # contra uma revisão congelada, "fora da faixa" = subiu em relação a ela (13/10/2026)
+                    "out_of_range": (ratio is None or ratio > 0)
+                    if P.base_kind == "version"
+                    else (ratio is None or ratio > Decimal(str(growth)) or ratio < -Decimal(str(reduction))),
                 }
             )
         groups[name] = rows
