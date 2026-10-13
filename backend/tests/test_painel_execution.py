@@ -63,6 +63,8 @@ def test_execution_kpis_and_forecast_only_with_full_projection(client, admin, ru
     real = next(t for n, t in total.items() if n.startswith("Realizado"))
     assert proj["y"] == [100.0] and proj["base"] == [430.0] and real["y"] == [430.0]
     assert proj["offsetgroup"] == real["offsetgroup"]
+    # rótulo do total da pilha (realizado + projeção) acima dela
+    assert total["Total com a projeção"]["y"] == [530.0] and "530" in total["Total com a projeção"]["text"][0]
     assert any(t["name"] == "Projeção set–dez (gestor)" for t in data["figures"]["monthly"]["data"])
 
     # filtro de meses só com meses fechados: o "fechamento" é o próprio realizado do recorte

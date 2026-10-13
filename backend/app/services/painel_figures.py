@@ -210,9 +210,30 @@ def fig_monthly_total(o: dict) -> dict:
         series.insert([k for k, _, _ in series].index("ref") + 1, ("proj", _projection_name(proj), PROJETADO))
         totals["proj"] = proj_total
     data = []
+    stacked = "proj" in totals
+    if stacked:
+        # total do realizado + projeção (13/10/2026: "mostra o realizado e o projetado, não o totalizado"): barra
+        # invisível do tamanho da pilha, só para o rótulo acima dela
+        data.append(
+            go.Bar(
+                x=["TOTAL"],
+                y=[totals["ref"]],
+                name="Total com a projeção",
+                offsetgroup="ref",
+                marker={"color": "rgba(0,0,0,0)"},
+                text=[f"<b>{_short(totals['ref'])}</b>"],
+                textposition="outside",
+                textangle=0,
+                cliponaxis=False,
+                constraintext="none",
+                textfont={"size": 15, "color": "#1f2328"},
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
     for key, name, color in series:
         v = totals[key]
-        shown = v - proj_total if (key == "ref" and "proj" in totals) else v
+        shown = v - proj_total if (key == "ref" and stacked) else v
         lines = [[f"{name}: {fmt_money(shown)}", color]]
         if key == "ref" and "proj" in totals:
             lines.append([f"Com a projeção: {fmt_money(v)}", ""])
@@ -237,13 +258,13 @@ def fig_monthly_total(o: dict) -> dict:
                 **stack,
                 marker={"color": color, "cornerradius": 4},
                 text=[_short(shown) if shown > 0 else ""],
-                # realizado com a projeção empilhada em cima: o rótulo vai dentro da barra (fora, a projeção o cobriria)
-                textposition="inside" if (key == "ref" and "proj" in totals) else "outside",
-                insidetextanchor="end",
+                # realizado e projeção empilhados: os rótulos vão dentro das barras e o total da pilha, acima
+                textposition="inside" if (key in ("ref", "proj") and stacked) else "outside",
+                insidetextanchor="end" if key == "ref" else "middle",
                 textangle=0,
                 cliponaxis=False,
                 constraintext="none",
-                textfont={"size": 14, "color": "#ffffff" if (key == "ref" and "proj" in totals) else INK[color]},
+                textfont={"size": 14, "color": "#ffffff" if (key in ("ref", "proj") and stacked) else INK[color]},
                 customdata=[[fmt_money(shown), lines]],
                 hovertemplate=name + ": <b>%{customdata[0]}</b><extra></extra>",
             )
