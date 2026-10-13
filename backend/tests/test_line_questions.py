@@ -3,6 +3,7 @@
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
 from sqlalchemy import inspect, text
 
 from app.db import engine
@@ -120,6 +121,7 @@ def test_package_level_questions_still_listed(client, admin, run_worker):
     assert r.status_code == 200 and r.json()["status"] == "ANSWERED"
 
 
+@pytest.mark.rebuild_schema
 def test_migration_0012_up_down_without_drift():
     from alembic.autogenerate import compare_metadata
     from alembic.config import Config

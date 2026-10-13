@@ -34,6 +34,7 @@ from app.services import consolidation as consolidation_svc
 from app.services import findings as findings_svc
 from app.services import opex as opex_svc
 from app.services import personnel as svc
+from app.services import personnel_premises as premises_svc
 
 router = APIRouter(prefix="/personnel", tags=["Pessoal"])
 ZERO = Decimal("0")
@@ -1007,7 +1008,7 @@ controller = require_roles(Role.CONTROLLER)
     summary="Premissas do custo de pessoal: dissídio, multiplicadores, abono, bônus por CC, rateio e total por conta",
 )
 def premises(db: Session = Depends(get_db), _: User = Depends(controller)):
-    return consolidation_svc.personnel_premises(db, _ctx(db))
+    return premises_svc.personnel_premises(db, _ctx(db))
 
 
 class PremisesWhatIfIn(BaseModel):
@@ -1032,7 +1033,7 @@ class PremisesWhatIfIn(BaseModel):
 def premises_what_if(payload: PremisesWhatIfIn, db: Session = Depends(get_db), _: User = Depends(controller)):
     ctx = _ctx(db)
     try:
-        out = consolidation_svc.premises_what_if(db, ctx, consolidation_svc.PremisesWhatIf(**payload.model_dump()))
+        out = premises_svc.premises_what_if(db, ctx, premises_svc.PremisesWhatIf(**payload.model_dump()))
     except svc.PersonnelError as exc:
         raise HTTPException(422, str(exc)) from exc
     finally:
@@ -1050,10 +1051,10 @@ def remove_overlap(request: Request, db: Session = Depends(get_db), user: User =
         raise HTTPException(409, "Versão congelada: só leitura. Abra uma revisão para alterar o rateio")
     if ctx.cycle.status == "CLOSED":
         raise HTTPException(409, "Ciclo encerrado: parâmetros só leitura")
-    current, new, overlap = consolidation_svc.split_without_overlap(db, ctx)
+    current, new, overlap = premises_svc.split_without_overlap(db, ctx)
     if not overlap:
         raise HTTPException(409, "O rateio não tem conta sobreposta ao abono ou ao bônus")
-    before_total = consolidation_svc.personnel_premises(db, ctx)["total"]
+    before_total = premises_svc.personnel_premises(db, ctx)["total"]
     accounts = ", ".join(f"{o['code']} ({o['label']})" for o in overlap)
     apply_parameter(
         db,
@@ -1066,7 +1067,7 @@ def remove_overlap(request: Request, db: Session = Depends(get_db), user: User =
         "(apontamento PERSONNEL_SPLIT_OVERLAP)",
     )
     db.flush()
-    after = consolidation_svc.personnel_premises(db, _ctx(db))
+    after = premises_svc.personnel_premises(db, _ctx(db))
     if after["total"] != before_total:  # salvaguarda: só redistribui entre contas
         db.rollback()
         raise HTTPException(409, "A retirada mudaria o total de pessoal; nada foi alterado")

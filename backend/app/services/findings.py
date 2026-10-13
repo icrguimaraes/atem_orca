@@ -39,9 +39,9 @@ from app.models import (
     User,
 )
 from app.services import capex as capex_svc
-from app.services import consolidation as consolidation_svc
 from app.services import opex as opex_svc
 from app.services import personnel as personnel_svc
+from app.services import personnel_premises as premises_svc
 from app.services.exports import _sheet
 
 # orçamentos iniciados e ainda não aprovados (aprovado = divergências já aceitas na análise)
@@ -336,10 +336,10 @@ def cycle_findings(db: Session, ctx: opex_svc.Context) -> list[dict]:
     de CC) — a correção fica na auditoria (SET_PARAMETER)."""
     if ctx.frozen:
         return []
-    overlap = consolidation_svc.split_overlap(db, ctx)
+    overlap = premises_svc.split_overlap(db, ctx)
     if not overlap:
         return []
-    amounts = consolidation_svc.overlap_amounts(db, ctx, overlap)
+    amounts = premises_svc.overlap_amounts(db, ctx, overlap)
     total = sum(amounts.values(), ZERO)
 
     def share(value: Decimal) -> str:

@@ -28,6 +28,7 @@ from app.models import (
 )
 from app.services import consolidation as cons
 from app.services import opex as opex_svc
+from app.services import personnel_premises as premises_svc
 
 ZERO = Decimal("0")
 
@@ -364,7 +365,7 @@ def _budget_lineage(db: Session) -> dict | None:
     rows = cons.rows_for(db, ctx, ctx.version)
     capex_sched = sum((sum(r.values, ZERO) for r in rows if r.module == "CAPEX"), ZERO)
     capex_unsched = sum((r.unscheduled for r in rows if r.module == "CAPEX"), ZERO)
-    pers = cons.personnel_breakdown(db, ctx)
+    pers = premises_svc.personnel_breakdown(db, ctx)
     components = [
         {
             "module": "OPEX",

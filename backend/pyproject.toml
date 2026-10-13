@@ -14,4 +14,5 @@ ignore = ["B008"]  # Depends() em defaults é o padrão do FastAPI
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["rebuild_schema: recria o esquema e o seed depois do teste (migrações)"]
 filterwarnings = ["ignore::DeprecationWarning", "ignore:Data Validation extension"]

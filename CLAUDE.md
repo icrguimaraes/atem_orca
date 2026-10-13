@@ -10,7 +10,7 @@ seções 12–15) e `docs/design-system.md` (visual) antes de alterar algo.
 scripts/dev-db.sh                                   # PostgreSQL local (/tmp:5433; bancos atem e atem_test)
 cd backend && pip install -r requirements-dev.txt
 cd backend && alembic upgrade head && python -m app.seed   # DATABASE_URL, SECRET_KEY, ADMIN_EMAIL, ADMIN_PASSWORD no ambiente
-cd backend && pytest -q                              # suíte completa (~1 min); conftest usa atem_test por padrão
+cd backend && pytest -q                              # suíte completa (~2 min); conftest usa atem_test por padrão
 cd backend && ruff check . && ruff format --check .  # obrigatório antes de commitar
 cd frontend && npm ci && npm run build               # tsc -b + vite; o Docker copia dist para backend/frontend_dist
 cd backend && FRONTEND_DIST=../frontend/dist uvicorn app.main:app --port 8077   # app completo local
@@ -75,7 +75,9 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   Estado dos filtros com `usePersistentState` (`src/persist.ts`: guardado no navegador e apagado no login/logout) e botão
   "Resetar filtros" via `onReset`/`resetCount` do FilterBar.
 - Celular: navegação na barra de abas inferior (`Layout.MobileTabs`, lista `TABS`) + folha "Mais"; nova página entra em `NAV` e aparece em "Mais".
-- Testes usam planilhas sintéticas de `tests/builders.py`. **Nunca** commitar `.xlsx` reais (dados pessoais) — já no `.gitignore`.
+- Testes: esquema + seed criados uma vez por sessão; cada teste roda numa transação desfeita no fim (toda
+  `SessionLocal()` usa a mesma conexão, `commit()` vira savepoint) e as sequências de id voltam a max+1. Teste que
+  mexe no esquema (migrações) leva `@pytest.mark.rebuild_schema`. Planilhas sintéticas de `tests/builders.py`. **Nunca** commitar `.xlsx` reais (dados pessoais) — já no `.gitignore`.
 - Branch de trabalho: `claude/atem-budget-planning-2027-1ril6s`; o Railway publica a cada push. Não abrir PR sem pedido.
 
 ## Dados sensíveis

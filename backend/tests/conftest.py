@@ -10,6 +10,7 @@ os.environ["SECRET_KEY"] = "test-secret-key-with-at-least-32-bytes!!"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import text  # noqa: E402
 
 from app.api.v1.auth import reset_rate_limit  # noqa: E402
 from app.db import SessionLocal, engine  # noqa: E402
@@ -20,14 +21,54 @@ from app.seed import seed  # noqa: E402
 from app.services.storage import get_storage  # noqa: E402
 
 
-@pytest.fixture(autouse=True)
-def fresh_db():
+def rebuild_schema() -> None:
+    """Esquema do zero + seed (uma vez por sessão; de novo só depois dos testes de migração)."""
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
         seed(db)
-    reset_rate_limit()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def schema():
+    rebuild_schema()
     yield
+
+
+@pytest.fixture(autouse=True)
+def fresh_db(request):
+    """Cada teste roda numa transação desfeita no fim (13/10/2026: antes o banco era recriado a cada teste, ~60% do
+    tempo da suíte). Toda `SessionLocal()` da aplicação passa a usar a mesma conexão; `commit()` vira um savepoint.
+    Testes marcados com `rebuild_schema` (migrações) rodam fora da transação e recriam o esquema ao terminar."""
+    reset_rate_limit()
+    if request.node.get_closest_marker("rebuild_schema"):
+        yield
+        rebuild_schema()
+        return
+    with engine.connect() as conn:
+        trans = conn.begin()
+        SessionLocal.configure(bind=conn, join_transaction_mode="create_savepoint")
+        try:
+            yield
+        finally:
+            SessionLocal.configure(bind=engine)
+            trans.rollback()
+    reset_sequences()
+
+
+def reset_sequences() -> None:
+    """Sequências de id voltam a max(id)+1: o rollback não as desfaz e alguns testes usam ids fixos (ex.: o CC
+    criado pelo template é o 1), como quando o banco era recriado."""
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if "id" in table.c and table.c.id.autoincrement is not False:
+                conn.execute(
+                    text(
+                        f"SELECT setval(pg_get_serial_sequence('{table.name}', 'id'), "
+                        f"coalesce((SELECT max(id) FROM {table.name}), 1), "
+                        f"(SELECT max(id) FROM {table.name}) IS NOT NULL)"
+                    )
+                )
 
 
 @pytest.fixture

@@ -494,6 +494,7 @@ def test_area_scope(client, pj_admin):
 # ---------------------------------------------------------------- migração
 
 
+@pytest.mark.rebuild_schema
 def test_migrations_0009_0011_up_down_without_drift():
     from alembic.autogenerate import compare_metadata
     from alembic.config import Config
