@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { api, type DeviationRow, type Deviations } from "../api";
-import { fmtSignedMoneyPref, fmtMoneyPref } from "../labels";
+import { fmtSignedCellPref, fmtCellPref, isMilMode } from "../labels";
 import { usePersistentState } from "../persist";
 import { DeviationTag } from "./ExecutionKpis";
 import { Alert, Empty, useLoad } from "./ui";
@@ -67,7 +67,7 @@ export function DeviationHighlights({ query, selectedCostCenter, selectedAccount
         {d && d.base_label && (
           <p className="muted small dev-basis">
             <i className={`kpi-swatch ${mainCls}`} aria-hidden="true" /> {d.main_label} × <i className={`kpi-swatch ${baseCls}`} aria-hidden="true" /> {d.base_label}
-            {" · "}maiores diferenças em valor; clique no nome para filtrar o Painel
+            {" · "}maiores diferenças em valor; clique no nome para filtrar o Painel{isMilMode() && " · valores em R$ mil"}
           </p>
         )}
       </div>
@@ -107,10 +107,10 @@ export function DeviationHighlights({ query, selectedCostCenter, selectedAccount
                     <Link className="why-btn trace-link" to={`/rastro?${qs}`} title="Abrir o Rastro neste recorte (até o lançamento)">rastro</Link>
                   </span>
                 </span>
-                <span className="dev-val right"><span className="dev-val-label">{d.base_label}</span>{fmtMoneyPref(row.base)}</span>
-                <span className="dev-val right"><span className="dev-val-label">{d.main_label}</span>{fmtMoneyPref(row.main)}</span>
+                <span className="dev-val right"><span className="dev-val-label">{d.base_label}</span>{fmtCellPref(row.base)}</span>
+                <span className="dev-val right"><span className="dev-val-label">{d.main_label}</span>{fmtCellPref(row.main)}</span>
                 <span className={`dev-var right ${n > 0 ? "up" : n < 0 ? "down" : ""}`}>
-                  <strong>{fmtSignedMoneyPref(row.var)}</strong>
+                  <strong>{fmtSignedCellPref(row.var)}</strong>
                   {row.var_pct !== null ? (
                     <DeviationTag value={row.var} pct={row.var_pct} above={isBudgetBase ? "acima do orçado" : "acima"} below={isBudgetBase ? "abaixo do orçado" : "abaixo"} />
                   ) : (

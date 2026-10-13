@@ -181,6 +181,20 @@ export const fmtMil = (v: string | number) => {
   return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits })} mil`;
 };
 export const fmtMoneyPref = (v: string | number) => (moneyMode === "full" ? fmtMoney(v) : fmtMil(v));
+/** Modo R$ mil ligado? As tabelas mostram só o número e dizem a unidade numa legenda ("Valores em R$ mil"). */
+export const isMilMode = () => moneyMode === "compact";
+const milNumber = (n: number) => {
+  const v = n / 1000;
+  const digits = Math.abs(v) < 10 ? 1 : 0;
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+};
+/** Valor de célula de tabela: R$ completo, ou só o número em milhares (sem "R$" nem "mil" em cada linha). */
+export const fmtCellPref = (v: string | number) => (moneyMode === "full" ? fmtMoney(v) : milNumber(Number(v)));
+export const fmtSignedCellPref = (v: string | number) => {
+  if (moneyMode === "full") return fmtSignedMoney(v);
+  const n = Number(v);
+  return `${n > 0 ? "+" : n < 0 ? "-" : ""}${milNumber(Math.abs(n))}`;
+};
 export const fmtSignedMoneyPref = (v: string | number) => {
   if (moneyMode === "full") return fmtSignedMoney(v);
   const n = Number(v);

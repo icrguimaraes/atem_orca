@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type Breakdown, type BreakdownRow } from "../api";
-import { fmtPct, fmtShare, deptRank, fmtMoneyPref } from "../labels";
+import { fmtPct, fmtShare, deptRank, fmtCellPref, isMilMode } from "../labels";
 import { Empty, Loading } from "./ui";
 import { WhyButton } from "./WhyPanel";
 
@@ -187,11 +187,11 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
               </Link>
             )}
           </td>
-          <td className="right nowrap">{fmtMoneyPref(r.ref)}</td>
+          <td className="right nowrap">{fmtCellPref(r.ref)}</td>
           <td className="right nowrap muted">{fmtShare(r.share_ref)}</td>
-          {hasBase && <td className="right nowrap">{fmtMoneyPref(r.base)}</td>}
+          {hasBase && <td className="right nowrap">{fmtCellPref(r.base)}</td>}
           {hasBase && <td className="right nowrap muted">{fmtShare(r.share_base)}</td>}
-          {hasBase && <td className="right nowrap">{fmtMoneyPref(r.var)}</td>}
+          {hasBase && <td className="right nowrap">{fmtCellPref(r.var)}</td>}
           {hasBase && (
             <td className="right nowrap">
               <VarCell pct={r.var_pct} t={th} version={versionBase} />
@@ -235,6 +235,7 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
           )}
         </span>
         <div className="inline-controls">
+          {isMilMode() && <span className="unit-note">Valores em R$ mil</span>}
           <input
             type="search"
             className="drill-search"
@@ -286,11 +287,11 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
           <tfoot>
             <tr>
               <td>Total</td>
-              <td className="right nowrap">{fmtMoneyPref(root.total.ref)}</td>
+              <td className="right nowrap">{fmtCellPref(root.total.ref)}</td>
               <td className="right nowrap muted">100%</td>
-              {hasBase && <td className="right nowrap">{fmtMoneyPref(root.total.base)}</td>}
+              {hasBase && <td className="right nowrap">{fmtCellPref(root.total.base)}</td>}
               {hasBase && <td className="right nowrap muted">100%</td>}
-              {hasBase && <td className="right nowrap">{fmtMoneyPref(root.total.var)}</td>}
+              {hasBase && <td className="right nowrap">{fmtCellPref(root.total.var)}</td>}
               {hasBase && (
                 <td className="right nowrap">
                   <VarCell pct={root.total.var_pct} t={th} version={versionBase} />
