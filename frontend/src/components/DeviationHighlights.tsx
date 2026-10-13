@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { api, type DeviationRow, type Deviations } from "../api";
-import { fmtMoney, fmtSignedMoney } from "../labels";
+import { fmtSignedMoneyPref, fmtMoneyPref } from "../labels";
 import { usePersistentState } from "../persist";
 import { DeviationTag } from "./ExecutionKpis";
 import { Alert, Empty, useLoad } from "./ui";
@@ -107,10 +107,10 @@ export function DeviationHighlights({ query, selectedCostCenter, selectedAccount
                     <Link className="why-btn trace-link" to={`/rastro?${qs}`} title="Abrir o Rastro neste recorte (até o lançamento)">ver rastro</Link>
                   </span>
                 </span>
-                <span className="dev-val right"><span className="dev-val-label">{d.base_label}</span>{fmtMoney(row.base)}</span>
-                <span className="dev-val right"><span className="dev-val-label">{d.main_label}</span>{fmtMoney(row.main)}</span>
+                <span className="dev-val right"><span className="dev-val-label">{d.base_label}</span>{fmtMoneyPref(row.base)}</span>
+                <span className="dev-val right"><span className="dev-val-label">{d.main_label}</span>{fmtMoneyPref(row.main)}</span>
                 <span className={`dev-var right ${n > 0 ? "up" : n < 0 ? "down" : ""}`}>
-                  <strong>{fmtSignedMoney(row.var)}</strong>
+                  <strong>{fmtSignedMoneyPref(row.var)}</strong>
                   {row.var_pct !== null ? (
                     <DeviationTag value={row.var} pct={row.var_pct} above={isBudgetBase ? "acima do orçado" : "acima"} below={isBudgetBase ? "abaixo do orçado" : "abaixo"} />
                   ) : (

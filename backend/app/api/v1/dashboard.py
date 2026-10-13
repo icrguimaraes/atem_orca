@@ -81,6 +81,7 @@ def overview(
     same_period: bool = True,
     base_version_id: int | None = None,
     figures: bool = False,
+    full_labels: bool = True,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -88,6 +89,7 @@ def overview(
     `years` (ex.: "2025,2026") são somados; `months` ("1,2,3") e `modules` ("OPEX,CAPEX,PERSONNEL") filtram
     tudo. `compare` liga a comparação com o ano anterior (só com um ano escolhido); `same_period` limita a base
     ao último mês fechado do realizado em foco. O ano do ciclo traz o orçamento proposto como orçado."""
+    painel_figures.FULL_LABELS.set(full_labels)  # rótulos dos gráficos: numérico completo (padrão) ou R$ mil/mi
     P = _period(db, years, months, modules, compare, same_period, year, base_version_id)
     f = Facts(db, user, company_id, cost_center_id, package_id, P, account_id=account_id, department_id=department_id)
     main_model = _main_model(P)

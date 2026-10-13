@@ -7,6 +7,7 @@ que usa o bundle básico do Plotly (barras e linhas) — por isso o mapa de calo
 """
 
 import re
+from contextvars import ContextVar
 from decimal import Decimal
 
 import plotly.graph_objects as go
@@ -55,8 +56,16 @@ def _tip_label(label: str | None) -> str:
     return re.sub(r" \(.*\)$| até [A-Z]{3}$", "", label or "").strip()
 
 
-def _short(value: float) -> str:
-    """Rótulo dentro do gráfico: "1,5 mi" em vez de "R$ 1,5 mi"."""
+# rótulos dos gráficos (13/10/2026): por padrão o valor numérico completo ("22.542.691,90"); o Painel alterna para
+# "R$ mil/mi" com o parâmetro `full_labels=false` de /dashboard/overview (contextvar por request)
+FULL_LABELS: ContextVar[bool] = ContextVar("painel_full_labels", default=True)
+
+
+def _short(value: float, cents: bool = True) -> str:
+    """Rótulo dentro do gráfico: "22.542.691,90" (padrão) ou "22,54 mi", sem o "R$". `cents=False` no mensal, onde
+    o rótulo completo vai na vertical e sem centavos para caber entre 24 barras."""
+    if FULL_LABELS.get():
+        return _br(value, 2 if cents else 0)
     return fmt_compact(value).replace("R$ ", "")
 
 
@@ -158,8 +167,10 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
                 name=name,
                 **stack,
                 marker={"color": color, "cornerradius": 4, "opacity": opacity},
-                text=[_short(v) if v > 0 else "" for v in values],
+                text=[_short(v, cents=False) if v > 0 else "" for v in values],
                 textposition="outside",
+                # numérico completo: na vertical, senão os rótulos de 24 barras se sobrepõem
+                textangle=-90 if FULL_LABELS.get() else 0,
                 constraintext="none",
                 cliponaxis=False,
                 textfont={
@@ -226,9 +237,9 @@ def fig_monthly_total(o: dict) -> dict:
                 name="Total com a projeção",
                 offsetgroup="ref",
                 marker={"color": "rgba(0,0,0,0)"},
-                text=[f"<b>{_short(totals['ref'])}</b>"],
+                text=[f"<b>{_short(totals['ref'], cents=False)}</b>"],
                 textposition="outside",
-                textangle=0,
+                textangle=-90 if FULL_LABELS.get() else 0,
                 cliponaxis=False,
                 constraintext="none",
                 textfont={"size": 15, "color": "#1f2328"},
@@ -264,11 +275,12 @@ def fig_monthly_total(o: dict) -> dict:
                 name=name,
                 **stack,
                 marker={"color": color, "cornerradius": 4},
-                text=[_short(shown) if shown > 0 else ""],
+                text=[_short(shown, cents=False) if shown > 0 else ""],
                 # realizado e projeção empilhados: os rótulos vão dentro das barras e o total da pilha, acima
                 textposition="inside" if (key in ("ref", "proj") and stacked) else "outside",
                 insidetextanchor="end" if key == "ref" else "middle",
-                textangle=0,
+                # numérico completo (sem centavos): na vertical, como no mensal, para as duas barras não se cobrirem
+                textangle=-90 if FULL_LABELS.get() else 0,
                 cliponaxis=False,
                 constraintext="none",
                 textfont={"size": 14, "color": "#ffffff" if (key in ("ref", "proj") and stacked) else INK[color]},

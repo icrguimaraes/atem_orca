@@ -6,15 +6,7 @@ import {
 } from "../api";
 import { PlotlyChart, type Figure } from "./PlotlyChart";
 import { Alert, Badge, Card, Stat, useLoad } from "./ui";
-import {
-  fmtCompact,
-  fmtDate,
-  fmtDateTime,
-  fmtInt,
-  fmtMoney,
-  REVIEW_STATUS,
-  SUBMISSION_STATUS,
-} from "../labels";
+import { fmtCompact, fmtDate, fmtDateTime, fmtInt, REVIEW_STATUS, SUBMISSION_STATUS, fmtMoneyPref } from "../labels";
 
 /* Blocos do Painel que não são gráficos Plotly do overview: tarefas do gestor, validações GMD e, no fim, a base
    importada (quadro de pessoal com o gráfico por CC e premissas). */
@@ -34,7 +26,7 @@ export function PainelBase() {
           <h2 className="section-title">Quadro de pessoal (base importada)</h2>
           <div className="stats">
             <Stat label="Colaboradores ativos" value={fmtInt(inv.personnel.headcount)} />
-            <Stat label="Folha mensal (salário base)" value={fmtCompact(inv.personnel.monthly_payroll)} hint={fmtMoney(inv.personnel.monthly_payroll)} />
+            <Stat label="Folha mensal (salário base)" value={fmtCompact(inv.personnel.monthly_payroll)} hint={fmtMoneyPref(inv.personnel.monthly_payroll)} />
             <Stat label="Custo mensal estimado" value={fmtCompact(inv.personnel.monthly_estimated_cost)} hint="salário × multiplicador do contrato" />
             <Stat label="Custo anual estimado" value={fmtCompact(inv.personnel.annual_estimated_cost)} hint="12 × custo mensal, sem reajuste" />
           </div>
@@ -187,7 +179,7 @@ export function PackageReviews() {
               <tr key={`${r.submission_id}-${r.package_id}`} className="clickable" onClick={() => navigate(`/orcamento/${r.cost_center_id}?pacote=${r.package_id}`)}>
                 <td>{r.cost_center}</td>
                 <td>{r.package}</td>
-                <td className="right">{fmtMoney(r.package_total)}</td>
+                <td className="right">{fmtMoneyPref(r.package_total)}</td>
                 <td>{fmtDateTime(r.submitted_at)}</td>
                 <td><Badge tone={REVIEW_STATUS[r.review_status]?.tone ?? "neutral"}>{REVIEW_STATUS[r.review_status]?.label}</Badge></td>
               </tr>

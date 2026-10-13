@@ -168,6 +168,18 @@ export const fmtCompact = (v: string | number) => {
   return `R$ ${n.toLocaleString("pt-BR", two)}`;
 };
 
+/** Modo de exibição dos valores do Painel (13/10/2026): numérico completo (padrão) ou R$ mil/mi. Definido pelo
+ * Painel antes de renderizar (`setMoneyMode`); os componentes do Painel usam `fmtMoneyPref`/`fmtSignedMoneyPref`. */
+export type MoneyMode = "full" | "compact";
+let moneyMode: MoneyMode = "full";
+export const setMoneyMode = (m: MoneyMode) => { moneyMode = m; };
+export const fmtMoneyPref = (v: string | number) => (moneyMode === "full" ? fmtMoney(v) : fmtCompact(v));
+export const fmtSignedMoneyPref = (v: string | number) => {
+  if (moneyMode === "full") return fmtSignedMoney(v);
+  const n = Number(v);
+  return `${n > 0 ? "+" : n < 0 ? "-" : ""}${fmtCompact(Math.abs(n))}`;
+};
+
 /** Participação (AV %), sem sinal: 0,523 → 52,3%. */
 export const fmtShare = (v: string | null | undefined) =>
   v === null || v === undefined ? "—" : `${(Number(v) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Execution } from "../api";
-import { fmtMoney, fmtPct, fmtShare, fmtSignedMoney } from "../labels";
+import { fmtPct, fmtShare, fmtSignedMoneyPref, fmtMoneyPref } from "../labels";
 
 /** Direção do desvio em texto e ícone (não só cor): acima do orçado = vermelho ▲, abaixo = verde ▼. */
 export function DeviationTag({ value, pct, above = "acima do orçado", below = "abaixo do orçado" }: {
@@ -52,13 +52,13 @@ export function ExecutionKpis({ ex, monthsTxt, linear }: { ex: Execution; months
         </span>
       </div>
       <div className="kpi-grid">
-        <Kpi label={`${ex.budget_label}${monthsTxt ? " (meses filtrados)" : ""}`} swatch="budget" value={fmtMoney(ex.budget_year ?? 0)}>
-          {partial && <>Orçado{upTo}: <strong>{fmtMoney(ex.budget_ytd ?? 0)}</strong></>}
+        <Kpi label={`${ex.budget_label}${monthsTxt ? " (meses filtrados)" : ""}`} swatch="budget" value={fmtMoneyPref(ex.budget_year ?? 0)}>
+          {partial && <>Orçado{upTo}: <strong>{fmtMoneyPref(ex.budget_ytd ?? 0)}</strong></>}
         </Kpi>
-        <Kpi label={ex.actual_label ?? "Realizado"} swatch="actual" value={fmtMoney(ex.actual_ytd ?? 0)}>
-          {ex.monthly_avg && <>Média mensal: <strong>{fmtMoney(ex.monthly_avg)}</strong></>}
+        <Kpi label={ex.actual_label ?? "Realizado"} swatch="actual" value={fmtMoneyPref(ex.actual_ytd ?? 0)}>
+          {ex.monthly_avg && <>Média mensal: <strong>{fmtMoneyPref(ex.monthly_avg)}</strong></>}
         </Kpi>
-        <Kpi label={`Desvio vs ${ex.budget_ytd_label}`} value={fmtSignedMoney(ex.var ?? 0)} tone={varN > 0 ? "up" : varN < 0 ? "down" : undefined}>
+        <Kpi label={`Desvio vs ${ex.budget_ytd_label}`} value={fmtSignedMoneyPref(ex.var ?? 0)} tone={varN > 0 ? "up" : varN < 0 ? "down" : undefined}>
           {ex.var_pct !== null && ex.var_pct !== undefined ? <DeviationTag value={ex.var ?? 0} pct={ex.var_pct} /> : "Sem orçado no período"}
         </Kpi>
         <Kpi label="% de execução do orçado" value={exec !== null ? fmtShare(ex.execution_pct) : "—"}>
@@ -78,11 +78,11 @@ export function ExecutionKpis({ ex, monthsTxt, linear }: { ex: Execution; months
           <Kpi
             label={fc.kind === "projection" ? "Projeção de fechamento" : `Fechamento ${ex.year}`}
             swatch={fc.kind === "projection" ? "proj" : "actual"}
-            value={fmtMoney(fc.value)}
+            value={fmtMoneyPref(fc.value)}
           >
             {fc.var !== null && (
               <>
-                <strong>{fmtSignedMoney(fc.var)}</strong> <DeviationTag value={fc.var} pct={fc.var_pct} />
+                <strong>{fmtSignedMoneyPref(fc.var)}</strong> <DeviationTag value={fc.var} pct={fc.var_pct} />
               </>
             )}
             {fc.kind === "projection" && <span className="stat-line">realizado + projeção do gestor {fc.from_month}–{fc.to_month}</span>}
@@ -90,7 +90,7 @@ export function ExecutionKpis({ ex, monthsTxt, linear }: { ex: Execution; months
         ) : (
           <Kpi label="Projeção de fechamento" swatch="proj" value="Indisponível" tone="muted">
             {fc?.reason}
-            {linear && <span className="stat-line">Anualização linear (só referência): {fmtMoney(linear)}</span>}
+            {linear && <span className="stat-line">Anualização linear (só referência): {fmtMoneyPref(linear)}</span>}
           </Kpi>
         )}
       </div>

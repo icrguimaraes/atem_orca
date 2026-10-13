@@ -1280,6 +1280,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-
 .dev-basis { margin: 0; line-height: 20px; }
 .seg-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .seg-tabs button { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: 500 13px/18px var(--font-body); padding: 7px 12px; min-height: 36px; cursor: pointer; }
+.seg-mini button { padding: 4px 10px; min-height: 30px; font-size: 12.5px; }
 .seg-tabs button.active { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
 .dev-list { list-style: none; margin: 0; padding: 0; }
 .dev-row { display: grid; grid-template-columns: 28px minmax(0, 2.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 4px 16px; align-items: start; padding: 12px 8px; border-top: 1px solid var(--border); }

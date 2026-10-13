@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type Breakdown, type BreakdownRow } from "../api";
-import { fmtMoney, fmtPct, fmtShare, deptRank } from "../labels";
+import { fmtPct, fmtShare, deptRank, fmtMoneyPref } from "../labels";
 import { Empty, Loading } from "./ui";
 import { WhyButton } from "./WhyPanel";
 
@@ -187,11 +187,11 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
               </Link>
             )}
           </td>
-          <td className="right nowrap">{fmtMoney(r.ref)}</td>
+          <td className="right nowrap">{fmtMoneyPref(r.ref)}</td>
           <td className="right nowrap muted">{fmtShare(r.share_ref)}</td>
-          {hasBase && <td className="right nowrap">{fmtMoney(r.base)}</td>}
+          {hasBase && <td className="right nowrap">{fmtMoneyPref(r.base)}</td>}
           {hasBase && <td className="right nowrap muted">{fmtShare(r.share_base)}</td>}
-          {hasBase && <td className="right nowrap">{fmtMoney(r.var)}</td>}
+          {hasBase && <td className="right nowrap">{fmtMoneyPref(r.var)}</td>}
           {hasBase && (
             <td className="right nowrap">
               <VarCell pct={r.var_pct} t={th} version={versionBase} />
@@ -286,11 +286,11 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
           <tfoot>
             <tr>
               <td>Total</td>
-              <td className="right nowrap">{fmtMoney(root.total.ref)}</td>
+              <td className="right nowrap">{fmtMoneyPref(root.total.ref)}</td>
               <td className="right nowrap muted">100%</td>
-              {hasBase && <td className="right nowrap">{fmtMoney(root.total.base)}</td>}
+              {hasBase && <td className="right nowrap">{fmtMoneyPref(root.total.base)}</td>}
               {hasBase && <td className="right nowrap muted">100%</td>}
-              {hasBase && <td className="right nowrap">{fmtMoney(root.total.var)}</td>}
+              {hasBase && <td className="right nowrap">{fmtMoneyPref(root.total.var)}</td>}
               {hasBase && (
                 <td className="right nowrap">
                   <VarCell pct={root.total.var_pct} t={th} version={versionBase} />

@@ -1,5 +1,5 @@
 import type { BudgetProgress } from "../api";
-import { SUBMISSION_STATUS, fmtInt, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
+import { SUBMISSION_STATUS, fmtInt, fmtPct, fmtSignedMoneyPref, fmtMoneyPref } from "../labels";
 import { Legend, PairedBars, SERIES, StatusBar } from "./charts";
 import { PlotlyChart, type Figure } from "./PlotlyChart";
 import { Card, Empty, Stat, lines } from "./ui";
@@ -19,7 +19,7 @@ export function BudgetProgressCard({ progress, figures }: { progress: BudgetProg
       actions={
         <span className="muted small">
           {fmtInt(progress.started_cost_centers)} de {fmtInt(progress.total_cost_centers)} CCs com lançamentos ·{" "}
-          proposto <strong>{fmtMoney(proposed)}</strong>
+          proposto <strong>{fmtMoneyPref(proposed)}</strong>
           {base ? <> ({fmtPct(String(proposed / base - 1))} vs {baseLabel} dos mesmos CCs)</> : null}
         </span>
       }
@@ -31,17 +31,17 @@ export function BudgetProgressCard({ progress, figures }: { progress: BudgetProg
         {progress.by_package.length && figures?.rank ? (
           <>
             <div className="stats rank-stats">
-              <Stat label={`Total · ${progress.target_year} proposto`} value={fmtMoney(proposed)} hint={lines("CCs que já lançaram")} />
+              <Stat label={`Total · ${progress.target_year} proposto`} value={fmtMoneyPref(proposed)} hint={lines("CCs que já lançaram")} />
               {base > 0 && (
                 <>
-                  <Stat label={`Total · ${baseLabel}`} value={fmtMoney(base)} hint={lines("mesmos CCs")} />
+                  <Stat label={`Total · ${baseLabel}`} value={fmtMoneyPref(base)} hint={lines("mesmos CCs")} />
                   <div className="stat stat-inline-delta">
                     <span className="stat-label">Variação</span>
                     <span className="stat-value">
                       <span className={`delta ${Number(pct) > 0 ? "up" : Number(pct) < 0 ? "down" : ""}`}>{Number(pct) > 0 ? "▲" : Number(pct) < 0 ? "▼" : "•"} {fmtPct(pct)}</span>
                     </span>
                     <span className="stat-hint">
-                      <span className="stat-line"><strong>{fmtSignedMoney(proposed - base)}</strong></span>
+                      <span className="stat-line"><strong>{fmtSignedMoneyPref(proposed - base)}</strong></span>
                       <span className="stat-line">vs {baseLabel}</span>
                     </span>
                   </div>

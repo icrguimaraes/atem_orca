@@ -12,7 +12,7 @@ import { DeviationHighlights } from "../components/DeviationHighlights";
 import { ExecutionKpis } from "../components/ExecutionKpis";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
-import { MONTHS, fmtMoney, fmtPct, fmtShare, fmtSignedMoney, byDepartment } from "../labels";
+import { MONTHS, fmtPct, fmtShare, byDepartment, fmtSignedMoneyPref, fmtMoneyPref, setMoneyMode, type MoneyMode } from "../labels";
 
 /**
  * Painel (rota /): filtros, números, blocos e tabela, com os gráficos em Plotly montados no backend
@@ -100,7 +100,9 @@ export default function Painel2() {
   }
   const [compare, setCompare] = usePersistentState("painel.compare", false); // desmarcado por padrão (pedido de 08/10/2026)
   const [samePeriod, setSamePeriod] = usePersistentState("painel.samePeriod", true);
-  const [baseVersion, setBaseVersion] = usePersistentState("painel.baseVersion", ""); // revisão congelada como base ("" = nenhuma)
+  const [baseVersion, setBaseVersion] = usePersistentState("painel.baseVersion", "");
+  const [numFmt, setNumFmt] = usePersistentState<MoneyMode>("painel.numberFormat", "full"); // numérico completo (padrão) ou R$ mil/mi
+  setMoneyMode(numFmt); // antes de renderizar: cartões e tabelas do Painel usam fmtMoneyPref // revisão congelada como base ("" = nenhuma)
   const tipo = (searchParams.get("tipo") ?? "").toUpperCase();
   const tipoFromUrl = BUDGET_TYPES.some((b) => b.key === tipo);
   // ?tipo= (links de outras páginas) vale sobre o filtro guardado
@@ -213,6 +215,7 @@ export default function Painel2() {
       compare: compare ? "" : "false",
       same_period: samePeriod ? "" : "false",
       base_version_id: baseVersion,
+      full_labels: numFmt === "full" ? "" : "false",
     }).filter(([, v]) => v),
   ).toString();
   const overview = useLoad(() => api<OverviewWithFigures>(`/dashboard/overview?figures=true${query ? `&${query}` : ""}`), [query]);
@@ -453,6 +456,10 @@ export default function Painel2() {
                 {hasBase && <> · comparado com <strong>{baseLabel}</strong></>}
                 <span className="selection-hint"> · clique nos gráficos e na tabela para filtrar</span>
               </span>
+              <div className="seg-tabs seg-mini" role="group" aria-label="Formato dos valores">
+                <button type="button" className={numFmt === "full" ? "active" : ""} onClick={() => setNumFmt("full")} title="R$ 22.542.691,90">Numérico</button>
+                <button type="button" className={numFmt === "compact" ? "active" : ""} onClick={() => setNumFmt("compact")} title="R$ 22,54 mi">R$ mil</button>
+              </div>
               <button type="button" className="btn btn-ghost btn-sm" aria-pressed={organizing} onClick={() => setOrganizing(!organizing)}>
                 {organizing ? "Concluir" : "Organizar painel"}
               </button>
@@ -481,14 +488,14 @@ export default function Painel2() {
           {execOn && !supersede && hasBase && <h2 className="kpi-subhead">Comparação com {baseLabel}</h2>}
           {!supersede && <div className="stats">
             {period?.base_kind === "prev" && !period.annualized_base && o.kpis.prev_total !== o.kpis.prev_ytd && (
-              <Stat label={`Realizado ${o.previous_year} (ano cheio)`} value={fmtMoney(o.kpis.prev_total)} />
+              <Stat label={`Realizado ${o.previous_year} (ano cheio)`} value={fmtMoneyPref(o.kpis.prev_total)} />
             )}
-            {hasBase && <Stat label={baseLabel} value={fmtMoney(o.kpis.prev_ytd)} hint={lines("base de comparação")} />}
+            {hasBase && <Stat label={baseLabel} value={fmtMoneyPref(o.kpis.prev_ytd)} hint={lines("base de comparação")} />}
             <Stat
               label={mainLabel}
-              value={fmtMoney(o.kpis.ref_ytd)}
+              value={fmtMoneyPref(o.kpis.ref_ytd)}
               hint={lines(
-                isBudgetMain && Number(o.kpis.budget_unscheduled) > 0 && `inclui ${fmtMoney(o.kpis.budget_unscheduled)} de CAPEX sem cronograma mensal`,
+                isBudgetMain && Number(o.kpis.budget_unscheduled) > 0 && `inclui ${fmtMoneyPref(o.kpis.budget_unscheduled)} de CAPEX sem cronograma mensal`,
               )}
             />
             {hasBase && (
@@ -496,7 +503,7 @@ export default function Painel2() {
                 <span className="stat-label">Variação</span>
                 <span className="stat-value"><Delta pct={o.kpis.ytd_var_pct} /></span>
                 <span className="stat-hint">
-                  <span className="stat-line"><strong>{fmtSignedMoney(Number(o.kpis.ref_ytd) - Number(o.kpis.prev_ytd))}</strong></span>
+                  <span className="stat-line"><strong>{fmtSignedMoneyPref(Number(o.kpis.ref_ytd) - Number(o.kpis.prev_ytd))}</strong></span>
                   <span className="stat-line">vs {baseLabel}</span>
                 </span>
               </div>
@@ -504,17 +511,17 @@ export default function Painel2() {
             {!execOn && o.has_actual && o.selected_years.length === 1 && o.last_closed_period && !months.length && (
               <Stat
                 label="Média mensal"
-                value={fmtMoney(Number(o.kpis.actual_total) / o.last_closed_period)}
+                value={fmtMoneyPref(Number(o.kpis.actual_total) / o.last_closed_period)}
                 hint={lines(`${o.last_closed_period} mês(es) com realizado`)}
               />
             )}
             {Number(o.kpis.ref_annualized) > 0 && (
               <Stat
                 label={`${o.reference_year} anualizado`}
-                value={fmtMoney(o.kpis.ref_annualized)}
+                value={fmtMoneyPref(o.kpis.ref_annualized)}
                 hint={lines(
                   o.has_prev && o.kpis.annualized_vs_prev_pct !== null
-                    ? `${fmtPct(o.kpis.annualized_vs_prev_pct)} (${fmtSignedMoney(Number(o.kpis.ref_annualized) - Number(o.kpis.prev_total))}) vs ${o.previous_year} cheio`
+                    ? `${fmtPct(o.kpis.annualized_vs_prev_pct)} (${fmtSignedMoneyPref(Number(o.kpis.ref_annualized) - Number(o.kpis.prev_total))}) vs ${o.previous_year} cheio`
                     : "projeção linear",
                 )}
               />
@@ -522,10 +529,10 @@ export default function Painel2() {
             {!execOn && o.has_budget && !isBudgetMain && (period?.base_kind !== "budget" || o.kpis.budget_total !== o.kpis.prev_ytd) && (
               <Stat
                 label={budgetLabel}
-                value={fmtMoney(o.kpis.budget_total)}
+                value={fmtMoneyPref(o.kpis.budget_total)}
                 hint={lines(
                   o.kpis.budget_consumption_pct !== null && `realizado ${fmtPct(o.kpis.budget_consumption_pct)} do orçado no período`,
-                  Number(o.kpis.budget_unscheduled) > 0 && `inclui ${fmtMoney(o.kpis.budget_unscheduled)} de CAPEX sem cronograma mensal`,
+                  Number(o.kpis.budget_unscheduled) > 0 && `inclui ${fmtMoneyPref(o.kpis.budget_unscheduled)} de CAPEX sem cronograma mensal`,
                 )}
               />
             )}
@@ -538,12 +545,12 @@ export default function Painel2() {
                 <Stat
                   key={m.module}
                   label={m.label}
-                  value={fmtMoney(m.main)}
+                  value={fmtMoneyPref(m.main)}
                   hint={lines(
                     modulesTotal > 0 && `${fmtShare(String(Number(m.main) / modulesTotal))} do total`,
                     hasBase && m.var_pct !== null && Number(m.base) > 0 &&
-                      `${fmtPct(m.var_pct)} (${fmtSignedMoney(Number(m.main) - Number(m.base))}) vs ${baseLabel}`,
-                    Number(m.unscheduled) > 0 && `inclui ${fmtMoney(m.unscheduled)} sem cronograma mensal`,
+                      `${fmtPct(m.var_pct)} (${fmtSignedMoneyPref(Number(m.main) - Number(m.base))}) vs ${baseLabel}`,
+                    Number(m.unscheduled) > 0 && `inclui ${fmtMoneyPref(m.unscheduled)} sem cronograma mensal`,
                   )}
                 />
               ))}
@@ -589,15 +596,15 @@ export default function Painel2() {
               >
                 {o.top_cost_centers_total && (
                   <div className="stats rank-stats">
-                    <Stat label={`Total · ${mainLabel}`} value={fmtMoney(o.top_cost_centers_total.main)} hint={lines("todos os centros de custo")} />
+                    <Stat label={`Total · ${mainLabel}`} value={fmtMoneyPref(o.top_cost_centers_total.main)} hint={lines("todos os centros de custo")} />
                     {o.top_cost_centers_total.base !== null && (
                       <>
-                        <Stat label={`Total · ${baseLabel}`} value={fmtMoney(o.top_cost_centers_total.base)} />
+                        <Stat label={`Total · ${baseLabel}`} value={fmtMoneyPref(o.top_cost_centers_total.base)} />
                         <div className="stat stat-inline-delta">
                           <span className="stat-label">Variação</span>
                           <span className="stat-value"><Delta pct={o.top_cost_centers_total.var_pct} /></span>
                           <span className="stat-hint">
-                            <span className="stat-line"><strong>{fmtSignedMoney(Number(o.top_cost_centers_total.main) - Number(o.top_cost_centers_total.base))}</strong></span>
+                            <span className="stat-line"><strong>{fmtSignedMoneyPref(Number(o.top_cost_centers_total.main) - Number(o.top_cost_centers_total.base))}</strong></span>
                             <span className="stat-line">vs {baseLabel}</span>
                           </span>
                         </div>
