@@ -486,7 +486,11 @@ function HistoryTab() {
 
 // ------------------------------------------------------------------ SAP HANA (KSB1 direto da view)
 
-interface SapStatus { configured: boolean; missing: string[]; host_set: boolean; port: number; schema: string; view: string }
+interface SapBatch { id: number; file_name: string; status: string; created_at: string; total_rows: number; via: string }
+interface SapStatus {
+  configured: boolean; missing: string[]; host_set: boolean; port: number; schema: string; view: string;
+  push_enabled: boolean; recent: SapBatch[];
+}
 interface SapColumn { name: string; type: string; field: string | null }
 interface SapTest {
   columns: SapColumn[]; mapping: Record<string, { label: string; column: string }>; missing: string[];
@@ -540,10 +544,53 @@ function SapTab() {
 
   return (
     <div className="section-stack">
-      <Card title="SAP HANA · KSB1">
+      <Card title="Envio pelo script local (recomendado)">
         <p className="muted small">
-          Lê a view <span className="mono">{st.schema}.{st.view}</span> (somente leitura) e monta a importação do realizado, que passa pela
-          mesma validação e prévia dos arquivos: nada entra na base sem a sua confirmação em Importações.
+          O script roda no seu computador (que acessa o HANA), lê a view <span className="mono">{st.schema}.{st.view}</span> só para leitura
+          e envia a planilha ao sistema, que cria uma importação para você revisar: nada entra na base sem a sua confirmação. A senha do
+          HANA fica só no seu computador.
+        </p>
+        {st.push_enabled ? (
+          <p><Badge tone="good">Recebimento ligado</Badge> <span className="muted small">token SAP_PUSH_TOKEN configurado no Railway</span></p>
+        ) : (
+          <Alert tone="warn">
+            Para ligar o recebimento, cadastre no Railway (Variables) a variável <span className="mono">SAP_PUSH_TOKEN</span> com um texto
+            longo e aleatório (o mesmo vai no <span className="mono">backend/.env</span> do seu computador, junto de{" "}
+            <span className="mono">SAP_PUSH_URL</span>, <span className="mono">HANA_HOST</span>, <span className="mono">HANA_USER</span> e{" "}
+            <span className="mono">HANA_PASSWORD</span>).
+          </Alert>
+        )}
+        <p className="small">No computador, na pasta do projeto:</p>
+        <pre className="dc-json">{`scripts\sap-ksb1.cmd teste        (conecta e mostra colunas e amostra)
+scripts\sap-ksb1.cmd 2026         (envia o ano, todas as empresas)
+scripts\sap-ksb1.cmd 2026 1001    (envia o ano de uma empresa)`}</pre>
+        {st.recent.length > 0 && (
+          <div className="table-wrap">
+            <table className="table">
+              <thead><tr><th>Último envio</th><th>Quando</th><th>Via</th><th className="right">Linhas</th><th>Situação</th></tr></thead>
+              <tbody>
+                {st.recent.map((b) => {
+                  const state = IMPORT_STATUS[b.status];
+                  return (
+                    <tr key={b.id}>
+                      <td><Link to={`/importacoes/${b.id}`}>{b.file_name}</Link></td>
+                      <td className="small">{fmtDateTime(b.created_at)}</td>
+                      <td className="small">{b.via === "script" ? "Script local" : "Tela"}</td>
+                      <td className="right">{fmtInt(b.total_rows)}</td>
+                      <td>{state ? <Badge tone={state.tone}>{state.label}</Badge> : b.status}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <Card title="Conexão direta do servidor (opcional)">
+        <p className="muted small">
+          O servidor também pode ler o HANA sozinho, mas só funciona se o HANA aceitar o IP do Railway (lista de IPs permitidos). Se o teste
+          abaixo falhar com "conexão fechada", use o script local.
         </p>
         {st.configured ? (
           <p><Badge tone="good">Configurado</Badge> <span className="muted small">porta {st.port} · usuário e senha nas variáveis do Railway</span></p>

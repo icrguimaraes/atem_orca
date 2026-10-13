@@ -203,3 +203,108 @@ def test_fetch_validation_errors(client, admin, hana_on):
     assert client.post(f"{S}/ksb1/fetch", headers=admin, json={"year": 1999}).status_code == 422
     assert client.post(f"{S}/ksb1/fetch", headers=admin, json={"year": 2026, "company_code": "9999"}).status_code == 422
     assert client.post(f"{S}/ksb1/fetch", headers=admin, json={"year": 2030}).status_code == 404  # sem lançamentos
+
+
+# ---------------------------------------------------------------- envio pelo script local
+
+PUSH = f"{S}/ksb1/push"
+
+
+@pytest.fixture
+def push_on(monkeypatch):
+    monkeypatch.setattr(get_settings(), "sap_push_token", "TOKEN-DE-TESTE-123")
+    return {"X-Push-Token": "TOKEN-DE-TESTE-123"}
+
+
+def _workbook() -> bytes:
+    rows = iter([list(r) for r in DATA if r[0] == "1001"])
+    mapping, _ = hana.resolve_columns(COLUMNS)
+    return hana.to_workbook(rows, COLUMNS, mapping)[0]
+
+
+def _post(client, headers, **form):
+    return client.post(
+        PUSH,
+        headers=headers,
+        data={"year": "2026", "company_code": "1001", **form},
+        files={"file": ("ksb1.xlsx", _workbook(), "application/octet-stream")},
+    )
+
+
+def test_push_route_is_off_without_token(client):
+    assert client.get(f"{S}/ksb1/config").status_code == 404
+    assert _post(client, {"X-Push-Token": "qualquer"}).status_code == 404
+
+
+def test_push_rejects_bad_token_and_blocks_after_repeated_failures(client, push_on):
+    for _ in range(5):
+        assert _post(client, {"X-Push-Token": "errado"}).status_code == 401
+    assert _post(client, {"X-Push-Token": "errado"}).status_code == 429
+    assert _post(client, push_on).status_code == 429  # o bloqueio vale para o IP, não só para o token errado
+
+
+def test_push_creates_batch_without_login(client, admin, push_on, run_worker, db):
+    company = next(c for c in client.get("/api/v1/companies", headers=admin).json() if c["code"] == "1001")
+    client.post(
+        "/api/v1/cost-centers",
+        headers=admin,
+        json={"company_id": company["id"], "code": "1050101003", "name": "FISCAL"},
+    )
+    cfg = client.get(f"{S}/ksb1/config", headers=push_on)
+    assert cfg.status_code == 200 and cfg.json() == {"columns": {}}
+    r = _post(client, push_on)
+    assert r.status_code == 202, r.text
+    batch_id = r.json()["id"]
+    assert r.json()["file_name"].startswith("SAP_HANA_KSB1_2026_1001_")
+    run_worker()
+    batch = client.get(f"/api/v1/imports/{batch_id}", headers=admin).json()
+    assert batch["status"] == "VALIDATED" and batch["layout"] == "SAP_KSB1" and batch["valid_rows"] == 2, batch
+    log = db.scalar(select(AuditLog).where(AuditLog.action == "SAP_PUSH"))
+    assert log.user_id is None and log.after["company"] == "1001" and "TOKEN" not in str(log.after)
+    status = client.get(f"{S}/status", headers=admin).json()
+    assert (
+        status["push_enabled"] is True
+        and status["recent"][0]["id"] == batch_id
+        and status["recent"][0]["via"] == "script"
+    )
+
+
+def test_push_validates_input(client, push_on):
+    assert _post(client, push_on, company_code="9999").status_code == 422
+    assert _post(client, push_on, year="1999").status_code == 422
+    empty = client.post(
+        PUSH, headers=push_on, data={"year": "2026"}, files={"file": ("k.xlsx", b"", "application/octet-stream")}
+    )
+    assert empty.status_code == 422
+
+
+def test_cli_saves_workbook_locally(monkeypatch, tmp_path, capsys):
+    from app import sap_push
+
+    for k, v in (("hana_host", "h"), ("hana_user", "u"), ("hana_password", "p")):
+        monkeypatch.setattr(get_settings(), k, v)
+    monkeypatch.setattr(hana, "ksb1_workbook", lambda year, company, override=None: (b"xlsx", 2))
+    out = tmp_path / "ksb1.xlsx"
+    assert sap_push.main(["--year", "2026", "--company", "1001", "--save", str(out), "--local-only"]) == 0
+    assert out.read_bytes() == b"xlsx" and "2 lançamentos" in capsys.readouterr().out
+    with pytest.raises(SystemExit):  # sem ano nem --test
+        sap_push.main(["--local-only"])
+    body, ctype = sap_push._multipart({"year": "2026"}, "k.xlsx", b"abc")
+    assert ctype.startswith("multipart/form-data; boundary=") and b'name="year"' in body and b"abc" in body
+
+
+def test_script_multipart_is_accepted_by_the_server(client, admin, push_on):
+    from app import sap_push
+
+    company = next(c for c in client.get("/api/v1/companies", headers=admin).json() if c["code"] == "1001")
+    client.post(
+        "/api/v1/cost-centers",
+        headers=admin,
+        json={"company_id": company["id"], "code": "1050101003", "name": "FISCAL"},
+    )
+    body, ctype = sap_push._multipart(
+        {"year": "2026", "company_code": "1001", "mode": "MERGE"}, "ksb1_2026.xlsx", _workbook()
+    )
+    r = client.post(PUSH, headers={**push_on, "Content-Type": ctype}, content=body)
+    assert r.status_code == 202, r.text
+    assert r.json()["status"] == "UPLOADED" and r.json()["file_name"].startswith("SAP_HANA_KSB1_2026_1001_")

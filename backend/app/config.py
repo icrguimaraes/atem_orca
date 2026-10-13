@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     hana_password: str | None = None
     hana_schema: str = "FD_S4HANA_PRD"
     hana_view: str = "VWG_FD_KSB1"
+    # envio do KSB1 pelo script local (`python -m app.sap_push`), para quando o HANA não aceita o IP do servidor:
+    # no Railway, SAP_PUSH_TOKEN liga a rota de envio; no computador do script, SAP_PUSH_URL aponta para o sistema
+    sap_push_token: str | None = None
+    sap_push_url: str | None = None
 
     @property
     def sqlalchemy_url(self) -> str:

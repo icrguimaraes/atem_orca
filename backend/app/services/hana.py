@@ -76,6 +76,14 @@ def _key(name: str) -> str:
     return re.sub(r"[^A-Z0-9]", "", norm(name).upper())
 
 
+def redact(message: str) -> str:
+    """Tira da mensagem de erro o endereço do HANA e IPs (a tela não precisa mostrá-los)."""
+    host = get_settings().hana_host
+    if host:
+        message = message.replace(host, "<host>")
+    return re.sub(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b", "<ip>", message)
+
+
 def missing_env() -> list[str]:
     s = get_settings()
     values = {"HANA_HOST": s.hana_host, "HANA_USER": s.hana_user, "HANA_PASSWORD": s.hana_password}
@@ -128,7 +136,7 @@ def connect(timeout_ms: int = 30000) -> Any:
             communicationTimeout=timeout_ms,
         )
     except Exception as exc:  # hdbcli.dbapi.Error: a mensagem não traz a senha
-        raise HanaError(f"Não foi possível conectar ao SAP HANA: {exc}") from exc
+        raise HanaError(f"Não foi possível conectar ao SAP HANA: {redact(str(exc))}") from exc
 
 
 def resolve_columns(columns: list[str], override: dict | None = None) -> tuple[dict[str, str], list[str]]:
@@ -172,7 +180,7 @@ def inspect(override: dict | None = None) -> dict:
     except HanaError:
         raise
     except Exception as exc:
-        raise HanaError(f"Falha ao ler a view: {exc}") from exc
+        raise HanaError(f"Falha ao ler a view: {redact(str(exc))}") from exc
     finally:
         conn.close()
     mapping, missing = resolve_columns(names, override)
@@ -258,3 +266,10 @@ def to_workbook(rows: Iterator[list[Any]], names: list[str], mapping: dict[str, 
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue(), count
+
+
+def ksb1_workbook(year: int, company: str | None, override: dict | None = None) -> tuple[bytes, int]:
+    """Busca o KSB1 do ano (e da empresa) e devolve (planilha .xlsx, nº de linhas): usado pelo botão da tela e pelo
+    script local (`app.sap_push`)."""
+    rows, names, mapping = fetch_ksb1(year, company, override)
+    return to_workbook(rows, names, mapping)
