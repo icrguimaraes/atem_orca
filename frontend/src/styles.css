@@ -887,7 +887,7 @@ input:disabled, select:disabled { opacity: 0.6; }
 .toggle-options label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
 .toggle-options label.off { color: var(--muted); cursor: not-allowed; }
 .toggle-options input { margin: 0; }
-.toggle-options select { min-height: 32px; padding: 4px 8px; font-size: 13px; }
+.toggle-options select { min-height: 38px; min-width: 170px; padding: 6px 38px 6px 12px; font-size: 14px; }
 .year-tabs button { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font: 500 14px/20px var(--font-body); padding: 9px 16px; min-height: 40px; cursor: pointer; }
 .year-tabs button.active { background: var(--text); border-color: var(--text); color: var(--bg); font-weight: 600; }
 .year-tabs[aria-busy="true"] button { opacity: 0.7; cursor: progress; }

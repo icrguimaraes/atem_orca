@@ -262,3 +262,29 @@ def test_painel_compares_with_frozen_version(client, admin, run_worker):
     # sem o ano do ciclo no filtro, a opção não vale e o parâmetro é ignorado
     o2 = client.get(f"/api/v1/dashboard/overview?years={target - 1}&base_version_id={v10}", headers=admin).json()
     assert o2["period"]["base_kind"] != "version" and not o2["period"]["version_compare_available"]
+
+
+def test_why_follows_the_revision_chosen_in_the_painel(client, admin, run_worker):
+    """ "Por quê?" com "Comparar com revisão": a base é a Revisão 0 congelada (não o realizado do ano anterior) e o
+    semáforo vale pela direção; sem a revisão, continua o comparativo entre anos."""
+    cc, _, _line = _setup(client, admin, run_worker)
+    client.post("/api/v1/consolidation/freeze", headers=admin, json={})
+    rv = client.post("/api/v1/consolidation/revise", headers=admin, json={"reason": "ajuste"}).json()
+    v10 = next(v["id"] for v in rv["versions"] if v["label"] == "Revisão 0")
+    head = client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=admin).json()
+    line = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()[0]
+    client.patch(f"/api/v1/opex/lines/{line['id']}", headers=admin, json={"values": {"1": 1450}})  # +1.000 em JAN
+    plain = client.get("/api/v1/dashboard/why", headers=admin).json()
+    assert plain["base_kind"] == "actual" and plain["compare_note"] == "comparação entre anos"
+    w = client.get(f"/api/v1/dashboard/why?base_version_id={v10}", headers=admin).json()
+    assert w["base_kind"] == "version" and w["base_label"] == "Revisão 0 (congelada)" and w["base_col"] == "Revisão 0"
+    assert w["compare_note"] == "comparação entre revisões" and w["closed"] is None
+    assert Decimal(w["total"]["var"]) == Decimal("1000.00") and w["thresholds"] == {
+        "growth": 0.0,
+        "reduction": 1000000.0,
+    }
+    opex = next(m for m in w["by_module"] if m["module"] == "OPEX")
+    assert (opex["base"], opex["proposed"], opex["var"]) == ("5400.00", "6400.00", "1000.00")
+    assert w["drivers"]["accounts"][0]["var"] == "1000.00"
+    # revisão que não existe (ou ainda aberta) é ignorada: volta ao comparativo entre anos
+    assert client.get("/api/v1/dashboard/why?base_version_id=999", headers=admin).json()["base_kind"] == "actual"

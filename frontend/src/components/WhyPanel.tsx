@@ -48,6 +48,7 @@ export interface AskTarget { type: "OPEX_LINE" | "PERSONNEL_MOVEMENT" | "CAPEX_P
 type Thresholds = { growth: number; reduction: number };
 export interface WhyData {
   title: string; target_year: number; ref_year: number; closed: number | null; base_label: string;
+  base_kind?: "actual" | "version"; base_col?: string; compare_note?: string;
   total: { base: string; proposed: string; var: string; var_pct: string | null };
   by_module: { module: string; label: string; base: string; proposed: string; var: string; var_pct: string | null }[];
   drivers: { accounts: Driver[]; cost_centers: Driver[] };
@@ -688,7 +689,7 @@ export function WhyDrawer({ qs, onClose }: { qs: string; onClose: () => void }) 
   const askFirst = !!data && canAsk && (data.missing > 0 || pending > 0);
   const traceTo = `/rastro?${baseQs}`;
   const baseShort = data ? data.base_label.split(" (")[0] : "";
-  const baseCol = data ? `Realizado ${data.ref_year} an.` : "";
+  const baseCol = data ? (data.base_col ?? `Realizado ${data.ref_year} an.`) : "";
   const newCol = data ? `Orçamento ${data.target_year}` : "";
 
   // justificativas: abas por tipo, filtro "só sem justificativa" e filtro por CC (vindo da origem da variação)
@@ -754,7 +755,7 @@ export function WhyDrawer({ qs, onClose }: { qs: string; onClose: () => void }) 
             <div className="wd-eyebrow">Por que mudou?</div>
             <h2 className="wd-title">{titleMain}</h2>
             {titleSub && <div className="wd-title-sub">{titleSub}</div>}
-            {data && <div className="wd-period">Orçamento {data.target_year} × {data.base_label} · comparação entre anos</div>}
+            {data && <div className="wd-period">Orçamento {data.target_year} × {data.base_label} · {data.compare_note ?? "comparação entre anos"}</div>}
             {data && (data.opex_count + data.personnel.length + data.capex.length > 0 || pending > 0) && (
               <div className="wd-status">
                 {data.missing > 0

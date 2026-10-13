@@ -25,6 +25,7 @@ from app.models import (
     BudgetPackage,
     BudgetQuestion,
     BudgetSubmission,
+    BudgetVersion,
     CostCenter,
     ReferenceBudgetEntry,
     User,
@@ -99,8 +100,10 @@ class Recorte:
         account_id: int | None = None,
         department_id: str | None = None,
         modules: str | None = None,
+        base_version_id: int | None = None,
         label: str | None = Query(None, max_length=200),
     ) -> None:
+        self.base_version_id = base_version_id
         self.parent_package_id, self.parent_no_package = parent_package_id, parent_no_package
         self.parent_account_id, self.parent_department_id = parent_account_id, parent_department_id
         self.company_id, self.cost_center_id, self.package_id = company_id, cost_center_id, package_id
@@ -134,17 +137,25 @@ def why(
     ctx = _ctx(db)
     target = ctx.target_year
     ref = target - 1
+    # "Comparar com revisão" no Painel: a base é a foto da revisão congelada, não o realizado do ano anterior
+    base_ver = db.scalar(
+        select(BudgetVersion).where(
+            BudgetVersion.id == (r.base_version_id or -1),
+            BudgetVersion.cycle_id == ctx.cycle.id,
+            BudgetVersion.status != "WORKING",
+        )
+    )
     P = _period(db, str(target), None, modules, False, True)
     f = Facts(
         db, user, company_id, cost_center_id, package_id, P, parent, account_id=account_id, department_id=department_id
     )
-    closed = _last_closed(db, ref)
+    closed = None if base_ver else _last_closed(db, ref)
     factor = Decimal(12) / Decimal(closed) if closed else Decimal(1)
     allowed = P.modules or set(MODULES)
 
     # totais por tipo
     prop_mod = f.by_module(ReferenceBudgetEntry, [target])
-    act_mod = f.by_module(ActualEntry, [ref])
+    act_mod = f.by_module_version(base_ver) if base_ver else f.by_module(ActualEntry, [ref])
     by_module = []
     for m in MODULES:
         if m not in allowed:
@@ -166,7 +177,12 @@ def why(
 
     # decomposição por conta e por CC
     prop = {(cc, acc): v for cc, acc, v in f.sums(ReferenceBudgetEntry, [target], "cost_center_id", "account_id")}
-    act = {(cc, acc): v * factor for cc, acc, v in f.sums(ActualEntry, [ref], "cost_center_id", "account_id")}
+    base_rows = (
+        f.version_sums(base_ver, "cost_center_id", "account_id")
+        if base_ver
+        else f.sums(ActualEntry, [ref], "cost_center_id", "account_id")
+    )
+    act = {(cc, acc): v * factor for cc, acc, v in base_rows}
     keys = set(prop) | set(act)
     by_acc: dict[int, list[Decimal]] = defaultdict(lambda: [ZERO, ZERO])
     by_cc: dict[int, list[Decimal]] = defaultdict(lambda: [ZERO, ZERO])
@@ -306,8 +322,12 @@ def why(
         "target_year": target,
         "ref_year": ref,
         "closed": closed,
-        "base_label": f"Realizado {ref} anualizado"
-        + (f" (até {closed:02d} × 12/{closed})" if closed and closed < 12 else ""),
+        "base_kind": "version" if base_ver else "actual",
+        "base_label": f"{base_ver.label} (congelada)"
+        if base_ver
+        else f"Realizado {ref} anualizado" + (f" (até {closed:02d} × 12/{closed})" if closed and closed < 12 else ""),
+        "base_col": base_ver.label if base_ver else f"Realizado {ref} an.",
+        "compare_note": "comparação entre revisões" if base_ver else "comparação entre anos",
         "total": {
             "base": _m(total_a),
             "proposed": _m(total_b),
@@ -318,7 +338,10 @@ def why(
         "drivers": {"accounts": acc_drivers[:10], "cost_centers": cc_drivers[:10] if len(cc_drivers) > 1 else []},
         "alerts": alerts,
         # limiares do semáforo do ciclo (os mesmos da tabela do Painel): a variação só fica vermelha fora da faixa
-        "thresholds": dict(zip(("growth", "reduction"), _thresholds(db), strict=True)),
+        # contra uma revisão congelada vale a direção (subiu = vermelho; igual ou abaixo = verde), como no Painel
+        "thresholds": {"growth": 0.0, "reduction": 1_000_000.0}
+        if base_ver
+        else dict(zip(("growth", "reduction"), _thresholds(db), strict=True)),
         "opex": opex_items[:20],
         "opex_count": len(opex_items),
         "personnel": personnel_items[:30],
