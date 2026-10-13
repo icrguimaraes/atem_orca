@@ -345,7 +345,10 @@ class Facts:
         # empresa(s): inteiro ou lista "1,2" (filtro com mais de uma empresa, 08/10/2026)
         self.company_ids = {company_id} if isinstance(company_id, int) else _ints(company_id)
         self.company_id = next(iter(self.company_ids)) if len(self.company_ids) == 1 else None
-        self.cost_center_id, self.package_id = cost_center_id, package_id
+        # centro de custo: um id ou vários ("6,12": CCs de mesmo nome em empresas diferentes, somados no ranking)
+        self.cost_center_ids = {cost_center_id} if isinstance(cost_center_id, int) else _ints(cost_center_id)
+        self.cost_center_id = next(iter(self.cost_center_ids)) if len(self.cost_center_ids) == 1 else None
+        self.package_id = package_id
         self.months = period.months
         self.modules = period.modules
         self.target_year = period.target_year
@@ -359,8 +362,8 @@ class Facts:
             stmt = stmt.where(model.cost_center_id.in_(self.visible or {-1}))
         if self.company_ids:
             stmt = stmt.where(model.company_id.in_(self.company_ids))
-        if self.cost_center_id:
-            stmt = stmt.where(model.cost_center_id == self.cost_center_id)
+        if self.cost_center_ids:
+            stmt = stmt.where(model.cost_center_id.in_(self.cost_center_ids))
         if self.package_id:
             stmt = stmt.where(model.account_id.in_(select(Account.id).where(Account.package_id == self.package_id)))
         if self.account_id:
@@ -418,7 +421,7 @@ class Facts:
             for r in rows:
                 if r.cost_center_id is None or (company_codes and r.company_code not in company_codes):
                     continue
-                if self.cost_center_id and r.cost_center_id != self.cost_center_id:
+                if self.cost_center_ids and r.cost_center_id not in self.cost_center_ids:
                     continue
                 if self.modules and r.module not in self.modules:
                     continue

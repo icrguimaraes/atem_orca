@@ -302,10 +302,50 @@ def _monthly(f: Facts, P: Period) -> list[dict]:
     return [{k: (_money(v) if k != "month" else v) for k, v in row.items()} for row in monthly.values()]
 
 
+def _ranking_cost_centers(db: Session, cur: dict, base: dict, P: Period, limit: int) -> list[dict]:
+    """Maiores centros de custo, **somando os de mesmo nome** em empresas diferentes (Contabilidade da ATEM + da NAVE: o
+    gestor é o mesmo, 13/10/2026). O `id` do item é a lista de ids ("6,12"): clicar nele filtra todos de uma vez."""
+    ids = {k for k in set(cur) | set(base) if k is not None}
+    ccs = {c.id: c for c in db.scalars(select(CostCenter).where(CostCenter.id.in_(ids or {-1})))}
+    companies = {c.id: (c.short_name or c.name) for c in db.scalars(select(Company))}
+    groups: dict[str, dict] = {}
+    for cc_id in ids:
+        cc = ccs.get(cc_id)
+        name = (cc.name or cc.code) if cc else "Sem CC"
+        g = groups.setdefault(
+            name.strip().upper(), {"ids": [], "name": name, "ref": ZERO, "base": ZERO, "codes": [], "companies": set()}
+        )
+        g["ids"].append(cc_id)
+        g["ref"] += cur.get(cc_id, ZERO)
+        g["base"] += base.get(cc_id, ZERO)
+        if cc:
+            g["codes"].append(cc.code)
+            g["companies"].add(companies.get(cc.company_id) or "")
+    top = sorted((g for g in groups.values() if g["ref"] > 0), key=lambda g: g["ref"], reverse=True)[:limit]
+    out = []
+    for g in top:
+        names = sorted(c for c in g["companies"] if c)
+        out.append(
+            {
+                "id": ",".join(str(i) for i in sorted(g["ids"])),
+                "code": g["codes"][0] if len(g["codes"]) == 1 else None,
+                "name": g["name"],
+                "company": names[0] if len(names) == 1 else None,
+                "companies": " + ".join(names) if len(names) > 1 else None,
+                "ref_ytd": _money(g["ref"]),
+                "prev_ytd": _money(g["base"]),
+                "ytd_var_pct": _pct(g["ref"], g["base"]) if P.base_kind else None,
+            }
+        )
+    return out
+
+
 def _ranking(db: Session, f: Facts, P: Period, key: str, label_model, limit: int = 10) -> list[dict]:
     """Maiores itens (CC ou conta) na série principal, com a base de comparação quando houver."""
     cur = dict(f.sums(_main_model(P), P.main_years, key))
     base = _base_sums(f, P, key)
+    if label_model is CostCenter:
+        return _ranking_cost_centers(db, cur, base, P, limit)
     ids = sorted((k for k in cur if k is not None), key=lambda k: cur[k], reverse=True)[:limit]
     objs = {o.id: o for o in db.scalars(select(label_model).where(label_model.id.in_(ids)))} if ids else {}
     # centro de custo: a empresa diferencia nomes iguais (Contabilidade da ATEM × da NAVE) melhor que o código SAP
@@ -354,7 +394,7 @@ def budget_progress(
     db: Session,
     user: User,
     company_id: str | None = None,
-    cost_center_id: int | None = None,
+    cost_center_id: int | str | None = None,
     package_id: int | None = None,
 ) -> dict | None:
     """Andamento do orçamento OPEX do ciclo: CCs por status e proposto × anualizado por pacote."""
@@ -377,7 +417,7 @@ def budget_progress(
     if _ints(company_id):
         cc_stmt = cc_stmt.where(CostCenter.company_id.in_(_ints(company_id)))
     if cost_center_id:
-        cc_stmt = cc_stmt.where(CostCenter.id == cost_center_id)
+        cc_stmt = cc_stmt.where(CostCenter.id.in_(_ints(str(cost_center_id)) or {-1}))
     cc_ids = set(db.scalars(cc_stmt))
     statuses = dict(
         db.execute(

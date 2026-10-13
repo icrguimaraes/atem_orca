@@ -210,7 +210,7 @@ export interface Comparison {
   template?: boolean; updates_ignored?: number; skipped_scopes?: string[];
 }
 
-export interface Ranked { id: number; code: string | null; name: string | null; ref_ytd: string; prev_ytd: string; ytd_var_pct: string | null }
+export interface Ranked { id: number | string; code: string | null; name: string | null; ref_ytd: string; prev_ytd: string; ytd_var_pct: string | null }
 export interface PackageRow {
   package_id: number | null; package: string; package_type: number | null; prev_total: string; prev_ytd: string;
   ref_ytd: string; ref_annualized: string; budget: string; ytd_var_pct: string | null;

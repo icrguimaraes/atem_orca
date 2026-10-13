@@ -70,7 +70,7 @@ def _scope_ccs(db: Session, user: User, company_id, cost_center_id, department_i
     if _ints(company_id):
         stmt = stmt.where(CostCenter.company_id.in_(_ints(company_id)))
     if cost_center_id:
-        stmt = stmt.where(CostCenter.id == cost_center_id)
+        stmt = stmt.where(CostCenter.id.in_(_ints(str(cost_center_id)) or {-1}))
     if _ints(department_id):
         stmt = stmt.where(CostCenter.department_id.in_(_ints(department_id)))
     for key in ("department_id", "area_id"):
@@ -95,7 +95,7 @@ class Recorte:
         parent_no_package: bool = False,
         parent_account_id: int | None = None,
         company_id: str | None = None,
-        cost_center_id: int | None = None,
+        cost_center_id: str | None = None,
         package_id: int | None = None,
         account_id: int | None = None,
         department_id: str | None = None,

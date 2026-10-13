@@ -69,7 +69,7 @@ ZERO = Decimal("0")
 @router.get("/overview", summary="KPIs, evolução mensal e rankings do período (anos somados × meses × tipos)")
 def overview(
     company_id: str | None = None,
-    cost_center_id: int | None = None,
+    cost_center_id: str | None = None,  # um id ou vários ("6,12")
     package_id: int | None = None,
     account_id: int | None = None,
     department_id: str | None = None,
@@ -204,7 +204,7 @@ def overview(
 def evolution(
     marks: str | None = Query(None, description='Marcos, ex.: "actual:2024,actual:2025,target:2027"'),
     company_id: str | None = None,
-    cost_center_id: int | None = None,
+    cost_center_id: str | None = None,  # um id ou vários ("6,12")
     package_id: int | None = None,
     account_id: int | None = None,
     department_id: str | None = None,
@@ -234,7 +234,7 @@ def breakdown(
     parent_no_package: bool = False,
     parent_account_id: int | None = None,
     company_id: str | None = None,
-    cost_center_id: int | None = None,
+    cost_center_id: str | None = None,  # um id ou vários ("6,12")
     package_id: int | None = None,
     account_id: int | None = None,
     department_id: str | None = None,
@@ -349,7 +349,7 @@ DEVIATION_GROUPS = {
 @router.get("/deviations", summary="Maiores desvios do recorte: conta × centro de custo, por CC e por conta")
 def deviations(
     company_id: str | None = None,
-    cost_center_id: int | None = None,
+    cost_center_id: str | None = None,  # um id ou vários ("6,12")
     package_id: int | None = None,
     account_id: int | None = None,
     department_id: str | None = None,

@@ -95,7 +95,7 @@ class TraceQuery:
     """Filtros do Painel + trilha do rastro (parent_*)."""
 
     company_id: str | None = None
-    cost_center_id: int | None = None
+    cost_center_id: str | None = None  # um id ou vários ("6,12")
     package_id: int | None = None
     account_id: int | None = None
     department_id: str | None = None
@@ -125,7 +125,7 @@ class TraceQuery:
         }
 
     @property
-    def effective_cost_center_id(self) -> int | None:
+    def effective_cost_center_id(self) -> int | str | None:
         return self.parent_cost_center_id or self.cost_center_id
 
 
@@ -180,7 +180,7 @@ def scope_ccs(db: Session, user: User, q: TraceQuery) -> set[int]:
     if _ints(q.company_id):
         stmt = stmt.where(CostCenter.company_id.in_(_ints(q.company_id)))
     if q.effective_cost_center_id:
-        stmt = stmt.where(CostCenter.id == q.effective_cost_center_id)
+        stmt = stmt.where(CostCenter.id.in_(_ints(str(q.effective_cost_center_id)) or {-1}))
     if _ints(q.department_id):
         stmt = stmt.where(CostCenter.department_id.in_(_ints(q.department_id)))
     for key in ("department_id", "area_id"):

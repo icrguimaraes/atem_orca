@@ -129,3 +129,70 @@ def test_ranking_labels_tell_same_named_cost_centers_apart_by_company():
     same = [{"name": "X", "code": "1", "company": "ATEM"}, {"name": "X", "code": "2", "company": "ATEM"}]
     assert _categories(same, False) == ["X · 1", "X · 2"]
     assert _categories([{"name": "X", "code": "1"}, {"name": "X", "code": "2"}], False) == ["X · 1", "X · 2"]
+
+
+def test_ranking_sums_same_named_cost_centers_and_the_filter_takes_all_of_them(client, admin, db):
+    """Contabilidade da ATEM + da REAM (mesmo gestor): uma barra só no ranking; clicar nela filtra os dois CCs."""
+    from sqlalchemy import select
+
+    from app.models import Account, ActualEntry, Company, CostCenter, DatasetVersion
+
+    atem = db.scalar(select(Company).where(Company.code == "1001"))
+    ream = db.scalar(select(Company).where(Company.code == "2001"))
+    acc = db.scalar(select(Account).where(Account.code == "6010301001"))
+    c1 = CostCenter(company_id=atem.id, code="T1", name="CONTABILIDADE")
+    c2 = CostCenter(company_id=ream.id, code="T2", name="CONTABILIDADE")
+    c3 = CostCenter(company_id=atem.id, code="T3", name="FISCAL")
+    db.add_all([c1, c2, c3])
+    db.flush()
+    for company, scope, entries in (
+        (atem, "ACTUAL:2026:1001", [(c1, "1000"), (c3, "700")]),
+        (ream, "ACTUAL:2026:2001", [(c2, "500")]),
+    ):
+        v = DatasetVersion(
+            dataset_type="ACTUAL", scope_key=scope, version_number=1, is_current=True, row_count=len(entries)
+        )
+        db.add(v)
+        db.flush()
+        for cc, amount in entries:
+            db.add(
+                ActualEntry(
+                    dataset_version_id=v.id,
+                    company_id=company.id,
+                    cost_center_id=cc.id,
+                    account_id=acc.id,
+                    fiscal_year=2026,
+                    period=1,
+                    amount=amount,
+                )
+            )
+    db.commit()
+
+    ov = client.get("/api/v1/dashboard/overview?years=2026&compare=false&figures=true", headers=admin).json()
+    top = {r["name"]: r for r in ov["top_cost_centers"]}
+    assert set(top) == {"CONTABILIDADE", "FISCAL"} and top["CONTABILIDADE"]["ref_ytd"] == "1500.00"
+    group = f"{min(c1.id, c2.id)},{max(c1.id, c2.id)}"
+    assert (
+        top["CONTABILIDADE"]["id"] == group and top["CONTABILIDADE"]["companies"] and top["FISCAL"]["id"] == str(c3.id)
+    )
+    assert ov["figures"]["top_cost_centers"]["data"][0]["y"][0] == "CONTABILIDADE"  # sem repetir nem usar o código SAP
+    # o filtro com os dois ids soma os dois CCs; o destaque do gráfico aceita o grupo
+    filtered = client.get(
+        f"/api/v1/dashboard/overview?years=2026&compare=false&cost_center_id={group}", headers=admin
+    ).json()
+    assert filtered["kpis"]["ref_ytd"] == "1500.00"
+    single = client.get(
+        f"/api/v1/dashboard/overview?years=2026&compare=false&cost_center_id={c3.id}", headers=admin
+    ).json()
+    assert single["kpis"]["ref_ytd"] == "700.00"
+    rows = client.get(
+        f"/api/v1/dashboard/breakdown?group_by=cost_center&years=2026&compare=false&cost_center_id={group}",
+        headers=admin,
+    ).json()["rows"]
+    assert (
+        sorted(r["name"] for r in rows) == ["CONTABILIDADE", "CONTABILIDADE"]
+        and sum(float(r["ref"]) for r in rows) == 1500.0
+    )
+    # "por quê?" e o rastro aceitam o grupo
+    assert client.get(f"/api/v1/dashboard/why?cost_center_id={group}", headers=admin).status_code == 200
+    assert client.get(f"/api/v1/trace/tree?cost_center_id={group}&years=2026", headers=admin).status_code == 200

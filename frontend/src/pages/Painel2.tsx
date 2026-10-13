@@ -160,12 +160,13 @@ export default function Painel2() {
     if (m && m >= 1 && m <= 12) toggleMonth(m);
   }, [toggleMonth]);
   // clicar de novo no item escolhido desmarca (como no Power BI)
-  const toggleCostCenter = useCallback((id: number) => {
+  const toggleCostCenter = useCallback((id: number | string) => {
     setFilters((f) => ({ ...f, cost_center_id: f.cost_center_id === String(id) ? "" : String(id) }));
   }, []);
   const onCostCenter = useCallback((cd: unknown) => {
-    const id = pick(cd, 3);
-    if (id) toggleCostCenter(id);
+    // o id do ranking pode ser um grupo ("6,12": CCs de mesmo nome em empresas diferentes)
+    const id = Array.isArray(cd) ? cd[3] : null;
+    if (id !== null && id !== undefined && id !== "") toggleCostCenter(String(id));
   }, [toggleCostCenter]);
   function onTableRow(level: Breakdown["group_by"], row: BreakdownRow) {
     if (row.id === null) return;
@@ -234,6 +235,11 @@ export default function Painel2() {
   const budgetLabel = period?.budget_label ?? "Orçado";
   const isBudgetMain = period?.main === "budget";
   const hasBase = Boolean(period?.base_kind);
+  // filtro de centro de custo com vários ids (clique numa barra de CCs de mesmo nome): rótulo e opção própria no seletor
+  const ccNames = (value: string) =>
+    [...new Set(value.split(",").map((i) => ccs.find((c) => String(c.id) === i)?.name ?? i))].join(" + ") + (value.includes(",") ? " (todas as empresas)" : "");
+  const withCcGroup = (opts: { value: string; label: string }[]) =>
+    filters.cost_center_id && !opts.some((o) => o.value === filters.cost_center_id) ? [...opts, { value: filters.cost_center_id, label: ccNames(filters.cost_center_id) }] : opts;
   const hasData = Boolean(o && (o.has_actual || o.has_budget));
   const shownYears = years.length ? years : (o?.selected_years ?? []);
   // execução do orçamento: realizado contábil × orçado (bloco novo); na comparação orçado × realizado ele substitui
@@ -346,10 +352,10 @@ export default function Painel2() {
           {
             key: "cost_center_id", label: "Centro de custo", value: filters.cost_center_id, wide: true,
             onChange: (v) => setFilters({ ...filters, cost_center_id: v }),
-            options: [
+            options: withCcGroup([
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
               ...ccs.filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!department || department.split(",").includes(String(c.department_id)))).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
-            ],
+            ]),
           },
         ]}
         extra={
@@ -421,7 +427,7 @@ export default function Painel2() {
               <span className="active-filters-label">Filtros ativos</span>
               {filters.company_id && chip(`Empresa: ${filters.company_id.split(",").map((i) => companies.find((c) => String(c.id) === i)?.short_name ?? i).join(" + ")}`, () => setFilters((f) => ({ ...f, company_id: "", cost_center_id: "" })))}
               {department && chip(`Área: ${department.split(",").map((i) => departments.find((d) => String(d.id) === i)?.name ?? i).join(" + ")}`, () => setDepartment(""))}
-              {filters.cost_center_id && chip(`Centro de custo: ${ccs.find((c) => String(c.id) === filters.cost_center_id)?.name ?? filters.cost_center_id}`, () => setFilters((f) => ({ ...f, cost_center_id: "" })))}
+              {filters.cost_center_id && chip(`Centro de custo: ${ccNames(filters.cost_center_id)}`, () => setFilters((f) => ({ ...f, cost_center_id: "" })))}
               {modules.length > 0 && chip(`Tipo: ${modules.map((m) => BUDGET_TYPES.find((b) => b.key === m)?.label ?? m).join(" + ")}`, () => setModules([]))}
               {years.length > 0 && chip(`Ano: ${years.join(" + ")}`, () => setYears([]))}
               {months.length > 0 && chip(`Mês: ${months.map((m) => MONTHS[m - 1]).join(", ")}`, () => setMonths([]))}

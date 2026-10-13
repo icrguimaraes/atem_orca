@@ -434,7 +434,9 @@ def fig_cumulative(o: dict) -> dict:
     return _fig(data, layout) | {"meta": {"tooltip": "unified"}}
 
 
-def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None = None, show_code: bool = True) -> dict:
+def fig_rank(
+    rows: list[dict], lb: dict, show_base: bool, selected: int | str | None = None, show_code: bool = True
+) -> dict:
     """Barras horizontais do maior para o menor, em cor sólida; com base, barra fina abaixo de cada barra e a variação
     % no texto. As barras usam a largura útil inteira (valor e variação ficam na margem direita).
     customdata = [valor, base, variação, id (o clique filtra), linhas do tooltip]; a barra fina usa o mesmo."""
@@ -446,7 +448,7 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
         f"{fmt_pct(r['var_pct'])} ({_signed_money(v - b)})" if r.get("var_pct") is not None else "—"
         for r, v, b in zip(rows, values, bases, strict=True)
     ]
-    opacity = [1.0 if (selected is None or r.get("id") == selected) else 0.3 for r in rows]
+    opacity = [1.0 if (selected is None or str(r.get("id")) == str(selected)) else 0.3 for r in rows]
 
     def text(value: float, var) -> str:
         out = f"<b>{_short(value)}</b>"
@@ -456,14 +458,15 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
             out += f"  <span style='color:{color};font-size:11px'>{fmt_pct(n)}</span>"
         return out
 
-    def tip(value: float, base: float, var: str) -> list:
-        lines = [[f"{lb['main']}: {fmt_money(value)}", lb["main_color"]]]
+    def tip(value: float, base: float, var: str, companies: str | None = None) -> list:
+        lines = [[f"Empresas somadas: {companies}", ""]] if companies else []
+        lines += [[f"{lb['main']}: {fmt_money(value)}", lb["main_color"]]]
         if show_base:
             lines += [[f"{lb['base']}: {fmt_money(base)}", lb["base_color"]], [f"Variação: {var}", ""]]
         return lines
 
     customdata = [
-        [fmt_money(v), fmt_money(b), var, r.get("id"), tip(v, b, var)]
+        [fmt_money(v), fmt_money(b), var, r.get("id"), tip(v, b, var, r.get("companies"))]
         for v, b, var, r in zip(values, bases, variations, rows, strict=True)
     ]
     hover = "<b>%{y}</b><br>" + lb["main"] + ": %{customdata[0]}"
@@ -902,6 +905,7 @@ def build(
                 "code": r["code"],
                 "name": r["name"],
                 "company": r.get("company"),
+                "companies": r.get("companies"),
                 "value": r["ref_ytd"],
                 "base": r["prev_ytd"],
                 "var_pct": r["ytd_var_pct"],
