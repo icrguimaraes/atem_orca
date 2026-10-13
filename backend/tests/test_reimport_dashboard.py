@@ -324,7 +324,7 @@ def test_painel_evolution_matches_kpis(client, admin, run_worker):
     var = traces["Aumento / Redução"]
     assert var["x"] == [1, 3, 5] and var["base"] == [7800.0, 7800.0, 18000.0]
     assert var["y"] == [13800.0, 10200.0, 506750.0]
-    assert var["text"] == ["(13,8 mil)", "+10,2 mil", "+506,8 mil"]  # redução entre parênteses, uma escala só
+    assert var["text"] == ["(13.800)", "+10.200", "+506.750"]  # redução entre parênteses, uma unidade só (R$)
     assert var["customdata"][0][2][0] == ["Variação: -63,9% (-R$ 13.800,00)", "#c8ad5e"]
     annualized = traces["Realizado"]["customdata"][1]
     assert annualized[0] == "Realizado 2026 (anualizado)"
@@ -490,3 +490,29 @@ def test_dashboard_accepts_multiple_departments(client, admin, run_worker):
     both = client.get(f"{q}&department_id={d1['id']},{d2['id']}", headers=admin)
     assert both.status_code == 200, both.text
     assert both.json()["kpis"] == only1  # a área Y não tem CCs: o resultado é o da área X
+
+
+def test_chart_labels_follow_the_value_format(client, admin, run_worker):
+    """Rótulos dos gráficos: numérico inteiro (padrão) ou tudo em milhares (R$ mil), sempre com a nota da unidade."""
+    from tests.test_consolidation import _setup as consolidation_setup
+
+    consolidation_setup(client, admin, run_worker)
+    q = "/api/v1/dashboard/overview?years=2027&figures=true"
+    full = client.get(q, headers=admin).json()["figures"]
+    mil = client.get(q + "&full_labels=false", headers=admin).json()["figures"]
+
+    def note(fig):
+        return [a["text"] for a in fig["layout"].get("annotations", []) if a.get("xref") == "paper"]
+
+    assert "Valores em R$" in note(full["monthly"]) and "Valores em R$ mil" in note(mil["monthly"])
+    labels_full = [x for t in full["monthly"]["data"] for x in t["text"] if x]
+    labels_mil = [x for t in mil["monthly"]["data"] for x in t["text"] if x]
+    assert labels_full and labels_mil
+    assert not any("mi" in x or "R$" in x for x in labels_full + labels_mil)  # sem mi/mil misturados nem "R$"
+    assert all(t["textangle"] == -90 for t in full["monthly"]["data"])  # numérico: na vertical
+    assert all(t["textangle"] == 0 for t in mil["monthly"]["data"])  # R$ mil: horizontal
+    # R$ mil = valor do mesmo mês dividido por mil, uma unidade só
+    first_full = next(t for t in full["monthly"]["data"] if any(t["text"]))
+    idx = next(i for i, x in enumerate(first_full["text"]) if x)
+    raw = float(first_full["y"][idx])
+    assert labels_full[0].replace(".", "") == str(round(raw)) or abs(float(labels_full[0].replace(".", "")) - raw) < 1

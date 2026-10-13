@@ -13,7 +13,7 @@ from decimal import Decimal
 import plotly.graph_objects as go
 
 from app.services.analytics import _fig, _layout
-from app.services.analytics_base import _br, fmt_compact, fmt_money, fmt_pct, short
+from app.services.analytics_base import _br, fmt_money, fmt_pct, short
 
 MONTHS = ("JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ")
 REALIZADO, ORCADO, ANTERIOR = "#4472c4", "#4fa894", "#8a6bbf"  # azul, verde-água (orçamento), roxo
@@ -56,17 +56,45 @@ def _tip_label(label: str | None) -> str:
     return re.sub(r" \(.*\)$| até [A-Z]{3}$", "", label or "").strip()
 
 
-# rótulos dos gráficos (13/10/2026): por padrão o valor numérico completo ("22.542.691,90"); o Painel alterna para
-# "R$ mil/mi" com o parâmetro `full_labels=false` de /dashboard/overview (contextvar por request)
+# rótulos dos gráficos (13/10/2026). Dois modos, sempre sem "R$" (a unidade vai numa nota no canto do gráfico):
+# - numérico (padrão): valor inteiro com separador de milhar ("22.542.692"); nos gráficos de colunas vai na vertical;
+# - R$ mil: tudo em milhares, uma unidade só ("22.543"; uma casa abaixo de R$ 10 mil), em vez de misturar mi e mil.
+# O Painel escolhe com `full_labels` de /dashboard/overview (contextvar por request).
 FULL_LABELS: ContextVar[bool] = ContextVar("painel_full_labels", default=True)
+NOTE_COLOR = "#6b7280"
 
 
-def _short(value: float, cents: bool = True) -> str:
-    """Rótulo dentro do gráfico: "22.542.691,90" (padrão) ou "22,54 mi", sem o "R$". `cents=False` no mensal, onde
-    o rótulo completo vai na vertical e sem centavos para caber entre 24 barras."""
+def _short(value: float, cents: bool = False) -> str:
+    """Rótulo de valor dentro do gráfico, sem o "R$"."""
     if FULL_LABELS.get():
         return _br(value, 2 if cents else 0)
-    return fmt_compact(value).replace("R$ ", "")
+    return _br(value / 1000, 1 if abs(value) < 10_000 else 0)
+
+
+def _headroom() -> float:
+    """Folga no topo das colunas: o rótulo na vertical (modo numérico) ocupa ~60 px acima da barra mais alta; com a
+    folga ele fica dentro da área do gráfico e não invade a legenda."""
+    return 1.34 if FULL_LABELS.get() else 1.15
+
+
+def _note_unit(fig: dict | None) -> None:
+    """Nota discreta no canto superior direito com a unidade dos rótulos (R$ ou R$ mil)."""
+    if not fig:
+        return
+    layout = fig.setdefault("layout", {})
+    layout.setdefault("annotations", []).append(
+        {
+            "text": "Valores em R$" if FULL_LABELS.get() else "Valores em R$ mil",
+            "xref": "paper",
+            "yref": "paper",
+            "x": 1,
+            "y": 1.02,
+            "xanchor": "right",
+            "yanchor": "bottom",
+            "showarrow": False,
+            "font": {"size": 11, "color": NOTE_COLOR},
+        }
+    )
 
 
 def _category(name: str | None, code: str | None) -> str:
@@ -167,7 +195,7 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
                 name=name,
                 **stack,
                 marker={"color": color, "cornerradius": 4, "opacity": opacity},
-                text=[_short(v, cents=False) if v > 0 else "" for v in values],
+                text=[_short(v) if v > 0 else "" for v in values],
                 textposition="outside",
                 # numérico completo: na vertical, senão os rótulos de 24 barras se sobrepõem
                 textangle=-90 if FULL_LABELS.get() else 0,
@@ -192,7 +220,7 @@ def fig_monthly(o: dict, monthly: list[dict] | None = None, months: list[int] | 
         showlegend=True,
         legend=LEGEND,
         # sem eixo de valores: cada coluna traz o rótulo; folga no topo para o rótulo de fora da coluna
-        yaxis={"visible": False, "range": [0, (max(everything + [0.0]) or 1) * 1.15], "fixedrange": True},
+        yaxis={"visible": False, "range": [0, (max(everything + [0.0]) or 1) * _headroom()], "fixedrange": True},
         xaxis={"showgrid": False, "automargin": True, "fixedrange": True},
         margin={"l": 8, "r": 8, "t": 36, "b": 8},
     )
@@ -237,7 +265,7 @@ def fig_monthly_total(o: dict) -> dict:
                 name="Total com a projeção",
                 offsetgroup="ref",
                 marker={"color": "rgba(0,0,0,0)"},
-                text=[f"<b>{_short(totals['ref'], cents=False)}</b>"],
+                text=[f"<b>{_short(totals['ref'])}</b>"],
                 textposition="outside",
                 textangle=-90 if FULL_LABELS.get() else 0,
                 cliponaxis=False,
@@ -275,7 +303,7 @@ def fig_monthly_total(o: dict) -> dict:
                 name=name,
                 **stack,
                 marker={"color": color, "cornerradius": 4},
-                text=[_short(shown, cents=False) if shown > 0 else ""],
+                text=[_short(shown) if shown > 0 else ""],
                 # realizado e projeção empilhados: os rótulos vão dentro das barras e o total da pilha, acima
                 textposition="inside" if (key in ("ref", "proj") and stacked) else "outside",
                 insidetextanchor="end" if key == "ref" else "middle",
@@ -296,7 +324,7 @@ def fig_monthly_total(o: dict) -> dict:
         bargroupgap=0.08 if "proj" in totals else 0.12,
         hovermode="x unified",
         showlegend=False,
-        yaxis={"visible": False, "range": [0, (top or 1) * 1.15], "fixedrange": True},
+        yaxis={"visible": False, "range": [0, (top or 1) * _headroom()], "fixedrange": True},
         xaxis={"showgrid": False, "automargin": True, "fixedrange": True},
         margin={"l": 8, "r": 8, "t": 36, "b": 8},
     )
@@ -389,7 +417,7 @@ def fig_cumulative(o: dict) -> dict:
             "categoryorder": "array",
             "categoryarray": list(MONTHS),
         },
-        margin={"l": 28, "r": 28, "t": 36, "b": 8},
+        margin={"l": 64 if FULL_LABELS.get() else 28, "r": 64 if FULL_LABELS.get() else 28, "t": 36, "b": 8},
     )
     return _fig(data, layout) | {"meta": {"tooltip": "unified"}}
 
@@ -409,7 +437,7 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
     opacity = [1.0 if (selected is None or r.get("id") == selected) else 0.3 for r in rows]
 
     def text(value: float, var) -> str:
-        out = f"<b>{fmt_compact(value)}</b>"
+        out = f"<b>{_short(value)}</b>"
         if show_base and var is not None:
             n = float(var)
             color = TXT_UP if n > 0 else TXT_DOWN if n < 0 else TXT_FLAT
@@ -459,7 +487,7 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
                 offset=0.0,
                 marker={"color": lb["base_color"], "cornerradius": 3, "opacity": opacity},
                 # rótulo também na base (pedido de 09/10/2026), menor e na cor da série
-                text=[f"<b>{fmt_compact(b)}</b>" if b else "" for b in bases],
+                text=[f"<b>{_short(b)}</b>" if b else "" for b in bases],
                 textposition="outside",
                 cliponaxis=False,
                 constraintext="none",
@@ -482,7 +510,12 @@ def fig_rank(rows: list[dict], lb: dict, show_base: bool, selected: int | None =
             "fixedrange": True,
         },
         yaxis={"autorange": "reversed", "automargin": True, "tickfont": {"size": 12}, "fixedrange": True},
-        margin={"l": 8, "r": 150 if show_base else 96, "t": 36, "b": 8},
+        margin={
+            "l": 8,
+            "r": (200 if show_base else 120) if FULL_LABELS.get() else (150 if show_base else 96),
+            "t": 36,
+            "b": 8,
+        },
     )
     return _fig(data, layout) | {"meta": {"tooltip": "point"}}
 
@@ -511,6 +544,8 @@ def fig_rank_total(total: dict | None, lb: dict) -> dict | None:
                 marker={"color": color, "cornerradius": 4},
                 text=[_short(v) if v > 0 else ""],
                 textposition="outside",
+                # numérico completo: na vertical (as duas colunas estreitas se cobririam)
+                textangle=-90 if FULL_LABELS.get() else 0,
                 cliponaxis=False,
                 constraintext="none",
                 textfont={"size": 14, "color": INK.get(color, color)},
@@ -525,7 +560,7 @@ def fig_rank_total(total: dict | None, lb: dict) -> dict | None:
         bargroupgap=0.12,
         hovermode="x unified",
         showlegend=False,
-        yaxis={"visible": False, "range": [0, (top or 1) * 1.15], "fixedrange": True},
+        yaxis={"visible": False, "range": [0, (top or 1) * _headroom()], "fixedrange": True},
         xaxis={"showgrid": False, "automargin": True, "fixedrange": True},
         margin={"l": 8, "r": 8, "t": 36, "b": 8},
     )
@@ -542,7 +577,7 @@ def fig_people(rows: list[dict]) -> dict | None:
     counts = [int(r["headcount"]) for r in rows]
     payroll = [_num(r["payroll"]) for r in rows]
     text = [
-        f"<b>{n} pessoa{'s' if n != 1 else ''}</b>  <span style='font-size:11px'>{fmt_compact(v)} de folha</span>"
+        f"<b>{n} pessoa{'s' if n != 1 else ''}</b>  <span style='font-size:11px'>{_short(v)} de folha</span>"
         for n, v in zip(counts, payroll, strict=True)
     ]
     tips = [
@@ -577,7 +612,7 @@ def fig_people(rows: list[dict]) -> dict | None:
             "fixedrange": True,
         },
         yaxis={"autorange": "reversed", "automargin": True, "tickfont": {"size": 12}, "fixedrange": True},
-        margin={"l": 8, "r": 190, "t": 36, "b": 8},
+        margin={"l": 8, "r": 230 if FULL_LABELS.get() else 190, "t": 36, "b": 8},
     )
     return _fig(data, layout) | {"meta": {"tooltip": "point"}}
 
@@ -627,14 +662,6 @@ def fig_personnel_what_if(monthly: list[dict], year: int) -> dict:
     return _fig(data, layout) | {"meta": {"tooltip": "unified"}}
 
 
-def _unit(top: float) -> tuple[float, str, int]:
-    """Uma escala só para todos os rótulos da cascata (como no slide: tudo em R$ mi com 1 casa)."""
-    for div, unit in ((1e9, " bi"), (1e6, " mi"), (1e3, " mil")):
-        if top >= div:
-            return div, unit, 1
-    return 1.0, "", 0
-
-
 def fig_evolution(milestones: list[dict]) -> dict | None:
     """Evolução do orçamento (cascata, no modelo do slide da diretoria): colunas cheias para os marcos (azul =
     realizado, verde-água = orçado/orçamento) e, entre cada par, uma barra flutuante de variação (areia) com o valor
@@ -646,10 +673,9 @@ def fig_evolution(milestones: list[dict]) -> dict | None:
         return None
     values = [_num(m["value"]) for m in milestones]
     labels = [m["label"] for m in milestones]
-    div, unit, decimals = _unit(max(values))
 
     def amount(v: float) -> str:
-        return f"{_br(abs(v) / div, decimals)}{unit}"
+        return _short(abs(v))
 
     xs = [2 * i for i in range(len(milestones))]
     tips = []
@@ -677,7 +703,7 @@ def fig_evolution(milestones: list[dict]) -> dict | None:
                 name=name,
                 width=0.8,
                 marker={"color": color, "cornerradius": 4},
-                text=[f"R$ {amount(values[i])}" for i in idx],
+                text=[amount(values[i]) for i in idx],
                 textposition="outside",
                 cliponaxis=False,
                 textfont={"size": 12, "color": INK[color]},
@@ -800,7 +826,7 @@ def fig_evolution(milestones: list[dict]) -> dict | None:
             "yanchor": "bottom",
             "yshift": 2,
             "showarrow": False,
-            "text": f"Variação total: <b>{sign}R$ {amount(total)} ({fmt_pct(total_pct)})</b>",
+            "text": f"Variação total: <b>{sign}{amount(total)} ({fmt_pct(total_pct)})</b>",
             "font": {"size": 12, "color": TXT_UP if total > 0 else TXT_DOWN if total < 0 else TXT_FLAT},
         },
     ]
@@ -889,8 +915,11 @@ def build(
             selected.get("account_id"),
         ),
     }
+    for key in ("monthly", "cumulative", "top_cost_centers", "top_accounts"):
+        _note_unit(figures[key])
     evolution_fig = fig_evolution(evolution or [])
     if evolution_fig:
+        _note_unit(evolution_fig)
         figures["evolution"] = evolution_fig
     progress = o.get("budget_progress")
     if progress and progress.get("by_package"):
@@ -917,6 +946,7 @@ def build(
             )
         proposed, base_total = _num(progress["proposed_total"]), _num(progress["annualized_started_total"])
         figures["budget_progress"] = fig_rank(rows, lbp, True, show_code=False)
+        _note_unit(figures["budget_progress"])
         figures["budget_progress_total"] = fig_rank_total(
             {
                 "main": progress["proposed_total"],

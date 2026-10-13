@@ -173,11 +173,18 @@ export const fmtCompact = (v: string | number) => {
 export type MoneyMode = "full" | "compact";
 let moneyMode: MoneyMode = "full";
 export const setMoneyMode = (m: MoneyMode) => { moneyMode = m; };
-export const fmtMoneyPref = (v: string | number) => (moneyMode === "full" ? fmtMoney(v) : fmtCompact(v));
+/** R$ mil: tudo em milhares, uma unidade só (nunca "mi" misturado com "mil" na mesma coluna): R$ 12.298 mil; uma casa
+ * decimal abaixo de R$ 10 mil (R$ 3,4 mil). */
+export const fmtMil = (v: string | number) => {
+  const n = Number(v) / 1000;
+  const digits = Math.abs(n) < 10 ? 1 : 0;
+  return `R$ ${n.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits })} mil`;
+};
+export const fmtMoneyPref = (v: string | number) => (moneyMode === "full" ? fmtMoney(v) : fmtMil(v));
 export const fmtSignedMoneyPref = (v: string | number) => {
   if (moneyMode === "full") return fmtSignedMoney(v);
   const n = Number(v);
-  return `${n > 0 ? "+" : n < 0 ? "-" : ""}${fmtCompact(Math.abs(n))}`;
+  return `${n > 0 ? "+" : n < 0 ? "-" : ""}${fmtMil(Math.abs(n))}`;
 };
 
 /** Participação (AV %), sem sinal: 0,523 → 52,3%. */

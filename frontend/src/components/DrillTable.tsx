@@ -183,7 +183,7 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
             {why && <WhyButton qs={[parentChain, ownParam(LEVELS[level], r), query].filter(Boolean).join("&")} label={r.name} />}
             {why && (
               <Link className="why-btn trace-link" to={`/rastro?${[parentChain, ownParam(LEVELS[level], r), query].filter(Boolean).join("&")}`} title="Abrir o Rastro já neste recorte (até o lançamento)">
-                ver rastro
+                rastro
               </Link>
             )}
           </td>

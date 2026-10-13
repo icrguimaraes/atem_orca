@@ -29,7 +29,7 @@ function rowLabel(row: DeviationRow): string {
 
 /** Maiores desvios (Painel, 10/10/2026): onde o realizado mais se afasta do orçado (ou da base escolhida), por
  * conta × centro de custo, por CC e por conta, com empresa, valores, desvio em R$ e %, marca "fora da faixa" e as
- * ações do Painel (filtrar, por quê?, ver rastro). Nome do CC sem código, como nos outros visuais. */
+ * ações do Painel (filtrar, por quê?, rastro). Nome do CC sem código, como nos outros visuais. */
 export function DeviationHighlights({ query, selectedCostCenter, selectedAccount, onPick }: {
   query: string;
   selectedCostCenter: string;
@@ -104,7 +104,7 @@ export function DeviationHighlights({ query, selectedCostCenter, selectedAccount
                   <span className="dev-actions">
                     {row.out_of_range && <span className="dev-flag" title="Fora da faixa dos limiares do ciclo">fora da faixa</span>}
                     <WhyButton qs={qs} label={rowLabel(row)} />
-                    <Link className="why-btn trace-link" to={`/rastro?${qs}`} title="Abrir o Rastro neste recorte (até o lançamento)">ver rastro</Link>
+                    <Link className="why-btn trace-link" to={`/rastro?${qs}`} title="Abrir o Rastro neste recorte (até o lançamento)">rastro</Link>
                   </span>
                 </span>
                 <span className="dev-val right"><span className="dev-val-label">{d.base_label}</span>{fmtMoneyPref(row.base)}</span>
