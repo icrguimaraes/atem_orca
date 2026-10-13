@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { api, type DeviationRow, type Deviations } from "../api";
-import { fmtSignedCellPref, fmtCellPref, isMilMode } from "../labels";
+import { fmtSignedCellPref, fmtCellPref, unitNote } from "../labels";
 import { usePersistentState } from "../persist";
 import { DeviationTag } from "./ExecutionKpis";
 import { Alert, Empty, useLoad } from "./ui";
@@ -67,7 +67,7 @@ export function DeviationHighlights({ query, selectedCostCenter, selectedAccount
         {d && d.base_label && (
           <p className="muted small dev-basis">
             <i className={`kpi-swatch ${mainCls}`} aria-hidden="true" /> {d.main_label} × <i className={`kpi-swatch ${baseCls}`} aria-hidden="true" /> {d.base_label}
-            {" · "}maiores diferenças em valor; clique no nome para filtrar o Painel{isMilMode() && " · valores em R$ mil"}
+            {" · "}maiores diferenças em valor; clique no nome para filtrar o Painel{" · " + unitNote().toLowerCase()}
           </p>
         )}
       </div>

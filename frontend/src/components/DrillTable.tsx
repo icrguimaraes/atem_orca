@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, type Breakdown, type BreakdownRow } from "../api";
-import { fmtPct, fmtShare, deptRank, fmtCellPref, isMilMode } from "../labels";
+import { fmtPct, fmtShare, deptRank, fmtCellPref, unitNote } from "../labels";
 import { Empty, Loading } from "./ui";
 import { WhyButton } from "./WhyPanel";
 
@@ -235,7 +235,7 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
           )}
         </span>
         <div className="inline-controls">
-          {isMilMode() && <span className="unit-note">Valores em R$ mil</span>}
+          <span className="unit-note">{unitNote()}</span>
           <input
             type="search"
             className="drill-search"
