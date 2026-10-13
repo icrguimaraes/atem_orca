@@ -113,3 +113,19 @@ def test_deviations_by_pair_cost_center_and_account(client, admin, run_worker):
     # ano do ciclo com o realizado: série principal do Painel × base (orçamento 2027 × realizado 2026)
     cycle = client.get("/api/v1/dashboard/deviations?years=2026,2027", headers=admin).json()
     assert cycle["basis"] == "period" and cycle["main_series"] == "budget"
+
+
+def test_ranking_labels_tell_same_named_cost_centers_apart_by_company():
+    """Dois CCs com o mesmo nome (Contabilidade da ATEM e da NAVE): o eixo mostra a empresa, não o código SAP."""
+    from app.services.painel_figures import _categories
+
+    rows = [
+        {"name": "CONTABILIDADE", "code": "1050101002", "company": "ATEM"},
+        {"name": "FISCAL", "code": "1050101003", "company": "ATEM"},
+        {"name": "CONTABILIDADE", "code": "5010102102", "company": "NAVE"},
+    ]
+    assert _categories(rows, False) == ["CONTABILIDADE · ATEM", "FISCAL", "CONTABILIDADE · NAVE"]
+    # mesma empresa nos dois: volta a diferenciar pelo código; sem empresa informada, também
+    same = [{"name": "X", "code": "1", "company": "ATEM"}, {"name": "X", "code": "2", "company": "ATEM"}]
+    assert _categories(same, False) == ["X · 1", "X · 2"]
+    assert _categories([{"name": "X", "code": "1"}, {"name": "X", "code": "2"}], False) == ["X · 1", "X · 2"]

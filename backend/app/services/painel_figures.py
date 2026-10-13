@@ -108,7 +108,19 @@ def _categories(rows: list[dict], show_code: bool) -> list[str]:
     if show_code:
         return [_category(r["name"], r.get("code")) for r in rows]
     names = [short(r["name"] or r.get("code") or "—", 34) for r in rows]
-    return [_category(r["name"], r.get("code")) if names.count(n) > 1 else n for r, n in zip(rows, names, strict=True)]
+    out = []
+    for r, n in zip(rows, names, strict=True):
+        if names.count(n) <= 1:
+            out.append(n)
+            continue
+        # nome repetido: a empresa diferencia ("CONTABILIDADE · NAVE") quando é única entre os iguais; senão, o código
+        same = [x for x, m in zip(rows, names, strict=True) if m == n]
+        companies = [x.get("company") for x in same]
+        if r.get("company") and all(companies) and len(set(companies)) == len(same):
+            out.append(f"{short(r['name'] or '—', 26)} · {r['company']}")
+        else:
+            out.append(_category(r["name"], r.get("code")))
+    return out
 
 
 def _labels(o: dict) -> dict:
@@ -889,6 +901,7 @@ def build(
                 "id": r["id"],
                 "code": r["code"],
                 "name": r["name"],
+                "company": r.get("company"),
                 "value": r["ref_ytd"],
                 "base": r["prev_ytd"],
                 "var_pct": r["ytd_var_pct"],

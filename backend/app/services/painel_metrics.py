@@ -308,11 +308,16 @@ def _ranking(db: Session, f: Facts, P: Period, key: str, label_model, limit: int
     base = _base_sums(f, P, key)
     ids = sorted((k for k in cur if k is not None), key=lambda k: cur[k], reverse=True)[:limit]
     objs = {o.id: o for o in db.scalars(select(label_model).where(label_model.id.in_(ids)))} if ids else {}
+    # centro de custo: a empresa diferencia nomes iguais (Contabilidade da ATEM × da NAVE) melhor que o código SAP
+    companies = (
+        {c.id: (c.short_name or c.name) for c in db.scalars(select(Company))} if label_model is CostCenter else {}
+    )
     return [
         {
             "id": i,
             "code": getattr(objs.get(i), "code", None),
             "name": getattr(objs.get(i), "name", None),
+            "company": companies.get(getattr(objs.get(i), "company_id", None)),
             "ref_ytd": _money(cur[i]),
             "prev_ytd": _money(base.get(i)),
             "ytd_var_pct": _pct(cur[i], base.get(i, ZERO)) if P.base_kind else None,
