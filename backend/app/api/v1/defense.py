@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.v1.dashboard import Facts, _ints, _last_closed, _period, _thresholds
 from app.core.deps import client_ip, get_current_user, is_global, visible_cost_center_ids
 from app.db import get_db
 from app.models import (
@@ -35,6 +34,8 @@ from app.services import consolidation as cons
 from app.services import justifications as just_svc
 from app.services import opex as opex_svc
 from app.services import questions as q_svc
+from app.services.painel_facts import Facts, _ints, _last_closed, _period
+from app.services.painel_metrics import _thresholds
 
 router = APIRouter(tags=["defesa do orçamento"])
 ZERO = Decimal("0")

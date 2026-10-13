@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.v1.dashboard import budget_progress
 from app.core.deps import client_ip, get_current_user, is_global, visible_cost_center_ids
 from app.db import get_db
 from app.domain.workflow import EDITABLE, STATUS_LABELS, WorkflowError, available_actions, check_transition
@@ -33,6 +32,7 @@ from app.models import (
 )
 from app.services import audit, template_export
 from app.services import opex as svc
+from app.services.painel_metrics import budget_progress
 
 router = APIRouter(prefix="/opex", tags=["OPEX"])
 ZERO = Decimal("0")

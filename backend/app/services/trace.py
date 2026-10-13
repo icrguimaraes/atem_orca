@@ -15,7 +15,6 @@ from openpyxl import Workbook
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.api.v1.dashboard import Facts, Period, _ints, _main_model, _period
 from app.core.deps import is_global, visible_cost_center_ids
 from app.domain.rules.personnel import split_amount
 from app.models import (
@@ -38,6 +37,7 @@ from app.services import opex as opex_svc
 from app.services import personnel as personnel_svc
 from app.services import pj as pj_svc
 from app.services.exports import _sheet
+from app.services.painel_facts import Facts, Period, _ints, _main_model, _period
 
 ZERO = Decimal("0")
 LEVELS = ("department", "area", "cost_center", "package", "account")
