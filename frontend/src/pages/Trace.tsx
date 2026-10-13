@@ -191,6 +191,7 @@ export default function Trace() {
         title="Rastro"
         subtitle="Do total do Painel ao lançamento: área → setor → centro de custo → pacote → conta → registro de origem · clique na linha para descer e na trilha para voltar."
       />
+      <div className="filter-panel">
       <FilterBar
         onApply={(v) => setFilters({ ...filters, cost_center_id: v.cost_center_id })}
         onReset={clearAll}
@@ -332,6 +333,7 @@ export default function Trace() {
         </div>
       )}
       <ActiveFilters chips={chips} onReset={clearAll} resetCount={activeFilters + crumbs.length} />
+      </div>
       {accountId && (
         <div className="active-filters" aria-label="Filtro por conta (veio do Painel)">
           <span className="filter-chip">Conta filtrada no Painel · <Link to={`/rastro?${qs.replace(/(^|&)account_id=[^&]*/, "")}`}>remover</Link></span>

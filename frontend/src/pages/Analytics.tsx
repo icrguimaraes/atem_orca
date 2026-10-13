@@ -130,6 +130,7 @@ export default function Analytics() {
         title="Análise orçamentária"
         subtitle={`Realizado ${y.prev} × Orçado ${y.ref} × Orçamento ${y.target} · versão ${d.version.label} · OPEX, CAPEX e Pessoal por centro de custo, conta e mês`}
       />
+      <div className="filter-panel">
       <FilterBar
         onApply={(v) => { set({ ...v } as Partial<Filters>); setTrail([]); }}  // botões (empresa, área, tipo) aplicam na hora
         onReset={clear}
@@ -255,15 +256,11 @@ export default function Analytics() {
                 Mesmo período
               </label>
             </div>
-            <span className="selection-note">
-              Selecionado: <strong>{d.series?.labels?.target ?? k.target.label}</strong>
-              {d.series?.labels?.ref && <> · referência <strong>{d.series.labels.ref}</strong></>}
-              {d.series?.labels?.prev && <> · comparado com <strong>{d.series.labels.prev}</strong></>}
-            </span>
           </div>
         </>
       )}
       <ActiveFilters chips={chips} onReset={clear} resetCount={active} />
+      </div>
       {trail.length > 0 && (
         <nav className="breadcrumb" aria-label="Drill-down">
           <button className="btn-link link" onClick={clear}>Visão geral</button>
