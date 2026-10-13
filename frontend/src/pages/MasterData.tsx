@@ -78,7 +78,9 @@ export default function MasterData() {
       initial: r ?? { company_id: data.companies[0]?.id, code: "", name: "", manager_user_id: null, manager_name: "", is_csc: false, is_backoffice: false, is_active: true },
       fields: [
         { key: "company_id", label: "Empresa", type: "select", options: companyOpts, required: true, readOnlyOnEdit: true },
-        { key: "code", label: "Código SAP", type: "text", required: true, readOnlyOnEdit: true },
+        // código editável (13/10/2026): CC criado com código provisório (ex.: NAVAUDEXT) recebe o SAP real sem
+        // recriar o CC — orçamento, quadro e histórico seguem com ele; a troca fica na auditoria
+        { key: "code", label: "Código SAP", type: "text", required: true, hint: "Troque só para corrigir um código provisório: lançamentos e histórico continuam no mesmo CC; a mudança fica registrada na auditoria." },
         { key: "name", label: "Denominação", type: "text", required: true },
         { key: "manager_user_id", label: "Usuário gestor (quem enxerga e preenche o orçamento do CC)", type: "select", options: userOpts, allowEmpty: true },
         { key: "manager_name", label: "Nome do gestor (como vem do SAP)", type: "text" },
