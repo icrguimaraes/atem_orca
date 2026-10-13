@@ -76,6 +76,8 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.
 - O Painel é único: período = anos somados × meses × tipos de orçamento (`api/v1/dashboard._period` e `Facts`);
   verde = orçado/orçamento (inclui o orçamento proposto do ano do ciclo, via consolidação), azul = realizado, roxo = ano anterior.
+  "Comparar com revisão" (13/10/2026): `base_version_id` em overview/breakdown/deviations → `Period.base_kind == "version"`, base = foto
+  da versão congelada (`Facts.version_sums`, série "prev" roxa rotulada "Revisão N (congelada)"); só com o ano do ciclo no filtro.
 - Filtros de página sempre via `components/FilterBar` (desktop: selects; celular: grade + folha "Aplicar"); opções podem depender do rascunho (`options: (draft) => …`).
   Estado dos filtros com `usePersistentState` (`src/persist.ts`: guardado no navegador e apagado no login/logout) e botão
   "Resetar filtros" via `onReset`/`resetCount` do FilterBar.

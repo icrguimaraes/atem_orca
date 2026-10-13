@@ -100,6 +100,7 @@ export default function Painel2() {
   }
   const [compare, setCompare] = usePersistentState("painel.compare", false); // desmarcado por padrão (pedido de 08/10/2026)
   const [samePeriod, setSamePeriod] = usePersistentState("painel.samePeriod", true);
+  const [baseVersion, setBaseVersion] = usePersistentState("painel.baseVersion", ""); // revisão congelada como base ("" = nenhuma)
   const tipo = (searchParams.get("tipo") ?? "").toUpperCase();
   const tipoFromUrl = BUDGET_TYPES.some((b) => b.key === tipo);
   // ?tipo= (links de outras páginas) vale sobre o filtro guardado
@@ -185,6 +186,7 @@ export default function Painel2() {
     setDepartment("");
     setCompare(false);
     setSamePeriod(true);
+    setBaseVersion("");
   }
   const activeFilters =
     [filters.company_id, filters.cost_center_id, filters.package_id].filter(Boolean).length +
@@ -210,6 +212,7 @@ export default function Painel2() {
       modules: modules.join(","),
       compare: compare ? "" : "false",
       same_period: samePeriod ? "" : "false",
+      base_version_id: baseVersion,
     }).filter(([, v]) => v),
   ).toString();
   const overview = useLoad(() => api<OverviewWithFigures>(`/dashboard/overview?figures=true${query ? `&${query}` : ""}`), [query]);
@@ -280,7 +283,7 @@ export default function Painel2() {
       <FilterBar
         onApply={(v) => setFilters({ ...filters, cost_center_id: v.cost_center_id })}
         onReset={clearAll}
-        resetCount={activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1)}
+        resetCount={activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1) + (baseVersion ? 1 : 0)}
         desktopReset={false}
         showActive={false}
         lead={
@@ -409,7 +412,7 @@ export default function Painel2() {
               </select>
             </div>
           </div>
-          {activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1) > 0 && (
+          {activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1) + (baseVersion ? 1 : 0) > 0 && (
             <div className="active-filters" aria-label="Filtros ativos">
               <span className="active-filters-label">Filtros ativos</span>
               {filters.company_id && chip(`Empresa: ${filters.company_id.split(",").map((i) => companies.find((c) => String(c.id) === i)?.short_name ?? i).join(" + ")}`, () => setFilters((f) => ({ ...f, company_id: "", cost_center_id: "" })))}
@@ -422,7 +425,7 @@ export default function Painel2() {
               {account && chip(`Conta: ${account.label}`, () => setAccount(null))}
               {/* "Resetar filtros" junto dos filtros ativos (10/10/2026), não solto no canto da faixa */}
               <button type="button" className="btn btn-ghost btn-sm active-filters-reset" onClick={clearAll}>
-                Resetar filtros ({activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1)})
+                Resetar filtros ({activeFilters + (compare ? 1 : 0) + (samePeriod ? 0 : 1) + (baseVersion ? 1 : 0)})
               </button>
             </div>
           )}
@@ -431,6 +434,13 @@ export default function Painel2() {
               <label className={period?.compare_available ? "" : "off"} title={period?.compare_available ? "" : "Disponível com um único ano selecionado e o ano anterior carregado"}>
                 <input type="checkbox" checked={compare} disabled={!period?.compare_available} onChange={(e) => setCompare(e.target.checked)} />
                 Comparar com o ano anterior
+              </label>
+              <label className={period?.version_compare_available ? "" : "off"} title={period?.version_compare_available ? "Compara o orçamento em elaboração com a foto de uma revisão congelada" : "Disponível com o ano do ciclo selecionado e alguma revisão congelada"}>
+                Comparar com revisão
+                <select value={baseVersion} disabled={!period?.version_compare_available} onChange={(e) => setBaseVersion(e.target.value)} aria-label="Comparar com revisão">
+                  <option value="">nenhuma</option>
+                  {(period?.versions ?? []).map((v) => <option key={v.id} value={String(v.id)}>{v.label}</option>)}
+                </select>
               </label>
               <label title={period?.same_period_available ? "Limita a base de comparação aos meses já fechados do realizado" : "Vale quando há comparação (ano anterior ou orçado) e o realizado do ano ainda está em andamento, sem filtro de meses"}>
                 <input type="checkbox" checked={samePeriod} onChange={(e) => setSamePeriod(e.target.checked)} />

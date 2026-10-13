@@ -79,6 +79,7 @@ def overview(
     modules: str | None = None,
     compare: bool = True,
     same_period: bool = True,
+    base_version_id: int | None = None,
     figures: bool = False,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -87,14 +88,15 @@ def overview(
     `years` (ex.: "2025,2026") são somados; `months` ("1,2,3") e `modules` ("OPEX,CAPEX,PERSONNEL") filtram
     tudo. `compare` liga a comparação com o ano anterior (só com um ano escolhido); `same_period` limita a base
     ao último mês fechado do realizado em foco. O ano do ciclo traz o orçamento proposto como orçado."""
-    P = _period(db, years, months, modules, compare, same_period, year)
+    P = _period(db, years, months, modules, compare, same_period, year, base_version_id)
     f = Facts(db, user, company_id, cost_center_id, package_id, P, account_id=account_id, department_id=department_id)
     main_model = _main_model(P)
     actual_total = f.total(ActualEntry, P.years)
     budget_total = f.total(ReferenceBudgetEntry, P.main_years)
     main_total = actual_total if P.main == "actual" else budget_total
     base_total = _base_total(f, P)
-    prev_full = f.total(ActualEntry, P.prev_years) if P.compare else ZERO
+    # com uma revisão congelada como base, a série "anterior" (roxa) é a foto da revisão
+    prev_full = f.total(ActualEntry, P.prev_years) if P.compare else (base_total if P.base_kind == "version" else ZERO)
     ytd_cap = P.closed if (P.main == "actual" and P.closed and P.closed < 12 and not P.months) else None
     budget_cmp = f.total(ReferenceBudgetEntry, P.years, ytd_cap) if P.main == "actual" else budget_total
     annualizable = P.main == "actual" and len(P.years) == 1 and bool(ytd_cap)
@@ -112,7 +114,7 @@ def overview(
         "target_year": P.target_year,
         "period": P.summary(),
         "has_actual": bool(P.actual_selected),
-        "has_prev": P.compare,
+        "has_prev": P.compare or P.base_kind == "version",
         "has_budget": budget_total != ZERO,
         "kpis": {
             "prev_total": _money(prev_full),
@@ -237,13 +239,14 @@ def breakdown(
     modules: str | None = None,
     compare: bool = True,
     same_period: bool = True,
+    base_version_id: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """Uma linha por grupo com a série principal do período, a base de comparação (ano anterior ou orçado),
     participação (AV %), variação e variação %. `parent_*` restringem aos filhos de uma linha expandida
     (drill-down). `thresholds` traz os limiares do ciclo usados no semáforo (alert.growth_pct / reduction_pct)."""
-    P = _period(db, years, months, modules, compare, same_period)
+    P = _period(db, years, months, modules, compare, same_period, base_version_id=base_version_id)
     parent = {
         "package_id": parent_package_id,
         "no_package": parent_no_package,
@@ -351,6 +354,7 @@ def deviations(
     modules: str | None = None,
     compare: bool = True,
     same_period: bool = True,
+    base_version_id: int | None = None,
     limit: int = Query(8, ge=1, le=30),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -359,7 +363,7 @@ def deviations(
     (`basis = "execution"`): realizado contábil até o último mês fechado (sem a projeção do gestor) × orçado no mesmo
     período. Sem isso, a série principal do Painel × a base de comparação (`basis = "period"`). `out_of_range` usa os
     limiares do ciclo (os mesmos do semáforo da tabela)."""
-    P = _period(db, years, months, modules, compare, same_period)
+    P = _period(db, years, months, modules, compare, same_period, base_version_id=base_version_id)
     f = Facts(db, user, company_id, cost_center_id, package_id, P, account_id=account_id, department_id=department_id)
     scope, _ = _execution_scope(db, P)
     use_execution = scope is not None and f.total(ReferenceBudgetEntry, [scope.year]) != ZERO
@@ -376,7 +380,9 @@ def deviations(
             base = grouped(f.sums(ReferenceBudgetEntry, [scope.year], *keys, max_period=scope.cap))
             return main, base
         main = grouped(f.sums(_main_model(P), P.main_years, *keys))
-        if P.base_kind == "prev":
+        if P.base_kind == "version":
+            base = grouped(f.version_sums(P.base_version, *keys))
+        elif P.base_kind == "prev":
             base = grouped(f.sums(ActualEntry, P.prev_years, *keys, max_period=P.base_cap))
         elif P.base_kind == "budget":
             base = grouped(f.sums(ReferenceBudgetEntry, P.years, *keys, max_period=P.base_cap))

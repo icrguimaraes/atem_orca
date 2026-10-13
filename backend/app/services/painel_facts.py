@@ -5,7 +5,7 @@ rotas do Painel, pela defesa do orçamento (`defense.py`) e pelo rastro (`servic
 """
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 
@@ -18,6 +18,7 @@ from app.models import (
     ActualEntry,
     BudgetCycle,
     BudgetPackage,
+    BudgetVersion,
     Company,
     CostCenter,
     DatasetVersion,
@@ -103,6 +104,9 @@ class Period:
     budget_years: list[int]
     target_year: int | None  # ano do ciclo: orçamento proposto (consolidação)
     available: list[int]
+    # comparação entre revisões (13/10/2026): base = foto de uma versão congelada do ciclo ("Revisão 0")
+    base_version: BudgetVersion | None = None
+    frozen_versions: list[dict] = field(default_factory=list)
 
     @property
     def actual_selected(self) -> list[int]:
@@ -135,7 +139,14 @@ class Period:
         return len(self.years) == 1 and (self.years[0] - 1) in self.actual_years
 
     @property
+    def version_compare_available(self) -> bool:
+        """Comparar com uma revisão: só com o ano do ciclo no filtro e alguma versão congelada."""
+        return self.target_year in self.years and bool(self.frozen_versions)
+
+    @property
     def base_kind(self) -> str | None:
+        if self.base_version is not None:
+            return "version"
         if self.compare:
             return "prev"
         if self.main == "actual" and self.budget_selected:
@@ -208,6 +219,8 @@ class Period:
 
     @property
     def base_label(self) -> str | None:
+        if self.base_kind == "version":
+            return f"{self.base_version.label} (congelada)"
         if self.base_kind == "prev":
             label = f"Realizado {_years_label(self.prev_years)}"
             if self.annualize_base:
@@ -242,6 +255,9 @@ class Period:
             "base_label": self.base_label,
             "annualized_base": self.annualize_base,
             "target_year": self.target_year,
+            "base_version_id": self.base_version.id if self.base_version else None,
+            "version_compare_available": self.version_compare_available,
+            "versions": self.frozen_versions,
         }
 
 
@@ -253,6 +269,7 @@ def _period(
     compare: bool,
     same_period: bool,
     year: int | None = None,
+    base_version_id: int | None = None,
 ) -> Period:
     actual_years = _loaded_years(db, "ACTUAL", 1)
     budget_years = _loaded_years(db, "REFERENCE_BUDGET", 2)
@@ -268,8 +285,21 @@ def _period(
     module_filter = {m.strip() for m in (modules or "").upper().split(",") if m.strip() in cons.MODULE_NATURES} or None
     actual_selected = [y for y in selected if y in actual_years]
     closed = _last_closed(db, max(actual_selected)) if actual_selected else None
+    # revisões congeladas do ciclo (base alternativa, só com o ano do ciclo no filtro)
+    frozen = (
+        list(
+            db.scalars(
+                select(BudgetVersion)
+                .where(BudgetVersion.cycle_id == cycle.id, BudgetVersion.status != "WORKING")
+                .order_by(BudgetVersion.major, BudgetVersion.minor)
+            )
+        )
+        if cycle
+        else []
+    )
+    base_version = next((v for v in frozen if v.id == base_version_id), None) if target_year in selected else None
     prev = selected[0] - 1
-    prev_years = [prev] if (compare and len(selected) == 1 and prev in actual_years) else []
+    prev_years = [prev] if (compare and base_version is None and len(selected) == 1 and prev in actual_years) else []
     prev_closed = _last_closed(db, prev) if prev_years else None
     return Period(
         selected,
@@ -283,6 +313,8 @@ def _period(
         budget_years,
         target_year,
         available,
+        base_version,
+        [{"id": v.id, "label": v.label} for v in frozen],
     )
 
 
@@ -318,7 +350,7 @@ class Facts:
         self.modules = period.modules
         self.target_year = period.target_year
         self.parent = parent or {}  # filtros do drill-down (filhos de um pacote ou de uma conta)
-        self._target: list[tuple] | None = None
+        self._rows: dict[int | None, list[tuple]] = {}  # linhas por versão (None = versão em elaboração)
         self._structure: dict[int, tuple[int | None, int | None]] = {}  # CC → (área, setor)
 
     def _filtered(self, model, stmt: Select) -> Select:
@@ -365,10 +397,16 @@ class Facts:
 
     def _target_rows(self) -> list[tuple]:
         """Linhas do orçamento proposto (OPEX + CAPEX + Pessoal) no escopo e nos filtros: (linha, conta, pacote)."""
-        if self._target is None:
+        return self._version_rows(None)
+
+    def _version_rows(self, version: BudgetVersion | None) -> list[tuple]:
+        """Linhas da versão (None = a em elaboração; congelada = a foto), filtradas como o orçamento proposto."""
+        key = version.id if version is not None else None
+        if key not in self._rows:
             try:
                 ctx = opex_svc.context(self.db)
-                rows = cons.rows_for(self.db, ctx, ctx.version, self.visible)
+                v = version or ctx.version
+                rows = cons.rows_for(self.db, cons.version_context(ctx, v), v, self.visible)
             except opex_svc.OpexError:
                 rows = []
             companies = {c.id: c.code for c in self.db.scalars(select(Company))}
@@ -407,12 +445,14 @@ class Facts:
                 ):
                     continue
                 out.append((r, account_id, pkg_id))
-            self._target = out
-        return self._target
+            self._rows[key] = out
+        return self._rows[key]
 
-    def _target_sums(self, keys: tuple[str, ...], max_period: int | None) -> dict[tuple, Decimal]:
+    def _target_sums(
+        self, keys: tuple[str, ...], max_period: int | None, version: BudgetVersion | None = None
+    ) -> dict[tuple, Decimal]:
         out: dict[tuple, Decimal] = defaultdict(lambda: ZERO)
-        for r, account_id, pkg_id in self._target_rows():
+        for r, account_id, pkg_id in self._version_rows(version):
             dept_id, area_id = self._structure.get(r.cost_center_id, (None, None))
             attrs = {
                 "cost_center_id": r.cost_center_id,
@@ -510,12 +550,33 @@ class Facts:
         rows = self.sums(model, years, max_period=max_period)
         return rows[0][0] if rows else ZERO
 
+    # ---- versão congelada como base (comparar Revisão 1 × Revisão 0)
+
+    def version_sums(self, version: BudgetVersion, *keys: str, max_period: int | None = None) -> list[tuple]:
+        return [(*k, v) for k, v in self._target_sums(keys, max_period, version).items()]
+
+    def version_total(self, version: BudgetVersion) -> Decimal:
+        rows = self.version_sums(version)
+        return rows[0][0] if rows else ZERO
+
+    def by_module_version(self, version: BudgetVersion) -> dict[str, Decimal]:
+        out: dict[str, Decimal] = defaultdict(lambda: ZERO)
+        for r, _, _ in self._version_rows(version):
+            for m, amount in enumerate(r.values, start=1):
+                if amount and not (self.months and m not in self.months):
+                    out[r.module] += amount
+            if r.unscheduled and not self.months:
+                out[r.module] += r.unscheduled
+        return out
+
 
 def _main_model(P: Period):
     return ActualEntry if P.main == "actual" else ReferenceBudgetEntry
 
 
 def _base_total(f: Facts, P: Period) -> Decimal:
+    if P.base_kind == "version":
+        return f.version_total(P.base_version)
     if P.base_kind == "prev":
         return f.total(ActualEntry, P.prev_years, P.base_cap) * P.base_scale
     if P.base_kind == "budget":
@@ -526,7 +587,10 @@ def _base_total(f: Facts, P: Period) -> Decimal:
 
 
 def _base_sums(f: Facts, P: Period, key: str) -> dict:
-    """Base de comparação por grupo: ano anterior (no mesmo período ou anualizado) ou orçado do período."""
+    """Base de comparação por grupo: ano anterior (no mesmo período ou anualizado), orçado do período ou a foto
+    de uma revisão congelada."""
+    if P.base_kind == "version":
+        return dict(f.version_sums(P.base_version, key))
     if P.base_kind == "prev":
         return {k: v * P.base_scale for k, v in f.sums(ActualEntry, P.prev_years, key, max_period=P.base_cap)}
     if P.base_kind == "budget":

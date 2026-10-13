@@ -264,7 +264,9 @@ export interface PeriodInfo {
   years: number[]; years_label: string; months: number[]; modules: string[]; main: "actual" | "budget"; main_label: string;
   actual_label: string | null; budget_label: string | null; closed: number | null; closed_month: string | null;
   compare: boolean; compare_available: boolean; same_period: boolean; same_period_available: boolean; prev_years: number[];
-  base_kind: "prev" | "budget" | null; base_label: string | null; annualized_base: boolean; target_year: number | null;
+  base_kind: "prev" | "budget" | "actual" | "version" | null; base_label: string | null; annualized_base: boolean; target_year: number | null;
+  // comparação entre revisões (13/10/2026): base = foto de uma versão congelada do ciclo
+  base_version_id: number | null; version_compare_available: boolean; versions: { id: number; label: string }[];
 }
 export interface BreakdownRow {
   id: number | null; code: string | null; name: string; ref: string; base: string; share_ref: string | null;

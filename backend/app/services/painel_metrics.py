@@ -259,7 +259,9 @@ def _by_module(f: Facts, P: Period) -> list[dict]:
     if P.modules:
         return []
     main = f.by_module(_main_model(P), P.main_years)
-    if P.base_kind == "prev":
+    if P.base_kind == "version":
+        base = f.by_module_version(P.base_version)
+    elif P.base_kind == "prev":
         base = {k: v * P.base_scale for k, v in f.by_module(ActualEntry, P.prev_years, P.base_cap).items()}
     elif P.base_kind == "budget":
         base = f.by_module(ReferenceBudgetEntry, P.years, P.base_cap)
@@ -286,6 +288,9 @@ def _monthly(f: Facts, P: Period) -> list[dict]:
     monthly = {m: {"month": m, "prev": ZERO, "ref": ZERO, "budget": ZERO, "proj": ZERO} for m in range(1, 13)}
     if P.compare:
         for period, amount in f.sums(ActualEntry, P.prev_years, "period", max_period=P.base_cap):
+            monthly[int(period)]["prev"] = amount
+    elif P.base_kind == "version":  # a revisão congelada entra na série "prev" (roxa), rotulada pela versão
+        for period, amount in f.version_sums(P.base_version, "period"):
             monthly[int(period)]["prev"] = amount
     for period, amount in f.sums(ActualEntry, P.years, "period"):
         monthly[int(period)]["ref"] = amount

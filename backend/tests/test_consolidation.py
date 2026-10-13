@@ -223,3 +223,38 @@ def test_compare_versions(client, admin, run_worker):
         ).status_code
         == 422
     )
+
+
+def test_painel_compares_with_frozen_version(client, admin, run_worker):
+    """Painel: "Comparar com revisão" usa a foto da Revisão 0 como base (cartões, mensal, tabela e desvios)."""
+    cc, _, _line = _setup(client, admin, run_worker)
+    target = client.get("/api/v1/cycles", headers=admin).json()[0]["fiscal_year"]
+    client.post("/api/v1/consolidation/freeze", headers=admin, json={})
+    rv = client.post("/api/v1/consolidation/revise", headers=admin, json={"reason": "ajuste"}).json()
+    v10 = next(v["id"] for v in rv["versions"] if v["label"] == "Revisão 0")
+    head = client.get(f"/api/v1/opex/cost-centers/{cc['id']}", headers=admin).json()
+    new_line = client.get(f"/api/v1/opex/submissions/{head['submission_id']}/lines", headers=admin).json()[0]
+    client.patch(f"/api/v1/opex/lines/{new_line['id']}", headers=admin, json={"values": {"1": 1450}})  # +1.000 em JAN
+    q = f"years={target}&base_version_id={v10}"
+    o = client.get(f"/api/v1/dashboard/overview?{q}&figures=true", headers=admin).json()
+    p = o["period"]
+    assert p["base_kind"] == "version" and p["base_label"] == "Revisão 0 (congelada)" and p["version_compare_available"]
+    assert p["versions"] == [{"id": v10, "label": "Revisão 0"}] and p["base_version_id"] == v10 and not p["compare"]
+    # o total inclui Pessoal/CAPEX da base de teste: o que importa é a diferença exata de R$ 1.000 entre as fotos
+    ref, base = Decimal(o["kpis"]["ref_ytd"]), Decimal(o["kpis"]["prev_ytd"])
+    assert ref - base == Decimal("1000.00") and o["has_prev"] and o["kpis"]["prev_total"] == o["kpis"]["prev_ytd"]
+    assert Decimal(o["kpis"]["ytd_var_pct"]) == ((ref - base) / base).quantize(Decimal("0.0001"))
+    opex = next(m for m in o["by_module"] if m["module"] == "OPEX")
+    assert (opex["main"], opex["base"]) == ("6400.00", "5400.00")
+    assert (
+        o["monthly"][0]["prev"] != o["monthly"][0]["budget"]
+    )  # JAN: Revisão 0 na série "prev", em elaboração no orçado
+    assert any(t["name"].startswith("Revisão 0") for t in o["figures"]["monthly"]["data"])
+    rows = client.get(f"/api/v1/dashboard/breakdown?group_by=account&{q}", headers=admin).json()["rows"]
+    acc = next(r for r in rows if r["code"] == "6010301002")
+    assert Decimal(acc["ref"]) - Decimal(acc["base"]) == Decimal("1000.00") and acc["var"] == "1000.00"
+    dev = client.get(f"/api/v1/dashboard/deviations?{q}", headers=admin).json()
+    assert dev["base_label"] == "Revisão 0 (congelada)"
+    # sem o ano do ciclo no filtro, a opção não vale e o parâmetro é ignorado
+    o2 = client.get(f"/api/v1/dashboard/overview?years={target - 1}&base_version_id={v10}", headers=admin).json()
+    assert o2["period"]["base_kind"] != "version" and not o2["period"]["version_compare_available"]
