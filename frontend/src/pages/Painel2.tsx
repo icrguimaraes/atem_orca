@@ -283,6 +283,7 @@ export default function Painel2() {
       <PackageReviews />
       <QuestionsInbox />
 
+      <div className="filter-panel">
       <FilterBar
         onApply={(v) => setFilters({ ...filters, cost_center_id: v.cost_center_id })}
         onReset={clearAll}
@@ -451,11 +452,6 @@ export default function Painel2() {
               </label>
             </div>
             <div className="inline-controls">
-              <span className="selection-note">
-                Selecionado: <strong>{mainLabel}{typesTxt}</strong>
-                {hasBase && <> · comparado com <strong>{baseLabel}</strong></>}
-                <span className="selection-hint"> · clique nos gráficos e na tabela para filtrar</span>
-              </span>
               <div className="seg-tabs seg-mini" role="group" aria-label="Formato dos valores">
                 <button type="button" className={numFmt === "full" ? "active" : ""} onClick={() => setNumFmt("full")} title="R$ 22.542.691,90">Numérico</button>
                 <button type="button" className={numFmt === "compact" ? "active" : ""} onClick={() => setNumFmt("compact")} title="R$ 22,54 mi">R$ mil</button>
@@ -466,6 +462,14 @@ export default function Painel2() {
             </div>
           </div>
         </>
+      )}
+      </div>
+      {o && (
+        <p className="selection-line">
+          Selecionado: <strong>{mainLabel}{typesTxt}</strong>
+          {hasBase && <> · comparado com <strong>{baseLabel}</strong></>}
+          <span className="selection-hint"> · clique nos gráficos e na tabela para filtrar</span>
+        </p>
       )}
 
       {overview.error && <Alert>{overview.error}</Alert>}
