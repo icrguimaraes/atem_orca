@@ -464,13 +464,6 @@ export default function Painel2() {
         </>
       )}
       </div>
-      {o && (
-        <p className="selection-line">
-          Selecionado: <strong>{mainLabel}{typesTxt}</strong>
-          {hasBase && <> · comparado com <strong>{baseLabel}</strong></>}
-          <span className="selection-hint"> · clique nos gráficos e na tabela para filtrar</span>
-        </p>
-      )}
 
       {overview.error && <Alert>{overview.error}</Alert>}
       {!o || !f ? (
