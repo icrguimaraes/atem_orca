@@ -204,6 +204,10 @@ def fig_monthly_total(o: dict) -> dict:
     unscheduled = _num(o["kpis"].get("budget_unscheduled"))
     if "budget" in totals:
         totals["budget"] += unscheduled
+    # revisão congelada como base (série "prev"): o CAPEX sem cronograma dela também entra só no TOTAL (13/10/2026)
+    prev_unscheduled = _num(o["kpis"].get("prev_unscheduled"))
+    if "prev" in totals:
+        totals["prev"] += prev_unscheduled
     # projeção do gestor: empilhada sobre o realizado também na coluna TOTAL (antes ficava dentro da barra azul)
     proj = [_num(r.get("proj", 0)) for r in o["monthly"]]
     proj_total = sum(proj)
@@ -248,6 +252,8 @@ def fig_monthly_total(o: dict) -> dict:
                 )
         if key == "budget" and unscheduled:
             lines.append([f"inclui {fmt_money(unscheduled)} de CAPEX sem cronograma mensal", ""])
+        if key == "prev" and prev_unscheduled:
+            lines.append([f"inclui {fmt_money(prev_unscheduled)} de CAPEX sem cronograma mensal", ""])
         stack = {"offsetgroup": "ref" if key == "proj" else key}
         if key == "proj":
             stack["base"] = [totals["ref"] - proj_total]

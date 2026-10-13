@@ -129,6 +129,8 @@ def overview(
             "budget_consumption_pct": _pct(actual_total, budget_cmp) if (P.main == "actual" and budget_cmp) else None,
             # parcela do orçamento do ano do ciclo sem mês (CAPEX sem cronograma): está no total, não no mensal
             "budget_unscheduled": _money(f.unscheduled_total() if P.target_year in P.years else ZERO),
+            # idem na revisão congelada usada como base (a coluna TOTAL do mensal soma ao roxo)
+            "prev_unscheduled": _money(f.unscheduled_total(P.base_version) if P.base_kind == "version" else ZERO),
         },
         "by_module": _by_module(f, P),
         # execução do orçamento (realizado contábil × orçado no mesmo período, % executado, projeção de fechamento)

@@ -250,6 +250,10 @@ def test_painel_compares_with_frozen_version(client, admin, run_worker):
         o["monthly"][0]["prev"] != o["monthly"][0]["budget"]
     )  # JAN: Revisão 0 na série "prev", em elaboração no orçado
     assert any(t["name"].startswith("Revisão 0") for t in o["figures"]["monthly"]["data"])
+    # coluna TOTAL do mensal: Revisão 0 inclui o CAPEX sem cronograma dela (os cartões e o gráfico batem)
+    total_fig = {t["name"]: t for t in o["figures"]["monthly_total"]["data"]}
+    prev_bar = next(t for n, t in total_fig.items() if n.startswith("Revisão 0"))
+    assert Decimal(str(prev_bar["y"][0])) == base
     rows = client.get(f"/api/v1/dashboard/breakdown?group_by=account&{q}", headers=admin).json()["rows"]
     acc = next(r for r in rows if r["code"] == "6010301002")
     assert Decimal(acc["ref"]) - Decimal(acc["base"]) == Decimal("1000.00") and acc["var"] == "1000.00"

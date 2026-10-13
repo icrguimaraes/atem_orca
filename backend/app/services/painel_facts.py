@@ -507,11 +507,11 @@ class Facts:
                 out[r.module] += r.unscheduled
         return out
 
-    def unscheduled_total(self) -> Decimal:
-        """Orçamento proposto sem mês (CAPEX sem cronograma) no escopo e nos filtros."""
+    def unscheduled_total(self, version: BudgetVersion | None = None) -> Decimal:
+        """Orçamento proposto sem mês (CAPEX sem cronograma) no escopo e nos filtros (da versão, se informada)."""
         if self.months:
             return ZERO
-        return sum((r.unscheduled for r, _, _ in self._target_rows()), ZERO)
+        return sum((r.unscheduled for r, _, _ in self._version_rows(version)), ZERO)
 
     @staticmethod
     def _column(model, key: str):
