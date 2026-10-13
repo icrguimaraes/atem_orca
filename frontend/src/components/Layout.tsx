@@ -9,7 +9,7 @@ import { ROLE_LABELS } from "../labels";
 import { ThemeSwitch, useTheme, type Theme } from "../theme";
 
 // `pj`: só para quem tem "Vê contratos PJ" (flag do usuário, não perfil)
-interface NavItem { to: string; label: string; icon: string; end?: boolean; roles?: string[]; pj?: boolean }
+interface NavItem { to: string; label: string; icon: string; end?: boolean; roles?: string[]; pj?: boolean; data?: boolean }
 
 // traço de 24 px (stroke), o mesmo desenho no menu lateral, na barra de abas e na folha "Mais"
 // (mesmo padrão do menu do projeto Movimentação de Pessoal)
@@ -37,6 +37,7 @@ const ICON = {
   mais: "M5 12h.01M12 12h.01M19 12h.01",
   recolher: "M4 4h16v16H4zM9 4v16M15 10l-2 2 2 2",
   expandir: "M4 4h16v16H4zM9 4v16M13 10l2 2-2 2",
+  central: "M4 6h4v4H4zM16 4h4v4h-4zM16 16h4v4h-4zM8 8h4v8h4M12 6h4M12 18h4",
   busca: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-3.5-3.5",
   tema: "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z",
 };
@@ -82,6 +83,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { to: "/estrutura", label: "Áreas e setores", roles: ["CONTROLLER"], icon: ICON.estrutura },
       { to: "/usuarios", label: "Usuários", roles: ["CONTROLLER"], icon: ICON.usuarios },
       { to: "/auditoria", label: "Auditoria", roles: ["CONTROLLER"], icon: ICON.auditoria },
+      { to: "/central", label: "Central de dados", data: true, icon: ICON.central },
     ],
   },
 ];
@@ -136,7 +138,8 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
 export default function Layout() {
   const { user, logout, can } = useAuth();
   // item visível: perfil (`roles`) e, para Contratos PJ, a flag "Vê contratos PJ" do usuário
-  const allowed = (n: NavItem) => (!n.roles || can(...n.roles)) && (!n.pj || (user?.pj_access ?? "NONE") !== "NONE");
+  const allowed = (n: NavItem) =>
+    (!n.roles || can(...n.roles)) && (!n.pj || (user?.pj_access ?? "NONE") !== "NONE") && (!n.data || !!user?.can_control_data);
   const [pwd, setPwd] = useState(false);
   const [more, setMore] = useState(false); // folha "Mais" da barra inferior (celular)
   const [theme, setTheme] = useTheme();

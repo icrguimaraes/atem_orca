@@ -15,6 +15,7 @@ from app.api.v1 import (
     auth,
     capex,
     consolidation,
+    control,
     cycles,
     dashboard,
     datasets,
@@ -107,6 +108,7 @@ for module in (
     integrations,
     pj,
     trace,
+    control,
 ):
     api.include_router(module.router)
 app.include_router(api)

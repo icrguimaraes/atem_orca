@@ -93,6 +93,10 @@ def update_user(
             raise HTTPException(409, "E-mail já cadastrado")
     if user.id == actor.id and data.get("is_active") is False:
         raise HTTPException(409, "Você não pode desativar o próprio usuário")
+    if data.get("can_control_data") is not None and not actor.can_control_data:
+        raise HTTPException(403, "Só quem tem a Central de dados pode conceder esse acesso")
+    if user.id == actor.id and data.get("can_control_data") is False:
+        raise HTTPException(409, "Você não pode retirar o próprio acesso à Central de dados")
     if "password" in data:
         user.password_hash = hash_password(data.pop("password"))
     for key, value in data.items():

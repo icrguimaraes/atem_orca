@@ -86,6 +86,7 @@ export interface User {
   can_view_pj: boolean;
   can_view_all_pj: boolean;
   pj_access: PjAccess;
+  can_control_data?: boolean; // Central de dados (acesso pessoal)
 }
 
 // ---------------------------------------------------------------- Contratos PJ (confidencial; /pj)

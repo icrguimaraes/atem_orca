@@ -151,6 +151,7 @@ def seed(db: Session, *, fiscal_year: int = 2027) -> None:
             email=settings.admin_email.lower(),
             name=settings.admin_name,
             password_hash=hash_password(settings.admin_password),
+            can_control_data=True,  # Central de dados: o administrador inicial é o dono da base
         )
         db.add(admin)
         db.flush()

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Company, type CostCenter, type Department, type PjAccess, type UserAccess, type UserListItem } from "../api";
 import { PJ_ACCESS_LABELS, ROLE_LABELS, fmtInt, byDepartment } from "../labels";
+import { useAuth } from "../auth";
 import { Alert, Loading, Modal } from "./ui";
 
 /* Criar e editar usuário num formulário só (08/10/2026): dados, perfis e os centros de custo que ele acessa — por
@@ -32,6 +33,8 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
   });
   // Contratos PJ (confidencial): "Vê contratos PJ: Não / Da área / Todos" — flag do usuário, independe do perfil
   const [pj, setPj] = useState<PjAccess>(user?.pj_access ?? "NONE");
+  const { user: me } = useAuth();
+  const [dataAccess, setDataAccess] = useState<boolean>(!!user?.can_control_data);
   const [ccs, setCcs] = useState<CostCenter[] | null>(null);
   const [depts, setDepts] = useState<Department[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -171,6 +174,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
           patch.can_view_pj = pj !== "NONE";
           patch.can_view_all_pj = pj === "ALL";
         }
+        if (me?.can_control_data && dataAccess !== !!user!.can_control_data) patch.can_control_data = dataAccess;
         if (Object.keys(patch).length) await api(`/users/${user!.id}`, { method: "PATCH", body: JSON.stringify(patch) });
         if ([...form.roles].sort().join() !== [...user!.roles].sort().join())
           await api(`/users/${user!.id}/roles`, { method: "PUT", body: JSON.stringify(form.roles) });
@@ -241,6 +245,12 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
               usuário, mesmo com perfil Administrador ou Controladoria. "Todos": todos os contratos. Toda troca fica na auditoria.
             </span>
           </label>
+          {me?.can_control_data && !creating && (
+            <label className="pj-access">
+              <span><input type="checkbox" checked={dataAccess} disabled={user?.id === me.id} onChange={(e) => setDataAccess(e.target.checked)} /> Central de dados</span>
+              <span className="muted small">Fontes, etapas do ETL e parâmetros do sistema. Só quem já tem o acesso pode concedê-lo.</span>
+            </label>
+          )}
         </section>
 
         <section className="stack">

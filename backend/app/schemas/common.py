@@ -40,6 +40,7 @@ class UserOut(ORM):
     can_view_pj: bool = False
     can_view_all_pj: bool = False
     pj_access: str = "NONE"  # NONE | AREA | ALL
+    can_control_data: bool = False  # Central de dados (acesso pessoal)
 
     @classmethod
     def build(cls, user) -> "UserOut":
@@ -53,6 +54,7 @@ class UserOut(ORM):
             can_view_pj=bool(user.can_view_pj),
             can_view_all_pj=bool(user.can_view_pj and user.can_view_all_pj),
             pj_access=pj_access(user),
+            can_control_data=bool(user.can_control_data),
         )
 
 
@@ -75,6 +77,7 @@ class UserUpdate(BaseModel):
     password: str | None = Field(default=None, min_length=8)
     can_view_pj: bool | None = None  # "Não" (False) limpa também o "Todos"
     can_view_all_pj: bool | None = None
+    can_control_data: bool | None = None  # só quem já tem o acesso pode conceder/retirar
 
 
 class UserCostCentersIn(BaseModel):

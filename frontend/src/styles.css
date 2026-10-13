@@ -1431,3 +1431,30 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus
   .stats .stat-hint { grid-column: 1 / -1; }
   .card-head h2, .card > h2 { font-size: 17px; line-height: 24px; }
 }
+
+/* Central de dados (10/10/2026) */
+.dc-tabs { margin-bottom: 16px; }
+.dc-flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; counter-reset: dcf; }
+.dc-flow li { counter-increment: dcf; position: relative; display: grid; gap: 2px; padding: 12px 14px 12px 40px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); font-size: 13px; }
+.dc-flow li::before { content: counter(dcf); position: absolute; left: 12px; top: 12px; width: 20px; height: 20px; border-radius: 50%; background: var(--text); color: var(--bg); font: 600 11px/20px var(--font-body); text-align: center; }
+.dc-flow li span, .dc-steps li span { color: var(--muted); font-size: 12.5px; }
+.dc-steps { margin: 0; padding-left: 22px; display: grid; gap: 10px; }
+.dc-steps li { display: grid; gap: 2px; font-size: 13.5px; }
+.dc-group td { background: var(--neutral-bg); }
+.dc-sub { margin: 18px 0 8px; }
+.dc-indent { padding-left: 24px !important; }
+.dc-old td { color: var(--muted); }
+.dc-layouts { display: grid; gap: 8px; }
+.dc-layout { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; background: var(--surface); }
+.dc-layout summary { cursor: pointer; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; align-items: baseline; }
+.dc-layout[open] summary { margin-bottom: 10px; }
+.dc-layout-title { font-weight: 600; font-size: 14px; }
+.dc-dl { display: grid; grid-template-columns: 80px 1fr; gap: 6px 12px; margin: 0 0 10px; font-size: 13px; }
+.dc-dl dt { color: var(--muted); font-weight: 600; }
+.dc-dl dd { margin: 0; }
+.dc-toolbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.dc-search { flex: 1 1 260px; max-width: 420px; }
+.dc-params td { vertical-align: top; }
+.dc-json { max-height: 260px; overflow: auto; background: var(--neutral-bg); padding: 8px; border-radius: var(--radius-sm); font-size: 11.5px; white-space: pre-wrap; word-break: break-word; }
+.dc-detail { max-width: 420px; word-break: break-word; }
+@media (max-width: 640px) { .dc-dl { grid-template-columns: 1fr; } }

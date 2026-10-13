@@ -46,6 +46,13 @@ def require_pj(user: User = Depends(get_current_user)) -> User:
     return user
 
 
+def require_data_control(user: User = Depends(get_current_user)) -> User:
+    """Central de dados: só quem tem o acesso pessoal "Central de dados" (users.can_control_data)."""
+    if not user.can_control_data:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sem acesso à Central de dados")
+    return user
+
+
 def is_global(user: User) -> bool:
     return bool(user.role_codes & {Role.ADMIN, Role.CONTROLLER})
 

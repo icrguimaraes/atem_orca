@@ -19,6 +19,8 @@ class User(TimestampMixin, Base):
     # vale para qualquer perfil (um Administrador sem o acesso pode concedê-lo, mas não vê os dados antes disso)
     can_view_pj: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     can_view_all_pj: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Central de dados (migração 0014): fontes, etapas do ETL e parâmetros — acesso pessoal, não do perfil
+    can_control_data: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     roles: Mapped[list["UserRole"]] = relationship(cascade="all, delete-orphan", lazy="selectin")
     scopes: Mapped[list["UserScope"]] = relationship(cascade="all, delete-orphan", lazy="selectin")

@@ -8,6 +8,7 @@ const Analytics = lazy(() => import("./pages/Analytics"));
 // Painel (Plotly): só baixa o Plotly quando aberto
 const Painel2 = lazy(() => import("./pages/Painel2"));
 import Audit from "./pages/Audit";
+import ControlCenter from "./pages/ControlCenter";
 import ContratosPj from "./pages/ContratosPj";
 import BaseStatus from "./pages/BaseStatus";
 import CapexCostCenter from "./pages/CapexCostCenter";
@@ -29,12 +30,13 @@ import Structure from "./pages/Structure";
 import Trace from "./pages/Trace";
 import Users from "./pages/Users";
 
-function Protected({ children, roles, pj }: { children: ReactNode; roles?: string[]; pj?: boolean }) {
+function Protected({ children, roles, pj, data }: { children: ReactNode; roles?: string[]; pj?: boolean; data?: boolean }) {
   const { user, loading, can } = useAuth();
   if (loading) return <Loading />;
   if (!user) return <Navigate to="/login" replace />;
   if (roles && !can(...roles)) return <Navigate to="/" replace />;
   if (pj && (user.pj_access ?? "NONE") === "NONE") return <Navigate to="/" replace />; // Contratos PJ: flag do usuário
+  if (data && !user.can_control_data) return <Navigate to="/" replace />; // Central de dados: acesso pessoal
   return <>{children}</>;
 }
 
@@ -78,6 +80,7 @@ export default function App() {
             <Route path="premissas-pessoal" element={<Protected roles={["CONTROLLER"]}><PersonnelPremises /></Protected>} />
             <Route path="usuarios" element={<Protected roles={["CONTROLLER"]}><Users /></Protected>} />
             <Route path="auditoria" element={<Protected roles={["CONTROLLER"]}><Audit /></Protected>} />
+            <Route path="central" element={<Protected data><ControlCenter /></Protected>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

@@ -61,6 +61,11 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   usuário, não por perfil: `users.can_view_pj`/`can_view_all_pj` ("Vê contratos PJ: Não / Da área / Todos" no editor de Usuários; `/auth/me` expõe `pj_access`); "Da área" = CCs das áreas dos CCs da própria
   pessoa, mesmo com perfil global. Toda rota exige `core.deps.require_pj`; auditoria sem valores em R$ e escondida de quem
   não tem acesso (`api/v1/audit_logs.py`).
+- Central de dados (10/10/2026, "o Power Query do sistema"): `pages/ControlCenter.tsx` (`/central`) sobre `services/control.py`
+  + `api/v1/control.py` — linhagem de cada número (fontes vigentes, componentes do orçamento, versões), fontes com histórico,
+  etapas do ETL por layout (`control.LAYOUTS` + colunas aceitas lidas dos `*_ALIASES` dos parsers), parâmetros do ciclo com
+  motivo obrigatório (reusa `cycles.apply_parameter`) e histórico. Acesso pessoal `users.can_control_data` (migração 0014;
+  `core.deps.require_data_control`), concedido só por quem já o tem. Novo layout de importação entra também em `control.LAYOUTS`.
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.
