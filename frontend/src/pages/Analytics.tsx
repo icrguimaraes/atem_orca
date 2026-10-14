@@ -287,8 +287,8 @@ export default function Analytics() {
         <Stat label={k.approved_pct.label} value={k.approved_pct.compact} hint={k.approved_pct.hint} tone={k.approved_pct.value && Number(k.approved_pct.value) >= 1 ? "good" : undefined} />
       </div>
 
-      <Card title={`Evolução mensal · Realizado ${y.prev} × Orçado ${y.ref} × Orçamento ${y.target}`}>
-        {d.figures.monthly.data.length ? <PlotlyChart figure={d.figures.monthly} height={340} ariaLabel="Evolução mensal" /> : <Empty>Sem valores mensais.</Empty>}
+      <Card title={`Comparativo mensal · Realizado ${y.prev} × Orçado ${y.ref} × Orçamento ${y.target}`}>
+        {d.figures.monthly.data.length ? <PlotlyChart figure={d.figures.monthly} height={360} ariaLabel="Comparativo mensal" /> : <Empty>Sem valores mensais.</Empty>}
       </Card>
 
       <EvolutionCard query={evolutionQs} />

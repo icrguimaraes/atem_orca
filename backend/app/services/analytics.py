@@ -120,45 +120,59 @@ def _extreme_labels(values: list[float]) -> tuple[list[str], list[str]]:
 
 
 def fig_monthly(base: Base) -> dict:
+    """Comparativo mensal em colunas lado a lado, igual ao do Painel (14/10/2026: as linhas não ajudavam a ler):
+    ano anterior roxo, referência azul, orçamento verde, com o valor em cada coluna e sem eixo de valores."""
+    # import tardio: painel_figures importa _fig/_layout deste módulo
+    from app.services.painel_figures import FULL_LABELS, INK, LEGEND, _headroom, _note_unit, _short
+
     rows = {r["id"]: r for r in group(base, "month")}
     series = [
         s
         for s in (
-            ("prev", base.labels["prev"], COLOR_PAST, "dot"),
-            ("ref", base.labels["ref"], COLOR_REF, "dash"),
-            ("target", base.labels["target"], COLOR_TARGET, "solid"),
+            ("prev", base.labels["prev"], COLOR_PAST),
+            ("ref", base.labels["ref"], COLOR_REF),
+            ("target", base.labels["target"], COLOR_TARGET),
         )
         if s[1]
     ]
-    data = []
-    all_values = []
-    for attr, name, color, dash in series:
+    data, everything = [], []
+    for attr, name, color in series:
         values = [float(rows.get(m, {}).get(attr, ZERO)) for m in range(1, 13)]
         if not any(values):
             continue
-        all_values += values
-        text, textposition = _extreme_labels(values)
+        everything += values
         data.append(
-            go.Scatter(
+            go.Bar(
                 x=list(MONTH_NAMES),
                 y=values,
                 name=name,
-                mode="lines+markers+text",
-                text=text,
-                textposition=textposition,
-                textfont={"size": 11, "color": color},
+                offsetgroup=attr,
+                marker={"color": color, "cornerradius": 4},
+                text=[_short(v) if v > 0 else "" for v in values],
+                textposition="outside",
+                # numérico completo: na vertical, senão os rótulos de 36 colunas se sobrepõem
+                textangle=-90 if FULL_LABELS.get() else 0,
+                constraintext="none",
                 cliponaxis=False,
-                line={"color": color, "width": 2.5, "dash": dash},
-                marker={"size": 7},
+                textfont={"size": 11, "color": INK.get(color, color)},
                 customdata=[fmt_money(v) for v in values],
-                hovertemplate="%{x} · " + name + ": <b>%{customdata}</b><extra></extra>",
+                hovertemplate=name + ": <b>%{customdata}</b><extra></extra>",
             )
         )
     layout = _layout(
-        hovermode="x unified", yaxis=_money_axis(all_values), xaxis={"showgrid": False, "automargin": True}
+        barmode="group",
+        bargap=0.16,
+        bargroupgap=0.04,
+        hovermode="x unified",
+        showlegend=True,
+        legend=LEGEND,
+        yaxis={"visible": False, "range": [0, (max(everything + [0.0]) or 1) * _headroom()], "fixedrange": True},
+        xaxis={"showgrid": False, "automargin": True, "fixedrange": True},
+        margin={"l": 8, "r": 8, "t": 36, "b": 8},
     )
-    layout["dragmode"] = "zoom"
-    return _fig(data, layout)
+    fig = _fig(data, layout)
+    _note_unit(fig)
+    return fig
 
 
 def fig_annual(base: Base, dim: str, limit: int = 12) -> dict:
