@@ -84,7 +84,7 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   Versão leve para outro computador da rede (sem o projeto): `scripts/sap-ksb1-leve/` (um arquivo `sap_ksb1.py` + `.cmd` + LEIA-ME;
   só `hdbcli` e `openpyxl`). Duplica os nomes de coluna de `KSB1_ALIASES`/`hana.TECHNICAL`; `tests/test_sap.py` falha se divergirem.
 - Projetos (14/10/2026): `pages/Projects.tsx` (`/projetos`) + `pages/ProjectDetail.tsx` (`/projetos/:id`) sobre `services/projects.py`
-  + `api/v1/projects.py` (migração 0015). Números **lidos do sistema**, nunca digitados nem importados: realizado/projeção/orçado de
+  (+ `services/project_numbers.py`, números/farol/figura) + `api/v1/projects.py` (migração 0015). Números **lidos do sistema**, nunca digitados nem importados: realizado/projeção/orçado de
   referência pelos vínculos CC × conta (`ProjectFactKey`; ex.: TDC 600561 = VP de Controladoria × 6090201002) e orçamento do ciclo
   pelas solicitações de CAPEX vinculadas (`ProjectCapexLink`, CC + "CPX-001" na versão vigente). O orçamento não é alterado.
   Acesso: Controladoria cria/exclui; responsável (`owner_user_id`) e gestor do CC responsável veem e editam. Marcos, riscos, links e
