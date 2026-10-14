@@ -146,11 +146,10 @@ def _base(db: Session, user: User, p: Project) -> dict:
 
 
 def list_projects(db: Session, user: User) -> dict:
-    items = []
-    for p in db.scalars(select(Project).order_by(Project.code)):
-        if can_view(db, user, p):
-            items.append(_base(db, user, p) | {"summary": summary(db, p)})
-    return {"items": items, "can_create": is_global(user)}
+    """Carteira: projetos visíveis + indicadores, Gantt, realizado × orçado e curva S (`project_portfolio`)."""
+    from app.services.project_portfolio import portfolio
+
+    return portfolio(db, user, _base, can_view)
 
 
 def detail(db: Session, user: User, project_id: int) -> dict:

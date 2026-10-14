@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { Alert, Badge, Empty, Loading, Modal, PageHeader, Stat, useLoad } from "../components/ui";
+import { PlotlyChart, type Figure } from "../components/PlotlyChart";
+import { Alert, Badge, Card, Empty, Loading, Modal, PageHeader, Stat, lines, useLoad } from "../components/ui";
 import { fmtDay, fmtInt, fmtMoney, type Tone } from "../labels";
 
 /* Projetos (14/10/2026): cadastro completo de cada projeto (TDC, Reforma Tributária…) com os números lidos do sistema
@@ -26,57 +27,160 @@ export const LIGHT_TONE: Record<ProjectSummary["light"], Tone> = { good: "good",
 
 export const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 0 })}%`);
 
+interface PortfolioItem extends ProjectBase {
+  next_milestone: { title: string; due_date: string | null; progress_pct: number } | null;
+  milestones: number; late_milestones: number; open_high_risks: number;
+  monthly: number[]; monthly_projection: number[];
+}
+
+interface Portfolio {
+  items: PortfolioItem[]; can_create: boolean; months?: string[];
+  kpis: null | {
+    ref_year: number; target_year: number; active: number; count: number; actual_all: string; actual_year: string;
+    projection_year: string; budget_year: string; cycle_budget: string; late_milestones: number; open_high_risks: number; warnings: number;
+  };
+  figures: null | { gantt: Figure; compare: Figure; scurve: Figure };
+}
+
+/** Barrinha de 0–100% (gasto, prazo, marcos); o gasto fica vermelho quando passa do prazo ou do orçado. */
+function Meter({ label, value, tone }: { label: string; value: number | null; tone: "bad" | "budget" | "time" }) {
+  const w = value === null ? 0 : Math.max(0, Math.min(100, value * 100));
+  return (
+    <div className="meter">
+      <div className="meter-head"><span>{label}</span><strong>{pct(value)}</strong></div>
+      <div className="meter-track"><div className={`meter-fill meter-${tone}`} style={{ width: `${w}%` }} /></div>
+    </div>
+  );
+}
+
+/** Mini-gráfico do realizado mês a mês (azul) e da projeção (vermelho) no ano de referência. */
+function Spark({ actual, projection, months }: { actual: number[]; projection: number[]; months: string[] }) {
+  const max = Math.max(1, ...actual.map((a, i) => a + (projection[i] ?? 0)));
+  const w = 12, gap = 4, h = 40;
+  return (
+    <svg className="spark" viewBox={`0 0 ${12 * (w + gap)} ${h}`} preserveAspectRatio="none" role="img" aria-label="Realizado mês a mês">
+      {actual.map((a, i) => {
+        const p = projection[i] ?? 0;
+        const ha = (a / max) * (h - 2);
+        const hp = (p / max) * (h - 2);
+        return (
+          <g key={i}>
+            <title>{`${months[i] ?? i + 1}: ${fmtMoney(a)}${p ? ` + projeção ${fmtMoney(p)}` : ""}`}</title>
+            {a > 0 && <rect x={i * (w + gap)} y={h - ha} width={w} height={ha} rx={2} className="spark-actual" />}
+            {p > 0 && <rect x={i * (w + gap)} y={h - ha - hp} width={w} height={hp} rx={2} className="spark-proj" />}
+            {a <= 0 && p <= 0 && <rect x={i * (w + gap)} y={h - 2} width={w} height={2} className="spark-empty" />}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export default function Projects() {
-  const { data, error, reload } = useLoad(() => api<{ items: ProjectBase[]; can_create: boolean }>("/projects"));
+  const navigate = useNavigate();
+  const { data, error, reload } = useLoad(() => api<Portfolio>("/projects"));
   const [creating, setCreating] = useState(false);
   if (error) return <Alert>{error}</Alert>;
   if (!data) return <Loading />;
-  const items = data.items;
-  const y = items[0]?.summary.ref_year;
-  const sum = (f: (p: ProjectBase) => string) => items.reduce((acc, p) => acc + Number(f(p)), 0);
+  const { items, kpis: k, figures: f } = data;
+  const y = k?.ref_year;
   return (
     <>
       <PageHeader
         title="Projetos"
-        subtitle="Cadastro, cronograma, riscos e números de cada projeto. Realizado e orçado vêm do sistema (centro de custo × conta e CAPEX do ciclo); o orçamento não é alterado aqui."
+        subtitle="Carteira de projetos: cronograma, realizado × orçado e situação de cada um. Os números vêm do sistema (centro de custo × conta e CAPEX do ciclo); o orçamento não é alterado aqui."
         actions={data.can_create && <button type="button" className="btn btn-primary" onClick={() => setCreating(true)}>Novo projeto</button>}
       />
-      {items.length > 0 && (
-        <div className="stats">
-          <Stat label="Projetos" value={fmtInt(items.length)} hint={`${items.filter((p) => p.status === "IN_PROGRESS").length} em andamento`} />
-          <Stat label={`Realizado ${y}`} value={fmtMoney(sum((p) => p.summary.actual_year))} hint="lançamentos do sistema" />
-          <Stat label={`Orçado ${y}`} value={fmtMoney(sum((p) => p.summary.budget_year))} tone="budget" />
-          <Stat label={`Orçamento ${items[0].summary.target_year}`} value={fmtMoney(sum((p) => p.summary.cycle_budget))} tone="budget" hint="CAPEX do ciclo vinculado" />
-        </div>
-      )}
-      {items.length === 0 ? (
+      {!k || !f ? (
         <Empty>{data.can_create ? 'Nenhum projeto ainda. Use "Novo projeto" e vincule o centro de custo × conta do realizado e a solicitação de CAPEX do ciclo.' : "Nenhum projeto sob a sua responsabilidade."}</Empty>
       ) : (
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Projeto</th><th>Situação</th><th>Farol</th><th className="right">Realizado {y}</th><th className="right">Orçado {y}</th>
-                <th className="right">% gasto</th><th className="right">% prazo</th><th className="right">Orçamento {items[0].summary.target_year}</th><th>Prazo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((p) => (
-                <tr key={p.id}>
-                  <td className="project-name"><Link to={`/projetos/${p.id}`}><strong>{p.code}</strong> · {p.name}</Link>{p.owner && <div className="muted small">{p.owner}</div>}</td>
-                  <td>{p.status_label}</td>
-                  <td><Badge tone={LIGHT_TONE[p.summary.light]}>{p.summary.light_label}</Badge>{p.summary.warnings.length > 0 && <div className="muted small">{p.summary.warnings.length} apontamento(s)</div>}</td>
-                  <td className="right">{fmtMoney(p.summary.actual_year)}</td>
-                  <td className="right">{Number(p.summary.budget_year) ? fmtMoney(p.summary.budget_year) : "—"}</td>
-                  <td className="right">{pct(p.summary.spent_pct)}</td>
-                  <td className="right">{pct(p.summary.time_pct)}</td>
-                  <td className="right">{Number(p.summary.cycle_budget) ? fmtMoney(p.summary.cycle_budget) : "—"}</td>
-                  <td className="small">{fmtDay(p.start_actual ?? p.start_planned)} a {fmtDay(p.end_actual ?? p.end_planned)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="stats">
+            <Stat label="Projetos" value={fmtInt(k.count)} hint={`${k.active} em andamento`} />
+            <Stat label="Realizado acumulado" value={fmtMoney(k.actual_all)} hint={lines(`${y}: ${fmtMoney(k.actual_year)}`, Number(k.projection_year) ? `+ projeção ${fmtMoney(k.projection_year)}` : null)} />
+            <Stat label={`Orçado ${y}`} tone="budget" value={Number(k.budget_year) ? fmtMoney(k.budget_year) : "—"} hint={Number(k.budget_year) ? undefined : "sem orçado no sistema"} />
+            <Stat label={`Orçamento ${k.target_year}`} tone="budget" value={fmtMoney(k.cycle_budget)} hint="CAPEX do ciclo vinculado" />
+            <Stat label="Pontos de atenção" tone={k.late_milestones || k.open_high_risks ? "warn" : undefined} value={fmtInt(k.warnings)} hint={lines(`${k.late_milestones} marco(s) atrasado(s)`, `${k.open_high_risks} risco(s) alto(s) em aberto`)} />
+          </div>
+
+          <Card title="Cronograma">
+            <PlotlyChart figure={f.gantt} height={Math.max(200, 70 * items.length + 100)} ariaLabel="Cronograma dos projetos" />
+            {items.some((p) => !p.end_planned && !p.end_actual) && <p className="muted small">Sem término previsto, a barra vai só até hoje, em tom claro. Preencha as datas e os marcos em cada projeto.</p>}
+          </Card>
+
+          <div className="grid-2">
+            <Card title={`Realizado × orçado por projeto`}>
+              <PlotlyChart figure={f.compare} height={320} ariaLabel="Realizado e orçado por projeto" />
+            </Card>
+            <Card title="Curva S · realizado acumulado">
+              <PlotlyChart figure={f.scurve} height={320} ariaLabel="Realizado acumulado por projeto" />
+              <p className="muted small">Linha cheia: realizado. Tracejada: com a projeção do gestor até dezembro.</p>
+            </Card>
+          </div>
+
+          <div className="project-cards">
+            {items.map((p) => {
+              const s = p.summary;
+              const ahead = s.spent_pct !== null && s.time_pct !== null && s.spent_pct > s.time_pct + 0.1;
+              return (
+                <article key={p.id} className="project-card" onClick={() => navigate(`/projetos/${p.id}`)}>
+                  <header>
+                    <div>
+                      <Link to={`/projetos/${p.id}`} onClick={(e) => e.stopPropagation()}><strong>{p.code}</strong> · {p.name}</Link>
+                      <div className="muted small">{p.status_label}{p.owner ? ` · ${p.owner}` : ""}{p.cost_center ? ` · ${p.cost_center}` : ""}</div>
+                    </div>
+                    <Badge tone={LIGHT_TONE[s.light]}>{s.light_label}</Badge>
+                  </header>
+                  <div className="project-card-numbers">
+                    <div><span className="muted small">Realizado {y}</span><strong>{fmtMoney(s.actual_year)}</strong></div>
+                    <div><span className="muted small">Orçado {y}</span><strong>{Number(s.budget_year) ? fmtMoney(s.budget_year) : "—"}</strong></div>
+                    <div><span className="muted small">Orçamento {s.target_year}</span><strong>{Number(s.cycle_budget) ? fmtMoney(s.cycle_budget) : "—"}</strong></div>
+                  </div>
+                  <Spark actual={p.monthly} projection={p.monthly_projection} months={data.months ?? []} />
+                  <div className="project-card-meters">
+                    <Meter label="Gasto do orçado" value={s.spent_pct} tone={ahead || (s.spent_pct ?? 0) > 1 ? "bad" : "budget"} />
+                    <Meter label="Prazo decorrido" value={s.time_pct} tone="time" />
+                    <Meter label="Marcos concluídos" value={s.progress_pct === null ? null : s.progress_pct / 100} tone="time" />
+                  </div>
+                  <footer className="small">
+                    {p.next_milestone
+                      ? <>Próximo marco: <strong>{p.next_milestone.title}</strong> · {fmtDay(p.next_milestone.due_date)}</>
+                      : <span className="muted">{p.milestones ? "Todos os marcos concluídos" : "Sem marcos cadastrados"}</span>}
+                    {s.warnings.length > 0 && <ul className="plain-list project-card-warn">{s.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
+                  </footer>
+                </article>
+              );
+            })}
+          </div>
+
+          <Card title="Todos os projetos">
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Projeto</th><th>Situação</th><th>Farol</th><th className="right">Realizado {y}</th><th className="right">Orçado {y}</th>
+                    <th className="right">% gasto</th><th className="right">% prazo</th><th className="right">Orçamento {k.target_year}</th><th>Prazo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((p) => (
+                    <tr key={p.id}>
+                      <td className="project-name"><Link to={`/projetos/${p.id}`}><strong>{p.code}</strong> · {p.name}</Link></td>
+                      <td>{p.status_label}</td>
+                      <td><Badge tone={LIGHT_TONE[p.summary.light]}>{p.summary.light_label}</Badge></td>
+                      <td className="right">{fmtMoney(p.summary.actual_year)}</td>
+                      <td className="right">{Number(p.summary.budget_year) ? fmtMoney(p.summary.budget_year) : "—"}</td>
+                      <td className="right">{pct(p.summary.spent_pct)}</td>
+                      <td className="right">{pct(p.summary.time_pct)}</td>
+                      <td className="right">{Number(p.summary.cycle_budget) ? fmtMoney(p.summary.cycle_budget) : "—"}</td>
+                      <td className="small">{fmtDay(p.start_actual ?? p.start_planned)} a {fmtDay(p.end_actual ?? p.end_planned)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
       )}
       {creating && <ProjectForm onClose={() => setCreating(false)} onSaved={reload} />}
     </>

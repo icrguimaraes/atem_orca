@@ -177,3 +177,34 @@ def test_children_access_and_audit(client, admin, db):
         select(AuditLog.action).where(AuditLog.entity_type == "project", AuditLog.entity_id == str(pid))
     ).all()
     assert actions.count("CREATE") == 4 and actions[-1] == "DELETE"
+
+
+def test_portfolio_summary_gantt_compare_and_scurve(client, admin, db):
+    ref, target, cc, cc27, acc = _setup(db)
+    a = client.post(
+        P,
+        headers=admin,
+        json={
+            "code": "600561",
+            "name": "TDC",
+            "start_planned": f"{ref}-01-01",
+            "end_planned": f"{target}-12-31",
+            "fact_keys": [{"cost_center_id": cc.id, "account_id": acc.id}],
+            "capex_links": [{"cost_center_id": cc27.id, "capex_code": "CPX-001"}],
+        },
+    ).json()
+    client.post(f"{P}/{a['id']}/milestones", headers=admin, json={"title": "Go-live", "due_date": "2020-01-31"})
+    client.post(P, headers=admin, json={"code": "600801", "name": "Reforma", "start_planned": f"{ref}-02-01"})
+    d = client.get(P, headers=admin).json()
+    k = d["kpis"]
+    assert k["count"] == 2 and k["actual_year"] == "488985.19" and k["cycle_budget"] == "668000.00"
+    assert k["late_milestones"] == 1 and d["items"][0]["next_milestone"]["title"] == "Go-live"
+    assert d["items"][0]["monthly"][0] == 110233.94 and d["items"][0]["monthly_projection"][10] == 82903.76
+    gantt = d["figures"]["gantt"]["data"]
+    assert gantt[0]["name"] == "Prazo" and len(gantt[0]["y"]) == 2  # sem término: barra até hoje
+    assert gantt[0]["text"][1] == "sem término previsto"
+    assert any(t["type"] == "scatter" and t["name"] == "Marco atrasado" and t["x"] for t in gantt)
+    names = [t["name"] for t in d["figures"]["compare"]["data"]]
+    assert names == [f"Realizado {ref}", "Projeção do gestor", f"Orçado {ref}", f"Orçamento {target}"]
+    curve = d["figures"]["scurve"]["data"]
+    assert curve[0]["y"][-1] == 488985.19 and curve[1]["y"][-1] == 571888.95  # acumulado e com a projeção

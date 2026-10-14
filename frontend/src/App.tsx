@@ -9,6 +9,7 @@ const Analytics = lazy(() => import("./pages/Analytics"));
 const Painel2 = lazy(() => import("./pages/Painel2"));
 // Projeto: o comparativo mensal é Plotly
 const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
+const Projects = lazy(() => import("./pages/Projects"));
 import Audit from "./pages/Audit";
 import ControlCenter from "./pages/ControlCenter";
 import ContratosPj from "./pages/ContratosPj";
@@ -28,7 +29,6 @@ import OpexCostCenter from "./pages/OpexCostCenter";
 import PersonnelCostCenter from "./pages/PersonnelCostCenter";
 import PersonnelPremises from "./pages/PersonnelPremises";
 import PersonnelSimulation from "./pages/PersonnelSimulation";
-import Projects from "./pages/Projects";
 import Structure from "./pages/Structure";
 import Trace from "./pages/Trace";
 import Users from "./pages/Users";
@@ -73,7 +73,7 @@ export default function App() {
             <Route path="apontamentos" element={<Findings />} />
             <Route path="justificativas" element={<Justifications />} />
             <Route path="perguntas" element={<Questions />} />
-            <Route path="projetos" element={<Projects />} />
+            <Route path="projetos" element={<Suspense fallback={<Loading />}><Projects /></Suspense>} />
             <Route path="projetos/:id" element={<Suspense fallback={<Loading />}><ProjectDetail /></Suspense>} />
             <Route path="pj" element={<Protected pj><ContratosPj /></Protected>} />
             <Route path="base" element={<Protected roles={["CONTROLLER"]}><BaseStatus /></Protected>} />
