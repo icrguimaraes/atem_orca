@@ -7,6 +7,8 @@ import { Loading } from "./components/ui";
 const Analytics = lazy(() => import("./pages/Analytics"));
 // Painel (Plotly): só baixa o Plotly quando aberto
 const Painel2 = lazy(() => import("./pages/Painel2"));
+// Projeto: o comparativo mensal é Plotly
+const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
 import Audit from "./pages/Audit";
 import ControlCenter from "./pages/ControlCenter";
 import ContratosPj from "./pages/ContratosPj";
@@ -26,6 +28,7 @@ import OpexCostCenter from "./pages/OpexCostCenter";
 import PersonnelCostCenter from "./pages/PersonnelCostCenter";
 import PersonnelPremises from "./pages/PersonnelPremises";
 import PersonnelSimulation from "./pages/PersonnelSimulation";
+import Projects from "./pages/Projects";
 import Structure from "./pages/Structure";
 import Trace from "./pages/Trace";
 import Users from "./pages/Users";
@@ -70,6 +73,8 @@ export default function App() {
             <Route path="apontamentos" element={<Findings />} />
             <Route path="justificativas" element={<Justifications />} />
             <Route path="perguntas" element={<Questions />} />
+            <Route path="projetos" element={<Projects />} />
+            <Route path="projetos/:id" element={<Suspense fallback={<Loading />}><ProjectDetail /></Suspense>} />
             <Route path="pj" element={<Protected pj><ContratosPj /></Protected>} />
             <Route path="base" element={<Protected roles={["CONTROLLER"]}><BaseStatus /></Protected>} />
             <Route path="validacao" element={<Protected roles={["CONTROLLER"]}><Validation /></Protected>} />

@@ -32,6 +32,7 @@ const ICON = {
   base: "M4 19h16M7 16v-5M12 16V7M17 16v-8M4 5h4",
   auditoria: "M12 3 5 6v5c0 4.5 3 8.3 7 9.5 4-1.2 7-5 7-9.5V6l-7-3zM9 12l2 2 4-4",
   pj: "M4 7h16v12H4zM9 7V4h6v3M4 12h16M12 11v3",
+  projetos: "M3 6h7l2 2h9v11H3zM8 13h8M8 16h5",
   senha: "M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0 3 3L22 7l-3-3m-3.5 3.5L19 4",
   sair: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
   mais: "M5 12h.01M12 12h.01M19 12h.01",
@@ -62,6 +63,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
     items: [
       { to: "/justificativas", label: "Justificativas", icon: ICON.justificativas },
       { to: "/perguntas", label: "Perguntas", icon: ICON.perguntas },
+      { to: "/projetos", label: "Projetos", icon: ICON.projetos },
       { to: "/apontamentos", label: "Apontamentos", icon: ICON.apontamentos },
       { to: "/pj", label: "Contratos PJ", pj: true, icon: ICON.pj },
     ],

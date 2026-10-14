@@ -1500,3 +1500,12 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus
 
 /* legenda da unidade (modo R$ mil): os valores das tabelas ficam só com o número */
 .unit-note { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+/* Projetos (14/10/2026) */
+.plain-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.form-section { font-size: 13px; margin: 18px 0 4px; }
+.chip-list { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-list .filter-chip button { border: 0; background: none; cursor: pointer; color: var(--muted); }
+.form-add { align-self: end; min-height: 48px; }
+.pre-wrap { white-space: pre-wrap; }
+.project-name { min-width: 240px; }

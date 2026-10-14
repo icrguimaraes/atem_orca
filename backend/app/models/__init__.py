@@ -42,4 +42,13 @@ from app.models.personnel import (
     ScenarioMultiplier,
 )
 from app.models.pj import PjContract, PjPhoto
+from app.models.project import (
+    Project,
+    ProjectCapexLink,
+    ProjectFactKey,
+    ProjectLink,
+    ProjectMilestone,
+    ProjectRisk,
+    ProjectUpdate,
+)
 from app.models.security import RoleDef, User, UserRole, UserScope
