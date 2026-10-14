@@ -15,7 +15,7 @@ from app.core.deps import is_global
 from app.models import Project, User
 from app.services.analytics import _fig, _layout
 from app.services.analytics_base import fmt_money, short
-from app.services.project_numbers import ZERO, Numbers, _sum, numbers, summary
+from app.services.project_numbers import ZERO, Numbers, _sum, chart_years, figure_from, merge, numbers, summary
 
 MONTHS_SHORT = ("jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez")
 
@@ -369,3 +369,15 @@ def portfolio(db: Session, user: User, base_fn, can_view_fn, today: date | None 
     }
     out["months"] = list(MONTHS_SHORT)
     return out
+
+
+def chart(db: Session, user: User, can_view_fn, project_id: int | None, year: int | None, view: str) -> dict:
+    """Gráfico de colunas da carteira com o filtro de projeto: um projeto ou a soma de todos os visíveis."""
+    projects = [p for p in db.scalars(select(Project).order_by(Project.code)) if can_view_fn(db, user, p)]
+    if project_id:
+        projects = [p for p in projects if p.id == project_id]
+    if not projects:
+        return {"figure": None, "years": [], "year": year}
+    n = merge([numbers(db, p) for p in projects])
+    year = year or n.ref_year
+    return {"figure": figure_from(n, year, view), "years": chart_years(n), "year": year, "ref_year": n.ref_year}

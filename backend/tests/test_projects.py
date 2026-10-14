@@ -208,3 +208,11 @@ def test_portfolio_summary_gantt_compare_and_scurve(client, admin, db):
     assert names == [f"Realizado {ref}", "Projeção do gestor", f"Orçado {ref}", f"Orçamento {target}"]
     curve = d["figures"]["scurve"]["data"]
     assert curve[0]["y"][-1] == 488985.19 and curve[1]["y"][-1] == 571888.95  # acumulado e com a projeção
+    # gráfico com filtro de projeto: soma de todos, um projeto, por mês e por ano
+    allm = client.get(f"{P}/chart", headers=admin).json()
+    assert allm["year"] == ref and target in allm["years"]
+    assert [t["name"] for t in allm["figure"]["data"]] == [f"Realizado {ref}", "Projeção do gestor", f"Orçado {ref}"]
+    one = client.get(f"{P}/chart?project_id={a['id']}&year={target}", headers=admin).json()
+    assert one["figure"]["data"][0]["y"][0] == 600000.0
+    by_year = client.get(f"{P}/chart?view=year", headers=admin).json()["figure"]["data"]
+    assert by_year[0]["x"] == [str(ref), str(target)] and by_year[2]["y"] == [400000.0, 668000.0]

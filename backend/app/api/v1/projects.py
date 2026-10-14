@@ -89,6 +89,17 @@ def options(db: Session = Depends(get_db), user: User = Depends(get_current_user
     return S.options(db, user)
 
 
+@router.get("/chart", summary="Colunas realizado × orçado por mês (ou por ano) de um projeto ou de todos")
+def chart(
+    project_id: int | None = None,
+    year: int | None = None,
+    view: Literal["month", "year"] = "month",
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return S.chart(db, user, project_id, year, view)
+
+
 @router.post("", status_code=201, summary="Novo projeto (Controladoria)")
 def create(body: ProjectIn, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return _call(S.create, db, user, body.model_dump(exclude_unset=True, mode="python"), client_ip(request))

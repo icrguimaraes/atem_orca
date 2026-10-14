@@ -1533,3 +1533,6 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus
 .spark-proj { fill: #e24b4a; }
 .spark-empty { fill: var(--border); }
 @media (max-width: 860px) { .project-cards { grid-template-columns: 1fr; } .project-card-numbers { grid-template-columns: 1fr 1fr; } }
+
+.chart-filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: flex-end; }
+.chart-filters select { min-height: 32px; padding: 3px 32px 3px 10px; font-size: 13px; max-width: 280px; }

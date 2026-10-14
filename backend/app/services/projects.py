@@ -152,6 +152,12 @@ def list_projects(db: Session, user: User) -> dict:
     return portfolio(db, user, _base, can_view)
 
 
+def chart(db: Session, user: User, project_id: int | None, year: int | None, view: str) -> dict:
+    from app.services.project_portfolio import chart as portfolio_chart
+
+    return portfolio_chart(db, user, can_view, project_id, year, view)
+
+
 def detail(db: Session, user: User, project_id: int) -> dict:
     p = _get(db, user, project_id)
     n = numbers(db, p)

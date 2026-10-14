@@ -76,6 +76,48 @@ function Spark({ actual, projection, months }: { actual: number[]; projection: n
   );
 }
 
+/** Realizado × orçado em colunas, por mês de um ano ou por ano, com o filtro de projeto acima (todos = soma). */
+function BudgetChart({ items }: { items: ProjectBase[] }) {
+  const [project, setProject] = useState("");
+  const [year, setYear] = useState<number | null>(null);
+  const [view, setView] = useState<"month" | "year">("month");
+  const q = new URLSearchParams({ view });
+  if (project) q.set("project_id", project);
+  if (year) q.set("year", String(year));
+  const { data, loading } = useLoad(
+    () => api<{ figure: Figure | null; years: number[]; year: number }>(`/projects/chart?${q.toString()}`),
+    [project, year, view],
+  );
+  const shown = data?.year ?? year;
+  return (
+    <Card
+      title="Realizado × orçado"
+      actions={
+        <div className="chart-filters">
+          <label className="sr-only" htmlFor="chart-project">Projeto</label>
+          <select id="chart-project" value={project} onChange={(e) => setProject(e.target.value)}>
+            <option value="">Todos os projetos</option>
+            {items.map((p) => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
+          </select>
+          <div className="seg-tabs seg-mini" role="group" aria-label="Período">
+            <button type="button" className={view === "year" ? "active" : ""} onClick={() => setView("year")}>Por ano</button>
+            {(data?.years ?? []).map((y) => (
+              <button key={y} type="button" className={view === "month" && y === shown ? "active" : ""} onClick={() => { setView("month"); setYear(y); }}>{y}</button>
+            ))}
+          </div>
+        </div>
+      }
+    >
+      <div style={{ opacity: loading ? 0.6 : 1 }}>
+        {data?.figure && data.figure.data.length
+          ? <PlotlyChart figure={data.figure} height={340} ariaLabel="Realizado e orçado do projeto" />
+          : data && <Empty>Sem valores neste recorte.</Empty>}
+      </div>
+      <p className="muted small">Azul: realizado · vermelho: projeção do gestor · verde: orçado (ano carregado) ou orçamento do ciclo (CAPEX vinculado).</p>
+    </Card>
+  );
+}
+
 export default function Projects() {
   const navigate = useNavigate();
   const { data, error, reload } = useLoad(() => api<Portfolio>("/projects"));
@@ -102,6 +144,8 @@ export default function Projects() {
             <Stat label="Projetos" value={fmtInt(k.count)} hint={`${k.active} em andamento`} />
             <Stat label="Pontos de atenção" tone={k.late_milestones || k.open_high_risks ? "warn" : undefined} value={fmtInt(k.warnings)} hint={lines(`${k.late_milestones} marco(s) atrasado(s)`, `${k.open_high_risks} risco(s) alto(s) em aberto`)} />
           </div>
+
+          <BudgetChart items={items} />
 
           <div className="grid-2">
             <Card title={`Realizado × orçado por projeto`}>

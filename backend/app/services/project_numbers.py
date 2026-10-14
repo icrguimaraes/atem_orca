@@ -219,54 +219,102 @@ def summary(db: Session, p: Project, n: Numbers | None = None, today: date | Non
     }
 
 
+def merge(items: list[Numbers]) -> Numbers:
+    """Soma os números de vários projetos (gráfico "Todos os projetos" da carteira)."""
+    first = items[0]
+    out = Numbers(first.ref_year, first.target_year, first.last_closed, {}, {}, {}, _months(), ZERO, [], [])
+    for n in items:
+        for src, dst in ((n.actual, out.actual), (n.projection, out.projection), (n.ref_budget, out.ref_budget)):
+            for year, values in src.items():
+                acc = dst.setdefault(year, _months())
+                for i, v in enumerate(values):
+                    acc[i] += v
+        out.cycle_budget = [a + b for a, b in zip(out.cycle_budget, n.cycle_budget, strict=True)]
+        out.cycle_unscheduled += n.cycle_unscheduled
+    return out
+
+
+def chart_years(n: Numbers) -> list[int]:
+    return sorted(set(n.actual) | set(n.projection) | set(n.ref_budget) | {n.ref_year, n.target_year})
+
+
 def figure(db: Session, p: Project, year: int | None = None) -> dict:
-    """Colunas mensais como no Painel: realizado (azul, com a projeção em vermelho empilhada), orçado (verde)."""
+    return figure_from(numbers(db, p), year)
+
+
+def figure_from(n: Numbers, year: int | None = None, view: str = "month") -> dict:
+    """Colunas como no Painel: realizado (azul, com a projeção em vermelho empilhada) × orçado (verde). `view="month"`:
+    os 12 meses do ano (no ano do ciclo, o orçamento do CAPEX vinculado); `view="year"`: um grupo por ano, com o
+    orçado de referência nos anos carregados e o orçamento do ciclo (inclusive o sem cronograma) no ano do ciclo."""
     from app.services.painel_figures import INK, LEGEND, MONTHS, ORCADO, PROJETADO, REALIZADO, _headroom, _note_unit
     from app.services.painel_figures import _short as short_label
 
-    n = numbers(db, p)
-    year = year or n.ref_year
-    if year == n.target_year:
-        series = [("budget", f"Orçamento {year}", ORCADO, [float(v) for v in n.cycle_budget], None)]
-    else:
-        actual = [float(v) for v in n.actual.get(year, _months())]
-        proj = [float(v) for v in n.projection.get(year, _months())]
-        series = [
-            ("ref", f"Realizado {year}", REALIZADO, actual, None),
-            ("proj", "Projeção do gestor", PROJETADO, proj, actual),
-            ("budget", f"Orçado {year}", ORCADO, [float(v) for v in n.ref_budget.get(year, _months())], None),
+    if view == "year":
+        years = chart_years(n)
+        x = [str(y) for y in years]
+        actual = [float(_sum(n.actual.get(y))) for y in years]
+        proj = [float(_sum(n.projection.get(y))) for y in years]
+        budget = [
+            float(_sum(n.cycle_budget) + n.cycle_unscheduled if y == n.target_year else _sum(n.ref_budget.get(y)))
+            for y in years
         ]
+        series = [
+            ("ref", "Realizado", REALIZADO, actual, None),
+            ("proj", "Projeção do gestor", PROJETADO, proj, actual),
+            ("budget", "Orçado / orçamento", ORCADO, budget, None),
+        ]
+        angle = 0
+    else:
+        year = year or n.ref_year
+        x = list(MONTHS)
+        if year == n.target_year:
+            series = [("budget", f"Orçamento {year}", ORCADO, [float(v) for v in n.cycle_budget], None)]
+        else:
+            actual = [float(v) for v in n.actual.get(year, _months())]
+            proj = [float(v) for v in n.projection.get(year, _months())]
+            series = [
+                ("ref", f"Realizado {year}", REALIZADO, actual, None),
+                ("proj", "Projeção do gestor", PROJETADO, proj, actual),
+                ("budget", f"Orçado {year}", ORCADO, [float(v) for v in n.ref_budget.get(year, _months())], None),
+            ]
+        angle = -90
     series = [s for s in series if any(s[3])]
     data, everything = [], []
+    stacked = next((s[3] for s in series if s[0] == "proj"), None)
     for key, name, color, values, base in series:
         everything += [v + (base[i] if base else 0) for i, v in enumerate(values)]
+        # realizado com projeção empilhada por cima: o rótulo vai para dentro da coluna (fora, a projeção o cobriria)
+        inside = [key == "ref" and bool(stacked and stacked[i]) for i in range(len(values))]
+        ink = INK.get(color, color)
         data.append(
             go.Bar(
-                x=list(MONTHS),
+                x=x,
                 y=values,
                 name=name,
                 offsetgroup="ref" if key == "proj" else key,
                 base=base,
                 marker={"color": color, "cornerradius": 4},
                 text=[short_label(v) if v > 0 else "" for v in values],
-                textposition="outside",
-                textangle=-90,
+                textposition=["inside" if i else "outside" for i in inside],
+                insidetextanchor="end",
+                textangle=angle,
                 constraintext="none",
                 cliponaxis=False,
-                textfont={"size": 11, "color": INK.get(color, color)},
+                textfont={"size": 11, "color": ["#ffffff" if i else ink for i in inside]},
                 customdata=[fmt_money(v) for v in values],
                 hovertemplate=name + ": <b>%{customdata}</b><extra></extra>",
+                **({"width": 0.22} if view == "year" else {}),  # por ano: colunas estreitas, como no mês
             )
         )
     layout = _layout(
         barmode="group",
-        bargap=0.16,
+        bargap=0.16 if view != "year" else 0.35,
         bargroupgap=0.04,
         hovermode="x unified",
         showlegend=True,
         legend=LEGEND,
         yaxis={"visible": False, "range": [0, (max(everything + [0.0]) or 1) * _headroom()], "fixedrange": True},
-        xaxis={"showgrid": False, "automargin": True, "fixedrange": True},
+        xaxis={"showgrid": False, "automargin": True, "fixedrange": True, "type": "category"},
         margin={"l": 8, "r": 8, "t": 36, "b": 8},
     )
     fig = _fig(data, layout)
