@@ -73,11 +73,11 @@ export default function ProjectDetail() {
       />
       {err && <Alert>{err}</Alert>}
       <div className="stats">
-        <Stat label="Farol" value={<Badge tone={LIGHT_TONE[s.light]}>{s.light_label}</Badge>} hint={lines(`${pct(s.spent_pct)} gasto · ${pct(s.time_pct)} do prazo`, s.progress_pct !== null ? `${s.progress_pct}% dos marcos` : null)} />
-        <Stat label={`Realizado ${s.ref_year}`} value={fmtMoney(s.actual_year)} hint={lines(s.last_closed ? `até o mês ${s.last_closed}` : null, Number(s.projection_year) ? `+ projeção ${fmtMoney(s.projection_year)}` : null)} />
-        <Stat label={`Orçado ${s.ref_year}`} tone="budget" value={Number(s.budget_year) ? fmtMoney(s.budget_year) : "—"} hint={s.available_year !== null ? `disponível ${fmtMoney(s.available_year)}` : "sem orçado no sistema"} />
         <Stat label={`Orçamento ${s.target_year}`} tone="budget" value={Number(s.cycle_budget) ? fmtMoney(s.cycle_budget) : "—"} hint={Number(s.cycle_unscheduled) ? `${fmtMoney(s.cycle_unscheduled)} sem cronograma` : "CAPEX do ciclo vinculado"} />
+        <Stat label={`Orçado ${s.ref_year}`} tone="budget" value={Number(s.budget_year) ? fmtMoney(s.budget_year) : "—"} hint={s.available_year !== null ? `disponível ${fmtMoney(s.available_year)}` : "sem orçado no sistema"} />
+        <Stat label={`Realizado ${s.ref_year}`} value={fmtMoney(s.actual_year)} hint={lines(s.last_closed ? `até o mês ${s.last_closed}` : null, Number(s.projection_year) ? `+ projeção ${fmtMoney(s.projection_year)}` : null)} />
         <Stat label="Realizado acumulado" value={fmtMoney(s.actual_all)} hint={s.actual_years.length > 1 ? `${s.actual_years[0]}–${s.actual_years[s.actual_years.length - 1]}` : s.actual_years.length ? `em ${s.actual_years[0]}` : undefined} />
+        <Stat label="Farol" value={<Badge tone={LIGHT_TONE[s.light]}>{s.light_label}</Badge>} hint={lines(`${pct(s.spent_pct)} gasto · ${pct(s.time_pct)} do prazo`, s.progress_pct !== null ? `${s.progress_pct}% dos marcos` : null)} />
       </div>
       {s.warnings.length > 0 && (
         <Alert tone="warn">
@@ -116,9 +116,6 @@ export default function ProjectDetail() {
           </div>
         </Card>
       </div>
-
-      <Milestones d={d} child={child} />
-      <Risks d={d} child={child} />
 
       <div className="grid-2">
         <Card title="Diário do projeto">
@@ -167,6 +164,9 @@ export default function ProjectDetail() {
           </div>
         )}
       </Card>
+
+      <Milestones d={d} child={child} />
+      <Risks d={d} child={child} />
 
       {editing && <ProjectForm project={d} onClose={() => setEditing(false)} onSaved={() => { setLocal(null); reload(); }} />}
     </>

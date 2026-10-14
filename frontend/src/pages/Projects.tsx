@@ -96,17 +96,12 @@ export default function Projects() {
       ) : (
         <>
           <div className="stats">
-            <Stat label="Projetos" value={fmtInt(k.count)} hint={`${k.active} em andamento`} />
-            <Stat label="Realizado acumulado" value={fmtMoney(k.actual_all)} hint={lines(`${y}: ${fmtMoney(k.actual_year)}`, Number(k.projection_year) ? `+ projeção ${fmtMoney(k.projection_year)}` : null)} />
-            <Stat label={`Orçado ${y}`} tone="budget" value={Number(k.budget_year) ? fmtMoney(k.budget_year) : "—"} hint={Number(k.budget_year) ? undefined : "sem orçado no sistema"} />
             <Stat label={`Orçamento ${k.target_year}`} tone="budget" value={fmtMoney(k.cycle_budget)} hint="CAPEX do ciclo vinculado" />
+            <Stat label={`Orçado ${y}`} tone="budget" value={Number(k.budget_year) ? fmtMoney(k.budget_year) : "—"} hint={Number(k.budget_year) ? undefined : "sem orçado no sistema"} />
+            <Stat label="Realizado acumulado" value={fmtMoney(k.actual_all)} hint={lines(`${y}: ${fmtMoney(k.actual_year)}`, Number(k.projection_year) ? `+ projeção ${fmtMoney(k.projection_year)}` : null)} />
+            <Stat label="Projetos" value={fmtInt(k.count)} hint={`${k.active} em andamento`} />
             <Stat label="Pontos de atenção" tone={k.late_milestones || k.open_high_risks ? "warn" : undefined} value={fmtInt(k.warnings)} hint={lines(`${k.late_milestones} marco(s) atrasado(s)`, `${k.open_high_risks} risco(s) alto(s) em aberto`)} />
           </div>
-
-          <Card title="Cronograma">
-            <PlotlyChart figure={f.gantt} height={Math.max(200, 70 * items.length + 100)} ariaLabel="Cronograma dos projetos" />
-            {items.some((p) => !p.end_planned && !p.end_actual) && <p className="muted small">Sem término previsto, a barra vai só até hoje, em tom claro. Preencha as datas e os marcos em cada projeto.</p>}
-          </Card>
 
           <div className="grid-2">
             <Card title={`Realizado × orçado por projeto`}>
@@ -137,12 +132,10 @@ export default function Projects() {
                     <div><span className="muted small">Orçamento {s.target_year}</span><strong>{Number(s.cycle_budget) ? fmtMoney(s.cycle_budget) : "—"}</strong></div>
                   </div>
                   <Spark actual={p.monthly} projection={p.monthly_projection} months={data.months ?? []} />
-                  <div className="project-card-meters">
-                    <Meter label="Gasto do orçado" value={s.spent_pct} tone={ahead || (s.spent_pct ?? 0) > 1 ? "bad" : "budget"} />
+                  <Meter label="Gasto do orçado" value={s.spent_pct} tone={ahead || (s.spent_pct ?? 0) > 1 ? "bad" : "budget"} />
+                  <footer className="small project-card-meters">
                     <Meter label="Prazo decorrido" value={s.time_pct} tone="time" />
                     <Meter label="Marcos concluídos" value={s.progress_pct === null ? null : s.progress_pct / 100} tone="time" />
-                  </div>
-                  <footer className="small">
                     {p.next_milestone
                       ? <>Próximo marco: <strong>{p.next_milestone.title}</strong> · {fmtDay(p.next_milestone.due_date)}</>
                       : <span className="muted">{p.milestones ? "Todos os marcos concluídos" : "Sem marcos cadastrados"}</span>}
@@ -179,6 +172,11 @@ export default function Projects() {
                 </tbody>
               </table>
             </div>
+          </Card>
+
+          <Card title="Prazo · cronograma">
+            <PlotlyChart figure={f.gantt} height={Math.max(200, 70 * items.length + 100)} ariaLabel="Cronograma dos projetos" />
+            {items.some((p) => !p.end_planned && !p.end_actual) && <p className="muted small">Sem término previsto, a barra vai só até hoje, em tom claro. Preencha as datas e os marcos em cada projeto.</p>}
           </Card>
         </>
       )}
