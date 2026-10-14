@@ -53,6 +53,9 @@ class Dimensions:
     def branch_id(self, company_id: int, value: str | None) -> int | None:
         if not value:
             return None
+        exact = self.branches.get((company_id, value.strip().upper()))
+        if exact:  # filial cadastrada com o próprio código da planta ("C201")
+            return exact
         if value.isdigit():
             return self.branches.get((company_id, value.zfill(4)))
         plant = re.fullmatch(r"[A-Za-z](\d{3,4})", value.strip())

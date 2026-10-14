@@ -156,7 +156,7 @@ class CompanyOut(CompanyIn, ORM):
 
 class BranchIn(BaseModel):
     company_id: int
-    code: str = Field(pattern=r"^\d{1,10}$")
+    code: str = Field(pattern=r"^[0-9A-Za-z]{1,10}$")  # numérica ("0001") ou planta SAP ("C201", 14/10/2026)
     name: str
     uf: str | None = Field(default=None, max_length=2)
     is_active: bool = True

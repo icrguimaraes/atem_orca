@@ -405,6 +405,37 @@ def test_ksb1_sap_export_xlsx(client, admin, run_worker, db):
     assert closed == {"ACTUAL:2025:1001": 12, "ACTUAL:2026:1001": 9}  # 2026 fecha em setembro
 
 
+def test_ksb1_plant_registered_with_its_own_code(client, admin, run_worker, db):
+    """Filial cadastrada com o código da planta (C201, alfanumérico): as partidas dessa planta ficam nela."""
+    _seed_cc(client, admin, run_worker)
+    company = client.get("/api/v1/companies", headers=admin).json()
+    cid = next(c["id"] for c in company if c["code"] == "1001")
+    resp = client.post("/api/v1/branches", headers=admin, json={"company_id": cid, "code": "C999", "name": "C999"})
+    assert resp.status_code == 201, resp.text
+    assert (
+        client.post("/api/v1/branches", headers=admin, json={"company_id": cid, "code": "C-1", "name": "x"}).status_code
+        == 422
+    )
+    rows = [
+        {
+            "cost_center": "1050101011",
+            "account": "6010301001",
+            "plant": "C999",
+            "amount": 100,
+            "document_date": datetime(2026, 1, 10),
+            "posting_date": datetime(2026, 1, 10),
+        }
+    ]
+    batch_id = upload(client, admin, builders.ksb1_export_xlsx(rows), "KSB1 planta.xlsx")
+    run_worker()
+    b = status(client, admin, batch_id)
+    assert b["status"] == "VALIDATED" and b["warning_rows"] == 0, b
+    client.post(f"/api/v1/imports/{batch_id}/confirm", headers=admin)
+    run_worker()
+    entry = db.scalar(select(ActualEntry).where(ActualEntry.amount == Decimal("100.00")))
+    assert entry.branch_id == resp.json()["id"]
+
+
 def test_employees_and_vacancy(client, admin, run_worker, db):
     _seed_cc(client, admin, run_worker)
     rows = [
