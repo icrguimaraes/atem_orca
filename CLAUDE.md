@@ -90,6 +90,9 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   pelas solicitações de CAPEX vinculadas (`ProjectCapexLink`, CC + "CPX-001" na versão vigente). O orçamento não é alterado.
   Acesso: Controladoria cria/exclui; responsável (`owner_user_id`) e gestor do CC responsável veem e editam. Marcos, riscos, links e
   diário auditados (`entity_type="project"`); farol = % gasto × % do prazo; apontamentos na própria página.
+  Orçado próprio do projeto (15/10/2026, migração 0016): `ProjectBudgetEntry` por ano × mês, gravado só pela Controladoria em
+  `PUT /projects/{id}/budget` (motivo obrigatório, auditado); fica só no projeto (o Painel não muda) e, quando existe, substitui
+  o orçado de referência nos números do projeto — o % gasto passa a ser o realizado acumulado sobre o orçado total do projeto.
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

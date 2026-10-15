@@ -14,6 +14,16 @@ export interface ProjectSummary {
   spent_pct: number | null; time_pct: number | null; actual_all: string; actual_years: number[];
   cycle_budget: string; cycle_unscheduled: string; capex: { capex_code: string; cost_center: string | null; title: string; total: string }[];
   progress_pct: number | null; light: "good" | "warn" | "bad" | "none" | "closed"; light_label: string; warnings: string[];
+  // "project": orçado próprio do projeto (todos os anos, prevalece); "year": orçado de referência do ano
+  budget_scope: "project" | "year"; budget_all: string; budget_by_year: Record<string, string>; budget_note: string | null; budget_source: string;
+  available_all: string | null; projection_all: string;
+}
+
+/** Orçado que o projeto usa: o próprio (vida do projeto) ou o do ano de referência. */
+export function budgetOf(s: ProjectSummary): { label: string; value: string } {
+  return s.budget_scope === "project"
+    ? { label: "Orçado do projeto", value: s.budget_all }
+    : { label: `Orçado ${s.ref_year}`, value: s.budget_year };
 }
 
 export interface ProjectBase {
@@ -38,6 +48,7 @@ interface Portfolio {
   kpis: null | {
     ref_year: number; target_year: number; active: number; count: number; actual_all: string; actual_year: string;
     projection_year: string; budget_year: string; cycle_budget: string; late_milestones: number; open_high_risks: number; warnings: number;
+    budget_all: string; budget_projects: number;
   };
   figures: null | { gantt: Figure; compare: Figure; scurve: Figure };
 }
@@ -139,7 +150,9 @@ export default function Projects() {
         <>
           <div className="stats">
             <Stat label={`Orçamento ${k.target_year}`} tone="budget" value={fmtMoney(k.cycle_budget)} hint="CAPEX do ciclo vinculado" />
-            <Stat label={`Orçado ${y}`} tone="budget" value={Number(k.budget_year) ? fmtMoney(k.budget_year) : "—"} hint={Number(k.budget_year) ? undefined : "sem orçado no sistema"} />
+            {k.budget_projects > 0
+              ? <Stat label="Orçado dos projetos" tone="budget" value={fmtMoney(k.budget_all)} hint="aprovado para a vida dos projetos" />
+              : <Stat label={`Orçado ${y}`} tone="budget" value={Number(k.budget_year) ? fmtMoney(k.budget_year) : "—"} hint={Number(k.budget_year) ? undefined : "sem orçado no sistema"} />}
             <Stat label="Realizado acumulado" value={fmtMoney(k.actual_all)} hint={lines(`${y}: ${fmtMoney(k.actual_year)}`, Number(k.projection_year) ? `+ projeção ${fmtMoney(k.projection_year)}` : null)} />
             <Stat label="Projetos" value={fmtInt(k.count)} hint={`${k.active} em andamento`} />
             <Stat label="Pontos de atenção" tone={k.late_milestones || k.open_high_risks ? "warn" : undefined} value={fmtInt(k.warnings)} hint={lines(`${k.late_milestones} marco(s) atrasado(s)`, `${k.open_high_risks} risco(s) alto(s) em aberto`)} />
@@ -172,7 +185,7 @@ export default function Projects() {
                   </header>
                   <div className="project-card-numbers">
                     <div><span className="muted small">Realizado {y}</span><strong>{fmtMoney(s.actual_year)}</strong></div>
-                    <div><span className="muted small">Orçado {y}</span><strong>{Number(s.budget_year) ? fmtMoney(s.budget_year) : "—"}</strong></div>
+                    <div><span className="muted small">{budgetOf(s).label}</span><strong>{Number(budgetOf(s).value) ? fmtMoney(budgetOf(s).value) : "—"}</strong></div>
                     <div><span className="muted small">Orçamento {s.target_year}</span><strong>{Number(s.cycle_budget) ? fmtMoney(s.cycle_budget) : "—"}</strong></div>
                   </div>
                   <Spark actual={p.monthly} projection={p.monthly_projection} months={data.months ?? []} />
@@ -195,7 +208,7 @@ export default function Projects() {
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Projeto</th><th>Situação</th><th>Farol</th><th className="right">Realizado {y}</th><th className="right">Orçado {y}</th>
+                    <th>Projeto</th><th>Situação</th><th>Farol</th><th className="right">Realizado {y}</th><th className="right">Orçado</th>
                     <th className="right">% gasto</th><th className="right">% prazo</th><th className="right">Orçamento {k.target_year}</th><th>Prazo</th>
                   </tr>
                 </thead>
@@ -206,7 +219,7 @@ export default function Projects() {
                       <td>{p.status_label}</td>
                       <td><Badge tone={LIGHT_TONE[p.summary.light]}>{p.summary.light_label}</Badge></td>
                       <td className="right">{fmtMoney(p.summary.actual_year)}</td>
-                      <td className="right">{Number(p.summary.budget_year) ? fmtMoney(p.summary.budget_year) : "—"}</td>
+                      <td className="right">{Number(budgetOf(p.summary).value) ? fmtMoney(budgetOf(p.summary).value) : "—"}<div className="muted small">{p.summary.budget_scope === "project" ? "do projeto" : `${y}`}</div></td>
                       <td className="right">{pct(p.summary.spent_pct)}</td>
                       <td className="right">{pct(p.summary.time_pct)}</td>
                       <td className="right">{Number(p.summary.cycle_budget) ? fmtMoney(p.summary.cycle_budget) : "—"}</td>

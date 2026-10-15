@@ -129,6 +129,32 @@ def update(
     return _call(S.update, db, user, project_id, body.model_dump(exclude_unset=True, mode="python"), client_ip(request))
 
 
+class BudgetEntryIn(BaseModel):
+    year: int
+    month: int = Field(ge=1, le=12)
+    amount: str = Field(max_length=30)
+
+
+class BudgetIn(BaseModel):
+    """Orçado do próprio projeto por ano × mês; substitui o anterior. Fica só no projeto (não muda o Painel)."""
+
+    source: str = Field(max_length=300, description="De onde veio (ex.: planilha da área e data)")
+    reason: str = Field(min_length=3, max_length=1000)
+    entries: list[BudgetEntryIn]
+
+
+@router.put("/{project_id}/budget", summary="Gravar o orçado do projeto (Controladoria; motivo obrigatório; auditado)")
+def set_budget(
+    project_id: int,
+    body: BudgetIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    entries = [e.model_dump() for e in body.entries]
+    return _call(S.set_budget, db, user, project_id, entries, body.source, body.reason, client_ip(request))
+
+
 @router.delete("/{project_id}", status_code=204, summary="Excluir o projeto (Controladoria; auditado)")
 def delete(project_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     _call(S.delete, db, user, project_id, client_ip(request))

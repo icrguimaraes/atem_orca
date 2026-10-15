@@ -44,6 +44,7 @@ from app.models.personnel import (
 from app.models.pj import PjContract, PjPhoto
 from app.models.project import (
     Project,
+    ProjectBudgetEntry,
     ProjectCapexLink,
     ProjectFactKey,
     ProjectLink,

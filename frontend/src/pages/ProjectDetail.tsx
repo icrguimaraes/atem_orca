@@ -74,7 +74,9 @@ export default function ProjectDetail() {
       {err && <Alert>{err}</Alert>}
       <div className="stats">
         <Stat label={`Orçamento ${s.target_year}`} tone="budget" value={Number(s.cycle_budget) ? fmtMoney(s.cycle_budget) : "—"} hint={Number(s.cycle_unscheduled) ? `${fmtMoney(s.cycle_unscheduled)} sem cronograma` : "CAPEX do ciclo vinculado"} />
-        <Stat label={`Orçado ${s.ref_year}`} tone="budget" value={Number(s.budget_year) ? fmtMoney(s.budget_year) : "—"} hint={s.available_year !== null ? `disponível ${fmtMoney(s.available_year)}` : "sem orçado no sistema"} />
+        {s.budget_scope === "project"
+          ? <Stat label="Orçado do projeto" tone="budget" value={fmtMoney(s.budget_all)} hint={lines(Object.entries(s.budget_by_year).map(([yy, v]) => `${yy}: ${fmtMoney(v)}`).join(" · "), s.available_all !== null ? `disponível ${fmtMoney(s.available_all)}` : null)} />
+          : <Stat label={`Orçado ${s.ref_year}`} tone="budget" value={Number(s.budget_year) ? fmtMoney(s.budget_year) : "—"} hint={s.available_year !== null ? `disponível ${fmtMoney(s.available_year)}` : "sem orçado no sistema"} />}
         <Stat label={`Realizado ${s.ref_year}`} value={fmtMoney(s.actual_year)} hint={lines(s.last_closed ? `até o mês ${s.last_closed}` : null, Number(s.projection_year) ? `+ projeção ${fmtMoney(s.projection_year)}` : null)} />
         <Stat label="Realizado acumulado" value={fmtMoney(s.actual_all)} hint={s.actual_years.length > 1 ? `${s.actual_years[0]}–${s.actual_years[s.actual_years.length - 1]}` : s.actual_years.length ? `em ${s.actual_years[0]}` : undefined} />
         <Stat label="Farol" value={<Badge tone={LIGHT_TONE[s.light]}>{s.light_label}</Badge>} hint={lines(`${pct(s.spent_pct)} gasto · ${pct(s.time_pct)} do prazo`, s.progress_pct !== null ? `${s.progress_pct}% dos marcos` : null)} />
@@ -106,6 +108,7 @@ export default function ProjectDetail() {
         <Card title="De onde vêm os números">
           <dl className="kv">
             <Kv label="Realizado e orçado (CC × conta)">{d.fact_keys.length ? d.fact_keys.map((k) => <div key={k.id}>{k.cost_center} × {k.account}</div>) : null}</Kv>
+            <Kv label="Orçado">{s.budget_scope === "project" ? `Orçado do próprio projeto${s.budget_note ? ` · ${s.budget_note}` : ""} (prevalece sobre o orçado de referência)` : s.budget_source === "reference" ? "Orçado de referência dos vínculos CC × conta" : null}</Kv>
             <Kv label={`CAPEX ${s.target_year}`}>{d.capex_links.length ? d.capex_links.map((c) => <div key={c.id}>{c.cost_center} · {c.capex_code}{c.found ? ` · ${c.title} · ${fmtMoney(c.total ?? 0)}` : " · não encontrada na versão vigente"}</div>) : null}</Kv>
           </dl>
           <div className="table-wrap">

@@ -216,3 +216,48 @@ def test_portfolio_summary_gantt_compare_and_scurve(client, admin, db):
     assert one["figure"]["data"][0]["y"][0] == 600000.0
     by_year = client.get(f"{P}/chart?view=year", headers=admin).json()["figure"]["data"]
     assert by_year[0]["x"] == [str(ref), str(target)] and by_year[2]["y"] == [400000.0, 668000.0]
+
+
+def test_project_budget_is_the_projects_own_and_spans_years(client, admin, db):
+    """Orçado próprio (TDC aprovado em dez do ano anterior): substitui o de referência, farol pelo acumulado, auditado,
+    e não muda o orçado do Painel."""
+    ref, target, cc, cc27, acc = _setup(db)
+    pid = client.post(
+        P,
+        headers=admin,
+        json={"code": "600561", "name": "TDC", "fact_keys": [{"cost_center_id": cc.id, "account_id": acc.id}]},
+    ).json()["id"]
+    painel_before = client.get(f"/api/v1/dashboard/overview?years={ref}&compare=false", headers=admin).json()["kpis"]
+    url = f"{P}/{pid}/budget"
+    body = {
+        "source": "Capex Acum Set 26 (área)",
+        "reason": "Orçado dos projetos enviado pela analista",
+        "entries": [
+            {"year": ref - 1, "month": 12, "amount": "13269000.00"},
+            {"year": ref, "month": 7, "amount": "89250.00"},
+        ],
+    }
+    assert client.put(url, headers=admin, json=body | {"reason": ""}).status_code == 422
+    assert (
+        client.put(url, headers=admin, json=body | {"entries": [{"year": ref, "month": 13, "amount": "1"}]}).status_code
+        == 422
+    )
+    d = client.put(url, headers=admin, json=body).json()
+    s = d["summary"]
+    assert s["budget_scope"] == "project" and s["budget_source"] == "project"
+    assert s["budget_all"] == "13358250.00" and s["budget_by_year"] == {
+        str(ref - 1): "13269000.00",
+        str(ref): "89250.00",
+    }
+    assert s["budget_year"] == "89250.00"  # o de referência (400.000,00) deixa de valer no projeto
+    assert round(s["spent_pct"], 4) == round(488985.19 / 13358250, 4) and s["light"] in ("good", "warn")
+    assert not any("acima do orçado" in w for w in s["warnings"])
+    assert [(e["year"], e["month"]) for e in d["budget_entries"]] == [(ref - 1, 12), (ref, 7)]
+    # o Painel não muda
+    painel_after = client.get(f"/api/v1/dashboard/overview?years={ref}&compare=false", headers=admin).json()["kpis"]
+    assert painel_after["budget_total"] == painel_before["budget_total"]
+    log = db.scalar(select(AuditLog).where(AuditLog.entity_type == "project", AuditLog.reason == body["reason"]))
+    assert log is not None and log.after["orçado do projeto"][str(ref - 1)]["12"] == "13269000.00"
+    # gestor sem perfil global não grava
+    _, other = make_user(client, admin, "gestor.orcado@test.com", ["MANAGER"])
+    assert client.put(url, headers=other, json=body).status_code in (403, 404)

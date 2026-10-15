@@ -53,6 +53,10 @@ class Numbers:
     cycle_unscheduled: Decimal  # CAPEX vinculado sem cronograma mensal
     capex_found: list[dict]
     capex_missing: list[dict]
+    # origem do orçado do projeto: "project" (orçado próprio, ProjectBudgetEntry — prevalece), "reference" (orçado
+    # de referência dos vínculos CC × conta) ou "none"
+    budget_source: str = "none"
+    budget_note: str | None = None
 
 
 def _months() -> list[Decimal]:
@@ -101,6 +105,14 @@ def numbers(db: Session, p: Project) -> Numbers:
         )
         for year, period, amount in rows:
             ref_budget.setdefault(int(year), _months())[int(period) - 1] += amount or ZERO
+    budget_source = "reference" if ref_budget else "none"
+    budget_note = None
+    if p.budget:  # orçado próprio do projeto (15/10/2026): substitui o de referência nos números do projeto
+        ref_budget = {}
+        for e in p.budget:
+            ref_budget.setdefault(int(e.fiscal_year), _months())[int(e.period) - 1] += e.amount or ZERO
+        budget_source = "project"
+        budget_note = next((e.source for e in p.budget if e.source), None)
     cycle_budget, unscheduled = _months(), ZERO
     found, missing = [], []
     for link in p.capex_links:
@@ -142,6 +154,8 @@ def numbers(db: Session, p: Project) -> Numbers:
         unscheduled,
         found,
         missing,
+        budget_source,
+        budget_note,
     )
 
 
@@ -163,13 +177,21 @@ def summary(db: Session, p: Project, n: Numbers | None = None, today: date | Non
     y = n.ref_year
     actual_y, proj_y, budget_y = _sum(n.actual.get(y)), _sum(n.projection.get(y)), _sum(n.ref_budget.get(y))
     actual_all = sum((_sum(v) for v in n.actual.values()), ZERO)
+    projection_all = sum((_sum(v) for v in n.projection.values()), ZERO)
+    budget_all = sum((_sum(v) for v in n.ref_budget.values()), ZERO)
     cycle_total = _sum(n.cycle_budget) + n.cycle_unscheduled
-    spent = float(actual_y / budget_y) if budget_y > 0 else None
+    # orçado próprio do projeto vale para a vida do projeto (TDC aprovado em dez/2025 para vários anos): o gasto é o
+    # realizado acumulado sobre o orçado total; com orçado de referência, o do ano
+    whole = n.budget_source == "project"
+    if whole:
+        spent = float(actual_all / budget_all) if budget_all > 0 else None
+    else:
+        spent = float(actual_y / budget_y) if budget_y > 0 else None
     time_pct = _time_pct(p, today)
     if p.status in ("DONE", "CANCELLED"):
         light = ("closed", STATUS_LABELS[p.status])
     elif spent is None:
-        light = ("none", f"Sem orçado {y} no sistema" if actual_y else "Sem números ainda")
+        light = ("none", f"Sem orçado {y} no sistema" if actual_y or actual_all else "Sem números ainda")
     elif spent > 1:
         light = ("bad", "Realizado acima do orçado")
     elif time_pct is not None and spent > time_pct + 0.10:
@@ -181,10 +203,14 @@ def summary(db: Session, p: Project, n: Numbers | None = None, today: date | Non
     warnings = []
     if not p.fact_keys:
         warnings.append("Sem vínculo de centro de custo × conta: o realizado do projeto não aparece.")
-    if actual_y and not budget_y:
-        warnings.append(f"Há realizado {y} ({fmt_money(actual_y)}), mas não há orçado {y} carregado no sistema.")
-    if budget_y and actual_y > budget_y:
-        warnings.append(f"Realizado {y} acima do orçado em {fmt_money(actual_y - budget_y)}.")
+    if whole:
+        if actual_all > budget_all:
+            warnings.append(f"Realizado acumulado acima do orçado do projeto em {fmt_money(actual_all - budget_all)}.")
+    else:
+        if actual_y and not budget_y:
+            warnings.append(f"Há realizado {y} ({fmt_money(actual_y)}), mas não há orçado {y} carregado no sistema.")
+        if budget_y and actual_y > budget_y:
+            warnings.append(f"Realizado {y} acima do orçado em {fmt_money(actual_y - budget_y)}.")
     for m in n.capex_missing:
         warnings.append(f"Solicitação {m['capex_code']} ({m['cost_center']}) não existe na versão vigente do CAPEX.")
     late = [m for m in p.milestones if m.due_date and m.due_date < today and not m.done_date and m.progress_pct < 100]
@@ -205,6 +231,13 @@ def summary(db: Session, p: Project, n: Numbers | None = None, today: date | Non
         "forecast_year": str(actual_y + proj_y),
         "budget_year": str(budget_y),
         "available_year": str(budget_y - actual_y - proj_y) if budget_y else None,
+        "budget_scope": "project" if whole else "year",
+        "budget_source": n.budget_source,
+        "budget_note": n.budget_note,
+        "budget_all": str(budget_all),
+        "budget_by_year": {str(k): str(_sum(v)) for k, v in sorted(n.ref_budget.items())},
+        "projection_all": str(projection_all),
+        "available_all": str(budget_all - actual_all - projection_all) if whole else None,
         "spent_pct": spent,
         "time_pct": time_pct,
         "actual_all": str(actual_all),
@@ -231,6 +264,8 @@ def merge(items: list[Numbers]) -> Numbers:
                     acc[i] += v
         out.cycle_budget = [a + b for a, b in zip(out.cycle_budget, n.cycle_budget, strict=True)]
         out.cycle_unscheduled += n.cycle_unscheduled
+        if n.budget_source != "none":
+            out.budget_source = n.budget_source if out.budget_source in ("none", n.budget_source) else "mixed"
     return out
 
 

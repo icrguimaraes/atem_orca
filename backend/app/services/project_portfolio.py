@@ -357,6 +357,8 @@ def portfolio(db: Session, user: User, base_fn, can_view_fn, today: date | None 
         "actual_year": total("actual_year"),
         "projection_year": total("projection_year"),
         "budget_year": total("budget_year"),
+        "budget_all": total("budget_all"),
+        "budget_projects": sum(1 for i in items if i["summary"]["budget_scope"] == "project"),
         "cycle_budget": total("cycle_budget"),
         "late_milestones": sum(i["late_milestones"] for i in items),
         "open_high_risks": sum(i["open_high_risks"] for i in items),

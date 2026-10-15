@@ -13,6 +13,7 @@ responsável (veem e editam o próprio). Toda mutação grava auditoria (`entity
 from __future__ import annotations
 
 from datetime import date
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
@@ -25,6 +26,7 @@ from app.models import (
     CapexProject,
     CostCenter,
     Project,
+    ProjectBudgetEntry,
     ProjectCapexLink,
     ProjectFactKey,
     ProjectLink,
@@ -243,6 +245,10 @@ def detail(db: Session, user: User, project_id: int) -> dict:
             for u in sorted(p.updates, key=lambda u: u.id, reverse=True)
         ],
         "documents": documents(db, p),
+        "budget_entries": [
+            {"year": e.fiscal_year, "month": e.period, "amount": str(e.amount), "source": e.source}
+            for e in sorted(p.budget, key=lambda e: (e.fiscal_year, e.period))
+        ],
     }
 
 
@@ -483,6 +489,55 @@ def delete_child(db: Session, user: User, project_id: int, kind: str, child_id: 
         ip=ip,
     )
     db.delete(obj)
+    db.commit()
+    db.refresh(p)
+    return detail(db, user, p.id)
+
+
+def _budget_snapshot(p: Project) -> dict:
+    out: dict[str, dict[str, str]] = {}
+    for e in sorted(p.budget, key=lambda e: (e.fiscal_year, e.period)):
+        out.setdefault(str(e.fiscal_year), {})[str(e.period)] = str(e.amount)
+    return out
+
+
+def set_budget(
+    db: Session, user: User, project_id: int, entries: list[dict], source: str, reason: str, ip: str | None = None
+) -> dict:
+    """Grava o orçado do próprio projeto (substitui o anterior). Só a Controladoria; motivo obrigatório; auditado com o
+    antes × depois por ano e mês. Não toca no orçado do Painel nem no orçamento do ciclo."""
+    _require_global(user)
+    p = _get(db, user, project_id)
+    if not (reason or "").strip():
+        raise Invalid("Informe o motivo da alteração do orçado")
+    values: dict[tuple[int, int], Decimal] = {}
+    for e in entries:
+        year, month = int(e["year"]), int(e["month"])
+        if not (2000 <= year <= 2100 and 1 <= month <= 12):
+            raise Invalid(f"Ano/mês inválido: {year}/{month}")
+        try:
+            amount = Decimal(str(e["amount"]))
+        except Exception as exc:  # noqa: BLE001
+            raise Invalid(f"Valor inválido em {month:02d}/{year}") from exc
+        values[(year, month)] = values.get((year, month), ZERO) + amount
+    before = _budget_snapshot(p)
+    p.budget = [
+        ProjectBudgetEntry(fiscal_year=y, period=m, amount=v, source=(source or "").strip() or None, created_by=user.id)
+        for (y, m), v in sorted(values.items())
+        if v
+    ]
+    db.flush()
+    audit.record(
+        db,
+        user_id=user.id,
+        action="UPDATE",
+        entity_type=ENTITY,
+        entity_id=p.id,
+        before={"orçado do projeto": before},
+        after={"orçado do projeto": _budget_snapshot(p), "fonte": (source or "").strip() or None},
+        reason=reason.strip(),
+        ip=ip,
+    )
     db.commit()
     db.refresh(p)
     return detail(db, user, p.id)

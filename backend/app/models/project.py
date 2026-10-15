@@ -4,11 +4,12 @@ de referência por centro de custo × conta (`ProjectFactKey`) e orçamento do c
 (`ProjectCapexLink`, CC + código da solicitação, resolvido na versão vigente). O orçamento em si nunca é alterado."""
 
 from datetime import date, datetime
+from decimal import Decimal
 
 from sqlalchemy import Date, DateTime, ForeignKey, SmallInteger, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin
+from app.models.base import Base, Money, TimestampMixin
 
 PROJECT_STATUS = ("PLANNED", "IN_PROGRESS", "PAUSED", "DONE", "CANCELLED")
 RISK_LEVELS = ("LOW", "MEDIUM", "HIGH")
@@ -54,6 +55,9 @@ class Project(TimestampMixin, Base):
     )
     updates: Mapped[list["ProjectUpdate"]] = relationship(
         cascade="all, delete-orphan", lazy="selectin", order_by="ProjectUpdate.id"
+    )
+    budget: Mapped[list["ProjectBudgetEntry"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="ProjectBudgetEntry.id"
     )
 
 
@@ -126,4 +130,22 @@ class ProjectUpdate(Base):
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
     text: Mapped[str] = mapped_column(Text)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ProjectBudgetEntry(Base):
+    """Orçado do próprio projeto por ano × mês (15/10/2026): o orçamento aprovado do projeto, que pode começar antes do
+    ano de referência (TDC aprovado em dez/2025). Fica só no projeto — não entra no orçado do Painel. Quando existe,
+    substitui o orçado de referência dos vínculos CC × conta nos números do projeto."""
+
+    __tablename__ = "project_budget_entries"
+    __table_args__ = (UniqueConstraint("project_id", "fiscal_year", "period"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    fiscal_year: Mapped[int] = mapped_column(SmallInteger)
+    period: Mapped[int] = mapped_column(SmallInteger)  # 1..12
+    amount: Mapped[Decimal] = mapped_column(Money)
+    source: Mapped[str | None] = mapped_column(String(300))  # de onde veio (planilha da área, data)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
