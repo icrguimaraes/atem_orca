@@ -363,7 +363,7 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
                 "cost_center_id": d["cost_center_id"],
                 "account_id": d["account_id"],
             }
-            file_keys.add((d.get("branch_id"), d["cost_center_id"], d["account_id"]))
+            file_keys.add((d["cost_center_id"], d["account_id"]))
             if batch.layout == "SAP_KSB1":
                 period = int(d["period"])
                 payload.append(
@@ -420,10 +420,11 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
                 max_period = max(max_period, int(row["period"]))
                 carried += 1
         if mode == "MERGE" and previous is not None:
-            # mantém as combinações filial × CC × conta que não vieram neste arquivo
+            # mantém as combinações CC × conta que não vieram neste arquivo; as que vieram são substituídas em todas as
+            # filiais (16/10/2026: base sem filial + KSB1 com planta não podem somar)
             columns = [c for c in model.__table__.columns if c.name not in ("id", "dataset_version_id")]
             for row in db.execute(select(*columns).where(model.dataset_version_id == previous.id)).mappings():
-                if (row["branch_id"], row["cost_center_id"], row["account_id"]) in file_keys:
+                if (row["cost_center_id"], row["account_id"]) in file_keys:
                     continue
                 payload.append(dict(row) | {"dataset_version_id": version.id})
                 max_period = max(max_period, int(row["period"]))

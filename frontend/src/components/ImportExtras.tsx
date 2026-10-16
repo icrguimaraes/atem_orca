@@ -154,7 +154,7 @@ export function ComparisonCard({ comparison, title = "Comparação com a base vi
             Modo <strong>{comparison.mode === "REPLACE" ? "Substituir" : "Atualizar (mesclar)"}</strong>:{" "}
             {comparison.mode === "REPLACE"
               ? "a base da empresa no ano passa a ser exatamente o conteúdo deste arquivo."
-              : "atualiza as combinações filial × CC × conta presentes no arquivo e mantém as demais."}
+              : "atualiza as combinações CC × conta presentes no arquivo (em todas as filiais) e mantém as demais."}
           </p>
           <div className="table-wrap">
             <table className="table">

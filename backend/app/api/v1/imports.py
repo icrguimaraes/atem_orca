@@ -50,8 +50,8 @@ async def upload(
     mode: Annotated[
         Literal["MERGE", "REPLACE"],
         Form(
-            description="Realizado/orçamento: MERGE atualiza só as combinações CC×conta×filial do arquivo e mantém as "
-            "demais; REPLACE substitui toda a base da empresa no ano"
+            description="Realizado/orçamento: MERGE atualiza só as combinações CC×conta do arquivo (todas as filiais) "
+            "e mantém as demais; REPLACE substitui toda a base da empresa no ano"
         ),
     ] = "MERGE",
     deactivate_missing: Annotated[bool, Form(description="Colaboradores ausentes ficam inativos")] = False,

@@ -51,12 +51,14 @@ def _valid(result: ParseResult):
 
 
 def _file_cells(records) -> dict[tuple, dict[int, Decimal]]:
-    """{(branch_id, cc_id, account_id): {mês: valor}} a partir dos registros do arquivo."""
+    """{(None, cc_id, account_id): {mês: valor}} a partir dos registros do arquivo. A filial não entra na chave
+    (16/10/2026): a base antiga sem filial e o KSB1 com a planta devem casar — senão o modo Atualizar soma em vez de
+    substituir."""
     cells: dict[tuple, dict[int, Decimal]] = defaultdict(lambda: defaultdict(Decimal))
     for r in records:
         d = r.data
         key = (
-            d.get("branch_id"),
+            None,
             d.get("cost_center_id") or f"novo:{d['cost_center']}",
             d.get("account_id") or f"novo:{d['account']}",
         )
@@ -75,8 +77,8 @@ def _db_cells(db: Session, model, version_id: int) -> dict[tuple, dict[int, Deci
         .where(model.dataset_version_id == version_id)
         .group_by(model.branch_id, model.cost_center_id, model.account_id, model.period)
     )
-    for branch_id, cc_id, acc_id, period, amount in rows:
-        cells[(branch_id, cc_id, acc_id)][int(period)] += amount
+    for _branch_id, cc_id, acc_id, period, amount in rows:
+        cells[(None, cc_id, acc_id)][int(period)] += amount
     return cells
 
 

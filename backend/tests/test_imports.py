@@ -436,6 +436,53 @@ def test_ksb1_plant_registered_with_its_own_code(client, admin, run_worker, db):
     assert entry.branch_id == resp.json()["id"]
 
 
+def test_merge_replaces_cc_account_in_every_branch(client, admin, run_worker, db):
+    """Base sem filial + KSB1 com planta (C001 → filial 0001): o modo Atualizar substitui a combinação CC × conta em
+    todas as filiais em vez de somar; combinações fora do arquivo continuam."""
+    _seed_cc(client, admin, run_worker)
+    rows = [
+        {
+            "cost_center": "1050101011",
+            "account": "6010301001",
+            "plant": None,
+            "amount": 1000,
+            "document_date": datetime(2026, 1, 10),
+            "posting_date": datetime(2026, 1, 10),
+        },
+        {
+            "cost_center": "1050101011",
+            "account": "6010301002",
+            "plant": None,
+            "amount": 300,
+            "document_date": datetime(2026, 1, 10),
+            "posting_date": datetime(2026, 1, 10),
+        },
+    ]
+    first = upload(client, admin, builders.ksb1_export_xlsx(rows), "base.xlsx")
+    run_worker()
+    client.post(f"/api/v1/imports/{first}/confirm", headers=admin)
+    run_worker()
+    again = [
+        {
+            "cost_center": "1050101011",
+            "account": "6010301001",
+            "plant": "C001",
+            "amount": 1200,
+            "document_date": datetime(2026, 1, 10),
+            "posting_date": datetime(2026, 1, 10),
+        },
+    ]
+    second = upload(client, admin, builders.ksb1_export_xlsx(again), "ksb1.xlsx")
+    run_worker()
+    scope = status(client, admin, second)["summary"]["comparison"]["scopes"][0]
+    assert (scope["new"], scope["changed"], scope["absent"]) == (0, 1, 1)
+    assert Decimal(scope["after_total"]) == Decimal("1500.00")  # 1.200 (substitui 1.000) + 300 mantido
+    client.post(f"/api/v1/imports/{second}/confirm", headers=admin)
+    run_worker()
+    entries = db.scalars(select(ActualEntry).join(DatasetVersion).where(DatasetVersion.is_current)).all()
+    assert sorted(e.amount for e in entries) == [Decimal("300.00"), Decimal("1200.00")]
+
+
 def test_employees_and_vacancy(client, admin, run_worker, db):
     _seed_cc(client, admin, run_worker)
     rows = [
