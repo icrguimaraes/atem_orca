@@ -31,6 +31,7 @@ const BUDGET_TYPES = [
   { key: "CAPEX", label: "CAPEX" },
   { key: "PERSONNEL", label: "Pessoal" },
 ];
+const DEFAULT_MODULES = ["OPEX", "PERSONNEL"]; // padrão do Painel: OPEX + Pessoal (CAPEX só quando escolhido)
 const SECTIONS = [
   { key: "monthly", label: "Comparativo mensal" },
   { key: "table", label: "Tabela por pacote, conta e centro de custo" },
@@ -105,8 +106,8 @@ export default function Painel2() {
   setMoneyMode(numFmt); // antes de renderizar: cartões e tabelas do Painel usam fmtMoneyPref // revisão congelada como base ("" = nenhuma)
   const tipo = (searchParams.get("tipo") ?? "").toUpperCase();
   const tipoFromUrl = BUDGET_TYPES.some((b) => b.key === tipo);
-  // ?tipo= (links de outras páginas) vale sobre o filtro guardado
-  const [modules, setModules] = usePersistentState<string[]>("painel.modules", tipoFromUrl ? [tipo] : [], tipoFromUrl);
+  // ?tipo= (links de outras páginas) vale sobre o filtro guardado; sem nada guardado, OPEX + Pessoal (19/10/2026)
+  const [modules, setModules] = usePersistentState<string[]>("painel.modules", tipoFromUrl ? [tipo] : DEFAULT_MODULES, tipoFromUrl);
   function toggleModule(m: string) {
     setModules((cur) => {
       const next = cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m];
@@ -185,7 +186,7 @@ export default function Painel2() {
     setAccount(null);
     setYears([]);
     setMonths([]);
-    setModules([]);
+    setModules(DEFAULT_MODULES);
     setDepartment("");
     setCompare(false);
     setSamePeriod(true);
