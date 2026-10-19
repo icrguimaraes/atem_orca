@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { api, download, type TraceEntries, type TraceLevel, type TraceRow, type TraceTree } from "../api";
 import { useAuth } from "../auth";
-import { fmtMoney, fmtShare } from "../labels";
+import { MONTHS, fmtMoney, fmtShare } from "../labels";
 import { RecordRow } from "../pages/Trace";
 import { Empty, Loading } from "./ui";
 
@@ -108,7 +108,7 @@ export function TraceDrawer({ qs, label, onClose }: { qs: string; label: string;
           <div className="wd-head-main">
             <div className="wd-eyebrow">Rastro · do total ao lançamento</div>
             <h2 className="wd-title">{label}</h2>
-            {info && <div className="wd-period">{info.series_label}{period?.years?.length ? ` · ${period.years.join(" + ")}` : ""}</div>}
+            {info && <div className="wd-period">{info.series_label}{period?.months?.length ? ` · ${period.months.map((m) => MONTHS[m - 1]).join(", ")}` : ""}</div>}
           </div>
           <button type="button" className="wd-close" onClick={onClose} aria-label="Fechar">✕</button>
         </header>
@@ -183,10 +183,12 @@ export function TraceDrawer({ qs, label, onClose }: { qs: string; label: string;
                   <div className="table-wrap">
                     <table className="table">
                       <thead>
-                        <tr><th>Tipo</th><th>Centro de custo</th><th>Conta</th><th>Lançamento</th><th>Mês</th><th className="right">Valor</th><th>Origem</th><th>Abrir</th></tr>
+                        {leaf
+                          ? <tr><th>Lançamento</th><th>Mês</th><th className="right">Valor</th><th>Origem</th><th>Abrir</th></tr>
+                          : <tr><th>Tipo</th><th>Centro de custo</th><th>Conta</th><th>Lançamento</th><th>Mês</th><th className="right">Valor</th><th>Origem</th><th>Abrir</th></tr>}
                       </thead>
                       <tbody>
-                        {entries.items.map((r) => <RecordRow key={r.id} r={r} isController={isController} pj={(user?.pj_access ?? "NONE") !== "NONE"} />)}
+                        {entries.items.map((r) => <RecordRow key={r.id} r={r} isController={isController} pj={(user?.pj_access ?? "NONE") !== "NONE"} compact={leaf} />)}
                       </tbody>
                     </table>
                   </div>

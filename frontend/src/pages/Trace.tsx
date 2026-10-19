@@ -487,7 +487,8 @@ function monthsOf(r: TraceRecord): string {
   return Number(r.unscheduled) ? `${label} + sem mês` : label;
 }
 
-export function RecordRow({ r, isController, pj }: { r: TraceRecord; isController: boolean; pj: boolean }) {
+/** `compact` (painel lateral do Rastro): sem as colunas Tipo, Centro de custo e Conta — a trilha já diz quais são. */
+export function RecordRow({ r, isController, pj, compact = false }: { r: TraceRecord; isController: boolean; pj: boolean; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const src = r.source ?? {};
   const origin = src.file_name
@@ -497,9 +498,9 @@ export function RecordRow({ r, isController, pj }: { r: TraceRecord; isControlle
   return (
     <>
       <tr>
-        <td className="nowrap">{r.kind_label}</td>
-        <td>{r.cost_center ? <><span className="mono">{r.cost_center.code}</span> {r.cost_center.name}</> : "—"}</td>
-        <td>{r.account ? <><span className="mono">{r.account.code}</span> {r.account.name}</> : "—"}</td>
+        {!compact && <td className="nowrap">{r.kind_label}</td>}
+        {!compact && <td>{r.cost_center ? <><span className="mono">{r.cost_center.code}</span> {r.cost_center.name}</> : "—"}</td>}
+        {!compact && <td>{r.account ? <><span className="mono">{r.account.code}</span> {r.account.name}</> : "—"}</td>}
         <td>
           <button type="button" className="row-filter" onClick={() => setOpen((v) => !v)} aria-expanded={open} title="Ver todos os campos do lançamento">
             {r.title}
@@ -513,7 +514,7 @@ export function RecordRow({ r, isController, pj }: { r: TraceRecord; isControlle
       </tr>
       {open && (
         <tr>
-          <td colSpan={8} className="small">
+          <td colSpan={compact ? 5 : 8} className="small">
             <div className="table-wrap">
               <table className="table">
                 <thead>
