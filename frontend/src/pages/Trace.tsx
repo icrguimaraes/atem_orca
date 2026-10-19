@@ -487,7 +487,7 @@ function monthsOf(r: TraceRecord): string {
   return Number(r.unscheduled) ? `${label} + sem mês` : label;
 }
 
-function RecordRow({ r, isController, pj }: { r: TraceRecord; isController: boolean; pj: boolean }) {
+export function RecordRow({ r, isController, pj }: { r: TraceRecord; isController: boolean; pj: boolean }) {
   const [open, setOpen] = useState(false);
   const src = r.source ?? {};
   const origin = src.file_name

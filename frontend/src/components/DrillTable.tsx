@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api, type Breakdown, type BreakdownRow } from "../api";
 import { fmtPct, fmtShare, deptRank, fmtCellPref, unitNote } from "../labels";
 import { Empty, Loading } from "./ui";
+import { TraceDrawer } from "./TraceDrawer";
 import { WhyButton } from "./WhyPanel";
 
 type Sort = "value_desc" | "value_asc" | "name" | "var";
@@ -78,6 +78,7 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
   const [root, setRoot] = useState<Breakdown | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [children, setChildren] = useState<Record<string, BreakdownRow[] | "loading">>({});
+  const [trace, setTrace] = useState<{ qs: string; label: string } | null>(null); // "rastro" abre no painel lateral
   const [chains, setChains] = useState<Record<string, string>>({});  // filtros acumulados de cada linha aberta
   const [sort, setSort] = useState<Sort>("value_desc");
   const [search, setSearch] = useState("");
@@ -182,9 +183,9 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
             {r.code && <span className="muted small mono"> {r.code}</span>}
             {why && <WhyButton qs={[parentChain, ownParam(LEVELS[level], r), query].filter(Boolean).join("&")} label={r.name} />}
             {why && (
-              <Link className="why-btn trace-link" to={`/rastro?${[parentChain, ownParam(LEVELS[level], r), query].filter(Boolean).join("&")}`} title="Abrir o Rastro já neste recorte (até o lançamento)">
+              <button type="button" className="why-btn trace-link" onClick={() => setTrace({ qs: [parentChain, ownParam(LEVELS[level], r), query].filter(Boolean).join("&"), label: r.name })} title="Abrir o Rastro deste recorte no painel lateral (até o lançamento)">
                 rastro
-              </Link>
+              </button>
             )}
           </td>
           <td className="right nowrap">{fmtCellPref(r.ref)}</td>
@@ -301,6 +302,7 @@ export function DrillTable({ query, refLabel, onSelect, why = false }: {
           </tfoot>
         </table>
       </div>
+      {trace && <TraceDrawer qs={trace.qs} label={trace.label} onClose={() => setTrace(null)} />}
     </>
   );
 }
