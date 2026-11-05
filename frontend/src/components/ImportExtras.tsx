@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { api, type Comparison, type ImportErrorItem } from "../api";
-import { ERROR_LABELS, RECORD_TYPES, fmtInt, fmtMoney } from "../labels";
+import { ERROR_LABELS, MONTHS, RECORD_TYPES, fmtInt, fmtMoney } from "../labels";
 import { Alert, Badge, Card, Empty, Loading, SearchBox, useLoad } from "./ui";
 
 /** Lista completa de inconsistências na própria tela (sem precisar baixar o Excel). */
@@ -154,7 +154,7 @@ export function ComparisonCard({ comparison, title = "Comparação com a base vi
             Modo <strong>{comparison.mode === "REPLACE" ? "Substituir" : "Atualizar (mesclar)"}</strong>:{" "}
             {comparison.mode === "REPLACE"
               ? "a base da empresa no ano passa a ser exatamente o conteúdo deste arquivo."
-              : "atualiza as combinações CC × conta presentes no arquivo (em todas as filiais) e mantém as demais."}
+              : "atualiza as combinações CC × conta presentes no arquivo, só nos meses que ele traz (em todas as filiais), e mantém o resto."}
           </p>
           <div className="table-wrap">
             <table className="table">
@@ -200,6 +200,9 @@ export function ComparisonCard({ comparison, title = "Comparação com a base vi
               </tbody>
             </table>
           </div>
+          {comparison.scopes.filter((s) => !skipped.has(s.scope)).map((s) => (
+            <MonthDetail key={`m-${s.scope}`} scope={s} />
+          ))}
           {comparison.scopes.some((s) => s.absent_action === "REMOVE" && s.absent > 0) && (
             <Alert tone="bad">
               Atenção: no modo Substituir, combinações que não estão no arquivo deixam de valer. Exemplos:{" "}
@@ -262,5 +265,52 @@ export function ComparisonCard({ comparison, title = "Comparação com a base vi
         </div>
       )}
     </Card>
+  );
+}
+
+const monthNames = (ms: number[]) => ms.map((m) => MONTHS[m - 1]?.charAt(0) + MONTHS[m - 1]?.slice(1).toLowerCase()).join(", ");
+
+/** Prévia mês a mês de uma base (05/11/2026): meses que o arquivo traz, vigente × após a carga e a projeção que o
+ * realizado substitui — para conferir antes de confirmar que nenhum mês foi apagado sem querer. */
+function MonthDetail({ scope }: { scope: import("../api").ScopeComparison }) {
+  const rows = scope.by_month ?? [];
+  const proj = scope.projection_replaced;
+  if (!rows.length && !proj?.months.length) return null;
+  return (
+    <div className="month-detail">
+      <p className="small">
+        <strong>Empresa {scope.company} · {scope.year}</strong>
+        {scope.months?.length ? <> · o arquivo traz: <strong>{monthNames(scope.months)}</strong></> : null}
+      </p>
+      {proj && proj.months.length > 0 && (
+        <Alert tone="warn">
+          A projeção de <strong>{monthNames(proj.months)}</strong> ({fmtMoney(proj.total)}) será substituída pelo realizado
+          deste arquivo. Os meses seguintes continuam projetados.
+        </Alert>
+      )}
+      {rows.length > 0 && (
+        <div className="table-wrap">
+          <table className="table">
+            <thead>
+              <tr><th>Mês</th><th className="right">Vigente</th><th className="right">Após a carga</th><th className="right">Diferença</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const diff = Number(r.after) - Number(r.current);
+                const inFile = scope.months?.includes(r.month);
+                return (
+                  <tr key={r.month} className={inFile ? "" : "muted"}>
+                    <td>{monthNames([r.month])}{inFile ? "" : <span className="muted small"> · mantido</span>}</td>
+                    <td className="right">{fmtMoney(r.current)}</td>
+                    <td className="right"><strong>{fmtMoney(r.after)}</strong></td>
+                    <td className={`right ${Math.abs(diff) >= 0.005 ? (diff < 0 ? "error-text" : "") : "muted"}`}>{fmtMoney(diff)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }

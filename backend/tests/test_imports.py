@@ -483,6 +483,74 @@ def test_merge_replaces_cc_account_in_every_branch(client, admin, run_worker, db
     assert sorted(e.amount for e in entries) == [Decimal("300.00"), Decimal("1200.00")]
 
 
+def test_monthly_ksb1_keeps_other_months_and_replaces_projection(client, admin, run_worker, db):
+    """KSB1 só de outubro no modo Atualizar: janeiro da mesma CC × conta continua, outubro entra, e a projeção de
+    outubro sai na carga (a de novembro fica). A prévia mostra os meses do arquivo, o mês a mês e a projeção
+    substituída."""
+    from app.models import Company
+
+    _seed_cc(client, admin, run_worker)
+
+    def ksb1(month: int, amount: float) -> bytes:
+        when = datetime(2026, month, 10)
+        row = {
+            "cost_center": "1050101011",
+            "account": "6010301001",
+            "amount": amount,
+            "document_date": when,
+            "posting_date": when,
+        }
+        return builders.ksb1_export_xlsx([row])
+
+    first = upload(client, admin, ksb1(1, 1000), "jan.xlsx")
+    run_worker()
+    client.post(f"/api/v1/imports/{first}/confirm", headers=admin)
+    run_worker()
+    # projeção do gestor de outubro e novembro (carregada antes do fechamento de outubro)
+    company = db.scalar(select(Company).where(Company.code == "1001"))
+    cc = db.scalar(select(CostCenter).where(CostCenter.code == "1050101011", CostCenter.company_id == company.id))
+    acc = db.scalar(select(Account).where(Account.code == "6010301001"))
+    proj = DatasetVersion(
+        dataset_type="PROJECTION", scope_key="PROJECTION:2026:1001", version_number=1, is_current=True
+    )
+    db.add(proj)
+    db.flush()
+    for month, amount in ((10, "700.00"), (11, "800.00")):
+        db.add(
+            ActualEntry(
+                dataset_version_id=proj.id,
+                company_id=company.id,
+                cost_center_id=cc.id,
+                account_id=acc.id,
+                fiscal_year=2026,
+                period=month,
+                amount=amount,
+                projected=True,
+            )
+        )
+    db.commit()
+
+    second = upload(client, admin, ksb1(10, 650), "out.xlsx")
+    run_worker()
+    scope = status(client, admin, second)["summary"]["comparison"]["scopes"][0]
+    assert scope["months"] == [10] and (scope["new"], scope["changed"]) == (0, 1)
+    assert Decimal(scope["after_total"]) == Decimal("1650.00")  # janeiro mantido + outubro
+    after = {m["month"]: Decimal(m["after"]) for m in scope["by_month"]}
+    assert after == {1: Decimal("1000"), 10: Decimal("650")}
+    assert scope["projection_replaced"]["months"] == [10]
+    assert Decimal(scope["projection_replaced"]["total"]) == Decimal("700.00")
+    client.post(f"/api/v1/imports/{second}/confirm", headers=admin)
+    run_worker()
+    current = db.scalars(select(ActualEntry).join(DatasetVersion).where(DatasetVersion.is_current)).all()
+    actual = sorted((e.period, e.amount) for e in current if not e.projected)
+    projected = sorted((e.period, e.amount) for e in current if e.projected)
+    assert actual == [(1, Decimal("1000.00")), (10, Decimal("650.00"))]
+    assert projected == [(11, Decimal("800.00"))]  # outubro substituído pelo realizado; novembro continua
+    db.expire_all()
+    old = db.get(DatasetVersion, proj.id)
+    assert not old.is_current  # a projeção anterior fica no histórico
+
+
 def test_employees_and_vacancy(client, admin, run_worker, db):
     _seed_cc(client, admin, run_worker)
     rows = [

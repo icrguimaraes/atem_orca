@@ -352,6 +352,7 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
         version = new_version(db, batch, dataset, scope, user_id, source)
         payload = []
         file_keys: set[tuple] = set()
+        file_months: set[int] = set()  # meses que o arquivo traz: no modo Atualizar só eles são substituídos
         max_period = 0
         for row in group:
             d = dict(row.data)
@@ -366,6 +367,7 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
             file_keys.add((d["cost_center_id"], d["account_id"]))
             if batch.layout == "SAP_KSB1":
                 period = int(d["period"])
+                file_months.add(period)
                 payload.append(
                     base
                     | {
@@ -386,6 +388,8 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
             else:
                 for month, amount in d.get("values", {}).items():
                     value = Decimal(amount)
+                    if int(month) > closed_actual:
+                        file_months.add(int(month))
                     if value == 0 or int(month) <= closed_actual:
                         continue
                     entry = base | {"fiscal_year": year, "period": int(month), "amount": value}
@@ -421,10 +425,11 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
                 carried += 1
         if mode == "MERGE" and previous is not None:
             # mantém as combinações CC × conta que não vieram neste arquivo; as que vieram são substituídas em todas as
-            # filiais (16/10/2026: base sem filial + KSB1 com planta não podem somar)
+            # filiais (16/10/2026: base sem filial + KSB1 com planta não podem somar) e só nos meses do arquivo
+            # (05/11/2026: o KSB1 de outubro não apaga janeiro a setembro)
             columns = [c for c in model.__table__.columns if c.name not in ("id", "dataset_version_id")]
             for row in db.execute(select(*columns).where(model.dataset_version_id == previous.id)).mappings():
-                if (row["cost_center_id"], row["account_id"]) in file_keys:
+                if (row["cost_center_id"], row["account_id"]) in file_keys and int(row["period"]) in file_months:
                     continue
                 payload.append(dict(row) | {"dataset_version_id": version.id})
                 max_period = max(max_period, int(row["period"]))
@@ -433,12 +438,49 @@ def load_financial(db: Session, batch: ImportBatch, user_id: int | None, dataset
             db.execute(insert(model), payload[start : start + 5000])
         version.row_count = len(payload)
         version.last_closed_period = max_period or None
-        versions.append(
-            {"scope": scope, "version": version.version_number, "entries": len(payload), "kept_from_previous": carried}
-        )
+        entry = {
+            "scope": scope,
+            "version": version.version_number,
+            "entries": len(payload),
+            "kept_from_previous": carried,
+        }
+        if dataset == "ACTUAL" and max_period:
+            entry["projection_replaced"] = _drop_closed_projection(db, batch, user_id, company_code, year, max_period)
+        versions.append(entry)
         stats["entries"] += len(payload) - carried
         stats["entries_kept_from_previous"] += carried
     return dict(stats) | {"versions": versions}
+
+
+def _drop_closed_projection(
+    db: Session, batch: ImportBatch, user_id: int | None, company_code: str, year: int, closed: int
+) -> dict:
+    """O realizado fechou até o mês `closed`: a projeção desses meses sai (05/11/2026, "a projeção some sozinha quando
+    o mês sobe"). Cria uma nova versão da projeção só com os meses seguintes; a anterior fica no histórico."""
+    scope = f"PROJECTION:{year}:{company_code}"
+    previous = db.scalar(
+        select(DatasetVersion).where(
+            DatasetVersion.dataset_type == "PROJECTION", DatasetVersion.scope_key == scope, DatasetVersion.is_current
+        )
+    )
+    if previous is None:
+        return {"months": [], "total": "0"}
+    columns = [c for c in ActualEntry.__table__.columns if c.name not in ("id", "dataset_version_id")]
+    rows = list(db.execute(select(*columns).where(ActualEntry.dataset_version_id == previous.id)).mappings())
+    dropped = [r for r in rows if int(r["period"]) <= closed]
+    if not dropped:
+        return {"months": [], "total": "0"}
+    version = new_version(db, batch, "PROJECTION", scope, user_id, previous.source or "EXCEL")
+    kept = [dict(r) | {"dataset_version_id": version.id} for r in rows if int(r["period"]) > closed]
+    for start in range(0, len(kept), 5000):
+        db.execute(insert(ActualEntry), kept[start : start + 5000])
+    version.row_count = len(kept)
+    version.last_closed_period = previous.last_closed_period
+    return {
+        "months": sorted({int(r["period"]) for r in dropped}),
+        "total": str(sum((Decimal(r["amount"]) for r in dropped), Decimal(0))),
+        "version": version.version_number,
+    }
 
 
 # ------------------------------------------------------------------ pessoal

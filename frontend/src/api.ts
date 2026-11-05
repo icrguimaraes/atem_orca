@@ -187,6 +187,9 @@ export interface ScopeComparison {
   scope: string; year: number; company: string; current_version: number | null; new: number; changed: number;
   unchanged: number; absent: number; absent_action: "KEEP" | "REMOVE"; absent_total: string; current_total: string;
   after_total: string; difference: string; absent_samples: string[];
+  // 05/11/2026: meses do arquivo, mês a mês (vigente × após) e a projeção que o realizado substitui
+  months?: number[]; by_month?: { month: number; current: string; after: string }[];
+  projection_replaced?: { months: number[]; total: string };
 }
 
 export interface BudgetImportScope {

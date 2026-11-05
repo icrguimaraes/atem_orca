@@ -1541,3 +1541,7 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus
 .td-crumbs { margin: 0; }
 .td .wd-sec .section-tools { margin-bottom: 8px; }
 .td-foot { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; border-top: 1px solid var(--border); padding-top: 16px; font-size: 13px; }
+
+/* prévia mês a mês da importação (05/11/2026) */
+.month-detail { margin-top: 14px; display: grid; gap: 8px; }
+.month-detail p { margin: 0; }

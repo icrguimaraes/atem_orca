@@ -82,6 +82,19 @@ def _db_cells(db: Session, model, version_id: int) -> dict[tuple, dict[int, Deci
     return cells
 
 
+def _projection_cells(db: Session, year: int, company: str) -> dict[int, Decimal]:
+    """Projeção vigente da empresa no ano, por mês (para mostrar o que o realizado vai substituir)."""
+    version = current_version(db, "PROJECTION", f"PROJECTION:{year}:{company}")
+    if version is None:
+        return {}
+    rows = db.execute(
+        select(ActualEntry.period, func.sum(ActualEntry.amount))
+        .where(ActualEntry.dataset_version_id == version.id)
+        .group_by(ActualEntry.period)
+    )
+    return {int(p): a for p, a in rows if a}
+
+
 def _same(a: dict[int, Decimal], b: dict[int, Decimal]) -> bool:
     return all(abs(a.get(m, Decimal(0)) - b.get(m, Decimal(0))) <= TOLERANCE for m in set(a) | set(b))
 
@@ -99,19 +112,45 @@ def compare_financial(db: Session, result: ParseResult, options: dict) -> dict:
         version = current_version(db, result.dataset_type, scope)
         file_cells = _file_cells(records)
         db_cells = _db_cells(db, model, version.id) if version else {}
+        # meses que o arquivo traz (05/11/2026): no modo Atualizar só eles são substituídos — um KSB1 só de outubro
+        # não mexe em janeiro a setembro
+        file_months = sorted({m for months in file_cells.values() for m in months})
         new = changed = unchanged = 0
         for key, months in file_cells.items():
+            current = {m: v for m, v in db_cells.get(key, {}).items() if mode != "MERGE" or m in file_months}
             if key not in db_cells:
                 new += 1
-            elif _same(months, db_cells[key]):
+            elif _same(months, current):
                 unchanged += 1
             else:
                 changed += 1
         absent = [k for k in db_cells if k not in file_cells]
-        file_total = sum((sum(m.values(), Decimal(0)) for m in file_cells.values()), Decimal(0))
         current_total = sum((sum(m.values(), Decimal(0)) for m in db_cells.values()), Decimal(0))
         kept_total = sum((sum(db_cells[k].values(), Decimal(0)) for k in absent), Decimal(0))
-        after_total = file_total + (kept_total if mode == "MERGE" else 0)
+        # mês a mês: vigente × após a carga
+        cur_month: dict[int, Decimal] = defaultdict(Decimal)
+        after_month: dict[int, Decimal] = defaultdict(Decimal)
+        for key, months in db_cells.items():
+            for m, v in months.items():
+                cur_month[m] += v
+                if mode == "MERGE" and not (key in file_cells and m in file_months):
+                    after_month[m] += v
+        for months in file_cells.values():
+            for m, v in months.items():
+                after_month[m] += v
+        after_total = sum(after_month.values(), Decimal(0))
+        by_month = [
+            {"month": m, "current": str(cur_month.get(m, Decimal(0))), "after": str(after_month.get(m, Decimal(0)))}
+            for m in range(1, 13)
+            if cur_month.get(m) or after_month.get(m)
+        ]
+        # realizado: a projeção dos meses que passam a ter realizado sai na carga
+        projection = {"months": [], "total": "0"}
+        if result.dataset_type == "ACTUAL":
+            kept_months = [m for k, ms in db_cells.items() for m in ms if mode == "MERGE"]
+            closed = max(file_months + kept_months, default=0)
+            proj = {m: v for m, v in _projection_cells(db, year, company).items() if m <= closed}
+            projection = {"months": sorted(proj), "total": str(sum(proj.values(), Decimal(0)))}
         scopes.append(
             {
                 "scope": scope,
@@ -128,6 +167,9 @@ def compare_financial(db: Session, result: ParseResult, options: dict) -> dict:
                 "after_total": str(after_total),
                 "difference": str(after_total - current_total),
                 "absent_samples": _describe(db, absent[:10]),
+                "months": file_months,
+                "by_month": by_month,
+                "projection_replaced": projection,
             }
         )
     no_changes = bool(scopes) and all(
