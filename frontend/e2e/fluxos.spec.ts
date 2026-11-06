@@ -77,10 +77,19 @@ test("orçamento OPEX: baixar o template preenchido do CC", async ({ page }) => 
 
 test("tema: escolha persiste e volta ao automático", async ({ page }) => {
   await login(page);
+  // o seletor Auto/Claro/Escuro fica no menu da conta (desktop: canto da barra superior; celular: folha "Mais")
+  const openThemeSwitch = async () => {
+    await expect(page.locator("main h1").first()).toBeVisible(); // casca montada (isVisible não espera)
+    if (await page.locator(".side-user-btn").isVisible()) await page.click(".side-user-btn");
+    else await page.click(".tabbar button:has-text('Mais')");
+    await expect(page.locator(".theme-switch").first()).toBeVisible();
+  };
+  await openThemeSwitch();
   await page.locator(".theme-switch button", { hasText: "Escuro" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await openThemeSwitch();
   await page.locator(".theme-switch button", { hasText: "Auto" }).click();
   await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
 });

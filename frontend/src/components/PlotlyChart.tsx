@@ -59,13 +59,22 @@ function isBar(t: Trace) {
  *    e o valor no fim da barra (categorias longas não cabem no eixo x de 390px);
  *  - barras horizontais divergentes (variação) passam a crescer todas para a direita, em valor absoluto: a cor
  *    e o sinal no texto continuam dizendo se é aumento ou redução, e o texto nunca invade os nomes à esquerda. */
-function adaptTraces(data: Data[]): { data: Data[]; horizontal: boolean; swapped: boolean } {
+function adaptTraces(data: Data[], barmode?: unknown): { data: Data[]; horizontal: boolean; swapped: boolean } {
   const traces = data as Trace[];
   if (traces.length === 0 || !traces.every(isBar)) return { data, horizontal: false, swapped: false };
   const vertical = traces.every((t) => t.orientation !== "h" && typeof t.x?.[0] === "string");
   let out: Trace[] = traces;
   if (vertical) {
-    out = traces.map((t) => ({ ...t, x: t.y, y: t.x, orientation: "h", textposition: "outside", cliponaxis: false }));
+    // o rótulo vertical (textangle -90, desenhado para colunas) ficaria em pé sobre a barra deitada e invadiria as
+    // vizinhas: no celular ele fica na horizontal, logo depois da barra, e um pouco menor (06/11/2026). Segmentos
+    // empilhados (ex.: coluna "Total": realizado + projeção, com o rótulo "inside") mantêm o texto dentro: levá-los
+    // todos para fora sobrepunha os números no fim da barra
+    const stacked = barmode === "stack" || barmode === "relative";
+    out = traces.map((t) => ({
+      ...t, x: t.y, y: t.x, orientation: "h", cliponaxis: false, textangle: 0,
+      textposition: stacked || t.textposition === "inside" ? t.textposition : "outside",
+      textfont: { ...((t.textfont as Record<string, unknown> | undefined) ?? {}), size: 10 },
+    }));
   }
   if (!out.every((t) => t.orientation === "h")) return { data, horizontal: false, swapped: false };
   const hasNeg = out.some((t) => (t.x as unknown[]).some((v) => Number(v) < 0));
@@ -178,7 +187,7 @@ export function PlotlyChart({ figure, height, onClick, ariaLabel }: {
     const el = ref.current;
     if (!el) return;
     const touch = isTouchOrNarrow();
-    const adapted = touch ? adaptTraces(figure.data) : { data: figure.data, horizontal: false, swapped: false };
+    const adapted = touch ? adaptTraces(figure.data, figure.layout.barmode) : { data: figure.data, horizontal: false, swapped: false };
     const { horizontal, swapped } = adapted;
     // tooltip próprio: o Plotly só emite os eventos de hover, sem desenhar o balão
     const data = mode ? ((adapted.data as Trace[]).map((t) => ({ ...t, hoverinfo: "none", hovertemplate: undefined })) as Data[]) : adapted.data;

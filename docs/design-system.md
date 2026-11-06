@@ -141,3 +141,7 @@ O layout visual do projeto irmão "ATEM Prévia de Resultados" substitui o Coral
 - **Celular**: continua a barra de abas inferior + folha "Mais"; a barra do topo vira a pílula flutuante; ícone ativo da barra em laranja.
 - **Gráficos**: mesmas figuras, séries, cliques e tooltips; o Plotly só troca a fonte para Sofia Sans e a grade para o tom creme (`--grid`).
   Rollback: tag `backup-antes-layout-previa-2026-11-06`.
+- **Entrada** (`pages/Login.tsx`, 06/11/2026): desenho da Prévia — painel tinta à esquerda (marca, frase com destaque laranja,
+  arcos laranja; no escuro um tom acima do fundo) e formulário no creme à direita; no celular só o formulário, com a marca em cima.
+- **Rótulos no celular**: colunas mensais que viram barras horizontais têm o rótulo na horizontal (`textangle` 0, 10 px) logo depois da
+  barra; segmentos com rótulo "inside" (coluna Total: realizado + projeção) mantêm o texto dentro. Desktop inalterado.
