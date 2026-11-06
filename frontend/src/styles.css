@@ -1545,3 +1545,33 @@ summary:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--focus
 /* prévia mês a mês da importação (05/11/2026) */
 .month-detail { margin-top: 14px; display: grid; gap: 8px; }
 .month-detail p { margin: 0; }
+
+/* projeção do gestor (05/11/2026): grade conta × mês */
+.proj-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; margin-bottom: 10px; color: var(--muted); }
+.proj-grid .month-cell { min-width: 118px; }
+.proj-grid th.th-closed { color: var(--series-1-ink); }
+.cell-actual { color: var(--series-1-ink); font-variant-numeric: tabular-nums; }
+.cell-budget { color: var(--series-3-ink); }
+.cell-in { display: flex; align-items: center; gap: 3px; }
+.cell-origin { display: inline-block; min-width: 14px; font-size: 10px; font-weight: 700; line-height: 15px; text-align: center; border-radius: 4px; }
+.cell-origin.origin-P { background: var(--neutral-bg); color: var(--muted); }
+.cell-origin.origin-G { background: var(--info-bg); color: var(--info); }
+.cell-origin.origin-O { background: color-mix(in srgb, var(--series-3) 16%, var(--surface)); color: var(--series-3-ink); }
+.proj-grid input.money { width: 96px; }
+.proj-grid input.money.suggested { font-style: italic; color: var(--series-3-ink); }
+.proj-grid input.money.dirty, .cell-dirty-sample { background: color-mix(in srgb, var(--series-1) 12%, var(--surface)); border-color: var(--series-1); font-weight: 600; }
+.cell-dirty-sample { display: inline-block; width: 14px; height: 12px; border: 1px solid var(--series-1); border-radius: 3px; vertical-align: middle; }
+.proj-grid tr.group-row td { background: var(--surface-2); font-weight: 700; text-transform: uppercase; font-size: 12px; letter-spacing: 0.03em; }
+.proj-grid tr.total-row td { border-top: 2px solid var(--border); }
+.modal-sub { font-size: 14px; margin: 16px 0 6px; }
+.compare-cells { max-height: 320px; }
+.proj-comment { display: grid; gap: 4px; margin-top: 14px; font-size: 13px; }
+.proj-comment textarea { width: 100%; }
+.proj-history { display: grid; gap: 8px; }
+.proj-history details { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; }
+.proj-history summary { cursor: pointer; }
+.add-account-list { max-height: 50vh; margin-top: 10px; }
+.proj-ask { display: grid; gap: 10px; padding: 12px 14px; margin-bottom: 14px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.proj-ask.proj-ask-open { border-color: var(--series-3); box-shadow: inset 3px 0 0 var(--series-3); }
+.proj-ask p { margin: 0; }
+.proj-ask-list { max-height: 220px; }

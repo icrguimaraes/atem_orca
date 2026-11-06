@@ -29,6 +29,7 @@ from app.api.v1 import (
     personnel,
     personnel_scenarios,
     pj,
+    projection,
     projects,
     rules,
     sap,
@@ -115,6 +116,7 @@ for module in (
     control,
     sap,
     projects,
+    projection,
 ):
     api.include_router(module.router)
 app.include_router(api)

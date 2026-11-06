@@ -48,8 +48,10 @@ def infer_nature(account_code: str, dre_group: str | None, package: str | None) 
 
 
 def new_version(
-    db: Session, batch: ImportBatch, dataset_type: str, scope_key: str, user_id: int | None, source: str
+    db: Session, batch: ImportBatch | None, dataset_type: str, scope_key: str, user_id: int | None, source: str
 ) -> DatasetVersion:
+    """Nova versão vigente do escopo; a anterior fica no histórico. `batch=None`: gravação feita na tela (ex.: projeção
+    digitada pelo gestor), sem lote de importação."""
     current = db.scalars(
         select(DatasetVersion)
         .where(DatasetVersion.dataset_type == dataset_type, DatasetVersion.scope_key == scope_key)
@@ -65,7 +67,7 @@ def new_version(
         dataset_type=dataset_type,
         scope_key=scope_key,
         version_number=number,
-        import_batch_id=batch.id,
+        import_batch_id=batch.id if batch is not None else None,
         source=source,
         is_current=True,
         created_by=user_id,

@@ -10,6 +10,9 @@ const Painel2 = lazy(() => import("./pages/Painel2"));
 // Projeto: o comparativo mensal é Plotly
 const ProjectDetail = lazy(() => import("./pages/ProjectDetail"));
 const Projects = lazy(() => import("./pages/Projects"));
+// Projeção do gestor (05/11/2026): lista de CCs e grade conta × mês
+const Projection = lazy(() => import("./pages/Projection"));
+const ProjectionGrid = lazy(() => import("./pages/ProjectionGrid"));
 import Audit from "./pages/Audit";
 import ControlCenter from "./pages/ControlCenter";
 import ContratosPj from "./pages/ContratosPj";
@@ -75,6 +78,8 @@ export default function App() {
             <Route path="perguntas" element={<Questions />} />
             <Route path="projetos" element={<Suspense fallback={<Loading />}><Projects /></Suspense>} />
             <Route path="projetos/:id" element={<Suspense fallback={<Loading />}><ProjectDetail /></Suspense>} />
+            <Route path="projecao" element={<Suspense fallback={<Loading />}><Projection /></Suspense>} />
+            <Route path="projecao/:ccId" element={<Suspense fallback={<Loading />}><ProjectionGrid /></Suspense>} />
             <Route path="pj" element={<Protected pj><ContratosPj /></Protected>} />
             <Route path="base" element={<Protected roles={["CONTROLLER"]}><BaseStatus /></Protected>} />
             <Route path="validacao" element={<Protected roles={["CONTROLLER"]}><Validation /></Protected>} />
