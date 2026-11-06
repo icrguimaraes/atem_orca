@@ -121,3 +121,23 @@ Shadow strategy is subtle and warm, using slightly tinted shadows to feel less c
 - **Cards** sem sombra; **selos** retangulares (8 px); **avisos** com filete à esquerda (vermelho só no erro); **vazio/carregando** em texto discreto, sem caixa; listas (justificativas, perguntas, pacotes, fila de CCs) em linhas separadas por filetes, item ativo com filete à esquerda.
 - **Situação** fora do "Por que mudou?": `.state` (ponto + texto) — `missing` (vermelho), `pending` (anel), `ok`/`answered` (verde), `closed`.
 
+
+### Casca da Prévia de Resultados (06/11/2026)
+
+O layout visual do projeto irmão "ATEM Prévia de Resultados" substitui o Coral Stay na casca e nos componentes; os dados não mudam.
+
+- **Tokens** (`styles.css`, `:root` e os dois seletores escuros): fundo creme `#f3f0ee` (escuro `#141413`), superfícies `#fcfbfa`/`#f7f4f1`,
+  texto tinta `#141413`, secundário `#63605d`, filetes `#d1cdc7`/`#e6e1db`; ação primária = **tinta** (`--brand`, texto creme `--brand-ink`;
+  no escuro inverte). `--accent` laranja `#cf4500` só nos pontinhos da casca (grupos do menu, sobretítulo da página) — nunca em dado.
+  Uma fonte só: **Sofia Sans** (títulos 500 com -2%, corpo 450 15 px); sombras quase invisíveis.
+- **Casca** (`components/Layout.tsx`): menu lateral flutuante (creme claro, raio 16, margem 12) com a logo compacta (`brand/logo-atem*.png`),
+  grupos em sanfona com o pontinho laranja (o grupo da página aberta não fecha; preferência em `localStorage["atem.sidebar.closed-groups"]`),
+  item atual em pílula tinta, botão de recolher (só ícones). Barra superior em pílula branca flutuante: menu, busca Ctrl+K, sol/lua (alterna
+  claro/escuro) e a conta (avatar + nome; o menu traz dados, alterar senha, tema Auto/Claro/Escuro e sair). Rodapé discreto.
+- **Cabeçalho de página**: `PageHeader` mostra como sobretítulo o grupo do menu da página (via `SectionContext` do Layout), título de 32 px.
+- **Componentes**: cartões sem borda nem sombra (o que fica dentro ganha filete suave); indicadores com o tom no pontinho antes do rótulo
+  (verde-água = orçamento, verde/vermelho = bom/ruim); botões com contorno tinta de 1,5 px; abas em segmentado com a ativa em tinta; chips
+  de ano/mês ativos em tinta; campos brancos com contorno tinta translúcido.
+- **Celular**: continua a barra de abas inferior + folha "Mais"; a barra do topo vira a pílula flutuante; ícone ativo da barra em laranja.
+- **Gráficos**: mesmas figuras, séries, cliques e tooltips; o Plotly só troca a fonte para Sofia Sans e a grade para o tom creme (`--grid`).
+  Rollback: tag `backup-antes-layout-previa-2026-11-06`.

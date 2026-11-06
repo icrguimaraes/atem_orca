@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { BrandMark } from "./Brand";
 import { CommandPalette, type PaletteItem } from "./CommandPalette";
-import { Alert, Modal } from "./ui";
+import { Alert, Modal, SectionContext } from "./ui";
 import { useAuth } from "../auth";
 import { ROLE_LABELS } from "../labels";
 import { ThemeSwitch, useTheme, type Theme } from "../theme";
@@ -42,9 +42,13 @@ const ICON = {
   central: "M4 6h4v4H4zM16 4h4v4h-4zM16 16h4v4h-4zM8 8h4v8h4M12 6h4M12 18h4",
   busca: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-3.5-3.5",
   tema: "M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z",
+  sol: "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4",
+  menu: "M4 6h16M4 12h16M4 18h16",
+  chevron: "M6 9l6 6 6-6",
 };
 
 const RAIL_KEY = "atem.sidebar.collapsed"; // menu recolhido: preferência do navegador (não some no login)
+const CLOSED_KEY = "atem.sidebar.closed-groups"; // grupos do menu recolhidos (sanfona); o grupo da página aberta não fecha
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
 // Menu (etapa 3, 10/10/2026): o cotidiano do gestor em cima (acompanhar e defender o orçamento), a Controladoria embaixo.
@@ -92,6 +96,21 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   },
 ];
 const NAV = NAV_GROUPS.flatMap((g) => g.items);
+
+/** O item corresponde à página aberta (inclui as subpáginas, ex.: /projecao/12 em "Projeção"). */
+const matches = (n: NavItem, pathname: string) =>
+  n.end ? pathname === n.to : pathname === n.to || pathname.startsWith(`${n.to}/`);
+
+/** Grupo do menu da página aberta: vira o sobretítulo do cabeçalho da página (padrão da Prévia de Resultados). */
+function sectionOf(pathname: string): string | undefined {
+  return NAV_GROUPS.find((g) => g.items.some((n) => matches(n, pathname)))?.title;
+}
+
+/** Tema efetivo (o "Auto" segue o sistema): decide o ícone e o destino do botão sol/lua da barra superior. */
+function effectiveTheme(theme: Theme): "light" | "dark" {
+  if (theme !== "auto") return theme;
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 /** Iniciais do nome (primeiro e último), para o avatar do rodapé do menu. */
 function initials(name?: string) {
@@ -165,6 +184,25 @@ export default function Layout() {
       /* ignora */
     }
   }, [collapsed]);
+  // grupos recolhidos do menu (sanfona); preferência do navegador
+  const [closed, setClosed] = useState<string[]>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(CLOSED_KEY) ?? "[]");
+      return Array.isArray(v) ? v.filter((x) => typeof x === "string") : [];
+    } catch {
+      return [];
+    }
+  });
+  const toggleGroup = (title: string) =>
+    setClosed((c) => {
+      const next = c.includes(title) ? c.filter((t) => t !== title) : [...c, title];
+      try {
+        localStorage.setItem(CLOSED_KEY, JSON.stringify(next));
+      } catch {
+        /* só nesta sessão */
+      }
+      return next;
+    });
   // busca rápida: Ctrl+K (⌘K no Mac) em qualquer página
   const [search, setSearch] = useState(false);
   useEffect(() => {
@@ -177,78 +215,107 @@ export default function Layout() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  const shown = effectiveTheme(theme);
+  const flipTheme = () => setTheme(shown === "dark" ? "light" : "dark");
   const paletteItems: PaletteItem[] = [
     ...NAV_GROUPS.flatMap((g) =>
       g.items.filter(allowed).map((n) => ({ key: n.to, group: "Páginas", label: n.label, icon: n.icon, hint: g.title, run: () => navigate(n.to) })),
     ),
     { key: "rail", group: "Ações", label: collapsed ? "Expandir o menu lateral" : "Recolher o menu lateral", icon: collapsed ? ICON.expandir : ICON.recolher, run: () => setCollapsed(!collapsed), keywords: "menu barra lateral" },
-    { key: "theme", group: "Ações", label: theme === "dark" ? "Usar tema claro" : "Usar tema escuro", icon: ICON.tema, run: () => setTheme(theme === "dark" ? "light" : "dark"), keywords: "tema escuro claro modo noturno" },
+    { key: "theme", group: "Ações", label: shown === "dark" ? "Usar tema claro" : "Usar tema escuro", icon: ICON.tema, run: flipTheme, keywords: "tema escuro claro modo noturno" },
     { key: "pwd", group: "Ações", label: "Alterar minha senha", icon: ICON.senha, run: () => setPwd(true), keywords: "senha conta" },
     { key: "logout", group: "Ações", label: "Sair", icon: ICON.sair, run: logout, keywords: "logout sair" },
   ];
+  const roles = user?.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ");
   return (
     <div className={`shell${collapsed ? " is-collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="brand">
-          <BrandMark size={collapsed ? 30 : 44} />
+          <BrandMark size={32} compact />
           <div className="brand-text">
             <strong>Orçamento</strong>
-            <span>Controladoria e Tributos · Grupo Atem</span>
+            <span>Controladoria e Tributos</span>
           </div>
+          <button
+            type="button"
+            className="rail-toggle"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-expanded={!collapsed}
+            aria-controls="main-nav"
+            aria-label={collapsed ? "Expandir o menu" : "Recolher o menu"}
+            title={collapsed ? "Expandir o menu" : "Recolher o menu (só ícones)"}
+          >
+            <Icon d={collapsed ? ICON.expandir : ICON.recolher} size={16} />
+          </button>
           <button type="button" className="mobile-only top-search-icon" onClick={() => setSearch(true)} aria-label="Buscar">
             <Icon d={ICON.busca} size={20} />
           </button>
         </div>
-        <button
-          type="button"
-          className="rail-toggle"
-          onClick={() => setCollapsed(!collapsed)}
-          aria-expanded={!collapsed}
-          aria-controls="main-nav"
-          title={collapsed ? "Expandir o menu" : "Recolher o menu"}
-        >
-          <Icon d={collapsed ? ICON.expandir : ICON.recolher} size={18} />
-          <span>Recolher menu</span>
-        </button>
         <nav id="main-nav" aria-label="Navegação principal">
           {NAV_GROUPS.map((g) => {
             const items = g.items.filter(allowed);
             if (!items.length) return null;
+            // com o menu só em ícones todos os grupos aparecem; o grupo da página aberta nunca fecha
+            const current = items.some((n) => matches(n, location.pathname));
+            const open = collapsed || current || !closed.includes(g.title);
             return (
-              <div className="nav-group" key={g.title}>
-                <div className="nav-section">{g.title}</div>
-                {items.map((n) => (
-                  <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")} title={collapsed ? n.label : undefined}>
-                    <Icon d={n.icon} size={18} />
-                    <span>{n.label}</span>
-                  </NavLink>
-                ))}
+              <div className={`nav-group${open ? "" : " closed"}`} key={g.title}>
+                <button type="button" className="nav-section" aria-expanded={open} onClick={() => toggleGroup(g.title)} disabled={current}>
+                  {g.title}
+                  <Icon d={ICON.chevron} size={14} />
+                </button>
+                {open &&
+                  items.map((n) => (
+                    <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? "active" : "")} title={collapsed ? n.label : undefined}>
+                      <Icon d={n.icon} size={18} />
+                      <span>{n.label}</span>
+                    </NavLink>
+                  ))}
               </div>
             );
           })}
         </nav>
-        <div className="sidebar-foot">
+      </aside>
+      <div className="main-col">
+        <header className="topbar">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setCollapsed(!collapsed)}
+            aria-label={collapsed ? "Expandir o menu" : "Recolher o menu"}
+            aria-expanded={!collapsed}
+            aria-controls="main-nav"
+          >
+            <Icon d={ICON.menu} size={20} />
+          </button>
+          <button type="button" className="top-search" onClick={() => setSearch(true)}>
+            <Icon d={ICON.busca} size={18} />
+            <span>Buscar páginas, centros de custo e ações…</span>
+            <kbd>{isMac ? "⌘" : "Ctrl"} K</kbd>
+          </button>
+          <div className="spacer" />
+          <button type="button" className="icon-btn" onClick={flipTheme} aria-label={shown === "dark" ? "Usar tema claro" : "Usar tema escuro"} title={shown === "dark" ? "Usar tema claro" : "Usar tema escuro"}>
+            <Icon d={shown === "dark" ? ICON.sol : ICON.tema} size={20} />
+          </button>
           <UserMenu
             name={user?.name}
-            roles={user?.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ")}
+            email={user?.email}
+            roles={roles}
             theme={theme}
             setTheme={setTheme}
             onPassword={() => setPwd(true)}
             onLogout={logout}
           />
-        </div>
-      </aside>
-      <div className="main-col">
-        <header className="topbar">
-          <button type="button" className="top-search" onClick={() => setSearch(true)}>
-            <Icon d={ICON.busca} size={17} />
-            <span>Buscar páginas, centros de custo e ações…</span>
-            <kbd>{isMac ? "⌘" : "Ctrl"} K</kbd>
-          </button>
         </header>
         <main className="content">
-          <Outlet />
+          <SectionContext.Provider value={sectionOf(location.pathname)}>
+            <Outlet />
+          </SectionContext.Provider>
         </main>
+        <footer className="foot">
+          <span>© {new Date().getFullYear()} Grupo ATEM · Controladoria e Tributos</span>
+          <span>Dados financeiros confidenciais</span>
+        </footer>
       </div>
       {search && <CommandPalette items={paletteItems} onClose={() => setSearch(false)} />}
       {pwd && <PasswordModal onClose={() => setPwd(false)} />}
@@ -258,10 +325,11 @@ export default function Layout() {
 }
 
 /**
- * Conta no rodapé do menu: o cartão abre (para cima) senha e tema; o botão ao lado sai do sistema direto.
+ * Conta no canto direito da barra superior (padrão da Prévia de Resultados): avatar e nome; o menu abre para baixo
+ * com os dados da conta, alterar senha, tema (Auto, Claro, Escuro) e sair.
  */
-function UserMenu({ name, roles, theme, setTheme, onPassword, onLogout }: {
-  name?: string; roles?: string; theme: Theme; setTheme: (t: Theme) => void; onPassword: () => void; onLogout: () => void;
+function UserMenu({ name, email, roles, theme, setTheme, onPassword, onLogout }: {
+  name?: string; email?: string; roles?: string; theme: Theme; setTheme: (t: Theme) => void; onPassword: () => void; onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
@@ -292,20 +360,13 @@ function UserMenu({ name, roles, theme, setTheme, onPassword, onLogout }: {
   };
   return (
     <div className="side-user-wrap" ref={wrap}>
-      {open && (
-        <div className="side-menu" id="side-user-menu">
-          <button type="button" onClick={run(onPassword)}><Icon d={ICON.senha} size={16} />Alterar senha</button>
-          <div className="side-menu-theme"><span>Tema</span><ThemeSwitch theme={theme} onChange={setTheme} /></div>
-          <hr />
-          <button type="button" onClick={run(onLogout)}><Icon d={ICON.sair} size={16} />Sair</button>
-        </div>
-      )}
       <div className="side-user">
         <button
           ref={toggle}
           type="button"
           className="side-user-btn"
           aria-expanded={open}
+          aria-haspopup="menu"
           aria-controls={open ? "side-user-menu" : undefined}
           onClick={() => setOpen(!open)}
           title="Minha conta: senha, tema e sair"
@@ -315,11 +376,22 @@ function UserMenu({ name, roles, theme, setTheme, onPassword, onLogout }: {
             <strong title={name}>{name}</strong>
             <span>{roles}</span>
           </span>
-        </button>
-        <button type="button" className="side-lock" onClick={onLogout} title="Sair" aria-label="Sair">
-          <Icon d={ICON.sair} size={18} />
+          <Icon d={ICON.chevron} size={16} />
         </button>
       </div>
+      {open && (
+        <div className="side-menu" id="side-user-menu">
+          <div className="side-menu-info">
+            <b>{name}</b>
+            {roles && <span>{roles}</span>}
+            {email && <span>{email}</span>}
+          </div>
+          <button type="button" onClick={run(onPassword)}><Icon d={ICON.senha} size={16} />Alterar senha</button>
+          <div className="side-menu-theme"><span>Tema</span><ThemeSwitch theme={theme} onChange={setTheme} /></div>
+          <hr />
+          <button type="button" onClick={run(onLogout)}><Icon d={ICON.sair} size={16} />Sair</button>
+        </div>
+      )}
     </div>
   );
 }

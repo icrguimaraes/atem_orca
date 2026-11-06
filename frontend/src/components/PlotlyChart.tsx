@@ -4,6 +4,9 @@ import type { Data, Layout, PlotlyHTMLElement } from "plotly.js";
 
 export interface Figure { data: Data[]; layout: Partial<Layout>; meta?: Record<string, string> }
 
+/** Fonte da casca (Sofia Sans, padrão da Prévia de Resultados); só a aparência muda, as séries vêm do backend. */
+const PLOT_FONT = "Sofia Sans, Arial, sans-serif";
+
 /** Lê os tokens do tema (claro/escuro) para o Plotly acompanhar o design system. */
 function themeLayout(): Partial<Layout> {
   const css = getComputedStyle(document.documentElement);
@@ -12,8 +15,8 @@ function themeLayout(): Partial<Layout> {
   const surface = css.getPropertyValue("--surface").trim() || "#fff";
   const border = css.getPropertyValue("--border").trim() || "#ddd";
   return {
-    font: { color: text, family: "DM Sans, system-ui, sans-serif", size: 12 },
-    hoverlabel: { bgcolor: surface, bordercolor: border, font: { color: text, family: "DM Sans, system-ui, sans-serif" } },
+    font: { color: text, family: PLOT_FONT, size: 12 },
+    hoverlabel: { bgcolor: surface, bordercolor: border, font: { color: text, family: PLOT_FONT } },
     xaxis: { tickfont: { color: muted }, linecolor: border },
     yaxis: { tickfont: { color: muted }, linecolor: border },
     legend: { font: { color: muted } },

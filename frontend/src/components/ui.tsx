@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import type { Tone } from "../labels";
@@ -7,10 +7,15 @@ export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 
+/** Grupo do menu da página aberta (fornecido pelo Layout); vira o sobretítulo do cabeçalho da página. */
+export const SectionContext = createContext<string | undefined>(undefined);
+
 export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
+  const section = useContext(SectionContext);
   return (
     <header className="page-header">
       <div>
+        {section && <div className="page-eyebrow">{section}</div>}
         <h1>{title}</h1>
         {subtitle && (typeof subtitle === "string" ? <p className="muted">{subtitle}</p> : subtitle)}
       </div>

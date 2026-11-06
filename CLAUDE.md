@@ -32,7 +32,7 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
 - Novos parâmetros do ciclo entram em `seed_data.CYCLE_PARAMETERS` (o seed acrescenta aos ciclos existentes) e em
   `PARAM_LABELS` no frontend.
 - Frontend: tokens de cor/fonte em `styles.css` (`:root`, claro e escuro); gráficos em `components/charts.tsx` com a paleta
-  `SERIES`; coral só em ações primárias. Toda tabela nova vai dentro de `.table-wrap`; conferir celular (390px) sem overflow.
+  `SERIES`; casca no padrão da Prévia de Resultados (06/11/2026: creme, tinta na ação primária, Sofia Sans, laranja só nos pontinhos da casca). Toda tabela nova vai dentro de `.table-wrap`; conferir celular (390px) sem overflow.
 - Gráficos analíticos: figuras Plotly são montadas **no backend** (`services/analytics.py` — figuras e `dashboard()`; constantes,
   formatação pt-BR, filtros, `build` e agregações em `services/analytics_base.py` —, uma base filtrada por request,
   formatação pt-BR em rótulos/tooltips) e renderizadas por `components/PlotlyChart.tsx` (bundle `plotly.js-basic-dist-min`:
