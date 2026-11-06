@@ -1688,3 +1688,14 @@ label { font-weight: 600; }
   .stats .stat { padding: 12px 14px; }
   .stats .stat-value { margin-top: 0; }
 }
+/* projeção: foco nos meses abertos (06/11/2026) */
+.proj-view { display: inline-flex; gap: 6px; margin-left: auto; }
+.proj-grid th.th-open { background: color-mix(in srgb, var(--series-1) 8%, var(--surface)); color: var(--text); }
+.proj-grid th .th-sub { display: block; font-size: 10px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--muted); }
+.proj-grid td.open-cell { background: color-mix(in srgb, var(--series-1) 4%, transparent); }
+.proj-focus .month-cell { min-width: 132px; }
+.proj-focus input.money { width: 108px; font-size: 13.5px; padding: 7px 8px; }
+.proj-focus .sticky-col { min-width: 230px; }
+.proj-grid .cell-ref { font-size: 10.5px; color: var(--series-3-ink); text-align: right; padding-right: 20px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.proj-grid td.muted-col { opacity: 0.75; }
+.proj-hidden { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }

@@ -4,6 +4,7 @@ import { api } from "../api";
 import { FilterBar } from "../components/FilterBar";
 import { Alert, BackButton, Card, Empty, Loading, Modal, PageHeader, SearchBox, Stat, lines, useLoad } from "../components/ui";
 import { MONTHS, NATURE_LABELS, fmtDateTime, fmtMoney, fmtMoneyInput, fmtSignedMoney, parseMoney } from "../labels";
+import { usePersistentState } from "../persist";
 import { monthName, type LastSaved } from "./Projection";
 
 /* Grade da projeção do CC (05/11/2026): conta × mês. Meses fechados = realizado (azul, travado); meses abertos
@@ -78,6 +79,7 @@ export default function ProjectionGrid() {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<Comparison | null>(null);
   const [adding, setAdding] = useState(false);
+  const [view, setView] = usePersistentState<"focus" | "year">("projecao.vista", "focus");
   const [useBudget, setUseBudget] = useState<boolean | null>(null); // resposta a "usar o orçado como projeção?"
 
   const g = grid.data;
@@ -111,8 +113,14 @@ export default function ProjectionGrid() {
   const visible = rows.filter((r) =>
     (!nature || r.nature === nature) &&
     (!q || `${r.code} ${r.name}`.toUpperCase().includes(q)) &&
-    (show === "" || (show === "changed" ? open.some((m) => isDirty(r, m)) : show === "suggested" ? r.origin.includes("O") : !same(closingOf(r), 0) || !same(budgetOf(r), 0))),
+    (show === "all" ? true
+      : show === "changed" ? open.some((m) => isDirty(r, m))
+      : show === "suggested" ? r.origin.includes("O")
+      : show === "values" ? !same(closingOf(r), 0) || !same(budgetOf(r), 0)
+      // padrão: contas que importam para a projeção (valor ou orçado nos meses abertos, alteradas ou acrescentadas)
+      : added.includes(r) || open.some((m) => key(r.account_id, m) in edits || !same(valueOf(r, m), 0) || !same(num(r.budget[m - 1]), 0))),
   );
+  const hiddenCount = rows.length - visible.length;
 
   const setCell = (r: GridRow, m: number, text: string) => setEdits((e) => ({ ...e, [key(r.account_id, m)]: text }));
   const clearSuggestions = () => setEdits((e) => {
@@ -196,7 +204,26 @@ export default function ProjectionGrid() {
     ? "vigente"
     : `na tela · vigente ${fmtMoney(vigente)}${!same(suggestedValue, 0) ? ` · inclui ${fmtMoney(suggestedValue)} de orçado sugerido` : ""}`;
   const groups = NATURES.map((n) => ({ nature: n, rows: visible.filter((r) => r.nature === n) })).filter((x) => x.rows.length);
-  const cols = 16;
+  // foco (06/11/2026, "dar um foco nas contas que serão alteradas"): os meses fechados viram uma coluna só (realizado
+  // acumulado + média mensal) e os meses abertos ficam logo ao lado da conta; "Ano completo" mostra mês a mês
+  const focus = view === "focus";
+  const closedLabel = g.closed ? (g.closed === 1 ? MONTHS[0] : `${MONTHS[0]}–${MONTHS[g.closed - 1]}`) : "";
+  const closedCols = focus ? (g.closed ? 2 : 0) : g.closed;
+  const cols = 1 + closedCols + open.length + 3;
+  const closedCellsOf = (values: number[], strong = false) => {
+    const wrap = (v: string) => (strong ? <strong>{v}</strong> : v);
+    if (!g.closed) return null;
+    if (focus) {
+      const ytd = values.slice(0, g.closed).reduce((s, v) => s + v, 0);
+      return (
+        <>
+          <td className="right cell-actual">{wrap(fmtMoneyInput(String(ytd)) || "—")}</td>
+          <td className="right cell-actual muted-col">{wrap(fmtMoneyInput(String(ytd / g.closed)) || "—")}</td>
+        </>
+      );
+    }
+    return values.slice(0, g.closed).map((v, i) => <td key={i} className="right cell-actual month-cell">{wrap(fmtMoneyInput(String(v)) || "—")}</td>);
+  };
 
   return (
     <>
@@ -222,7 +249,7 @@ export default function ProjectionGrid() {
       <FilterBar
         fields={[
           { key: "nature", label: "Natureza", value: nature, onChange: setNature, options: [{ value: "", label: "OPEX, Pessoal e CAPEX" }, ...NATURES.map((n) => ({ value: n, label: NATURE_LABELS[n] ?? n }))] },
-          { key: "show", label: "Contas", value: show, onChange: setShow, options: [{ value: "", label: "Todas as contas" }, { value: "values", label: "Só com valor no ano" }, { value: "suggested", label: "Com sugestão do orçado" }, { value: "changed", label: "Só alteradas agora" }] },
+          { key: "show", label: "Contas", value: show, onChange: setShow, options: [{ value: "", label: "Com valor ou orçado nos meses abertos" }, { value: "all", label: "Todas as contas" }, { value: "values", label: "Com valor no ano" }, { value: "suggested", label: "Com sugestão do orçado" }, { value: "changed", label: "Só alteradas agora" }] },
         ]}
         onReset={() => { setNature(""); setShow(""); setQuery(""); }}
         resetCount={(nature ? 1 : 0) + (show ? 1 : 0) + (query ? 1 : 0)}
@@ -249,17 +276,37 @@ export default function ProjectionGrid() {
           <span><span className="cell-origin origin-O">O</span> orçado sugerido (conta sem projeção)</span>
           <span><span className="cell-dirty-sample" /> alterado agora</span>
           {!g.can_edit && <strong>Perfil de consulta: só leitura.</strong>}
+          {g.closed > 0 && (
+            <span className="proj-view" role="group" aria-label="Exibição dos meses">
+              <button type="button" className="btn btn-ghost btn-sm" aria-pressed={focus} onClick={() => setView("focus")}>Foco nos meses abertos</button>
+              <button type="button" className="btn btn-ghost btn-sm" aria-pressed={!focus} onClick={() => setView("year")}>Ano completo</button>
+            </span>
+          )}
         </div>
+        {hiddenCount > 0 && !show && !nature && !query && (
+          <p className="muted small proj-hidden">
+            {hiddenCount} conta(s) só com realizado em meses fechados estão ocultas.{" "}
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShow("all")}>Mostrar todas</button>
+          </p>
+        )}
         {invalid > 0 && <Alert tone="warn">{invalid} valor(es) inválido(s): use números como 1.234,56 ou -500.</Alert>}
         {rows.length === 0 ? (
           <Empty>Este centro de custo não tem realizado, projeção nem orçado em {g.year}. Use "Acrescentar conta".</Empty>
         ) : (
           <div className="table-wrap grid-wrap">
-            <table className="table grid-table proj-grid">
+            <table className={`table grid-table proj-grid ${focus ? "proj-focus" : ""}`}>
               <thead>
                 <tr>
                   <th className="sticky-col">Conta</th>
-                  {MONTHS.map((m, i) => <th key={m} className={`right ${i + 1 <= g.closed ? "th-closed" : ""}`}>{m}</th>)}
+                  {focus
+                    ? g.closed > 0 && (
+                      <>
+                        <th className="right th-closed">Realizado {closedLabel}</th>
+                        <th className="right th-closed">Média/mês</th>
+                      </>
+                    )
+                    : MONTHS.slice(0, g.closed).map((m) => <th key={m} className="right th-closed">{m}</th>)}
+                  {open.map((m) => <th key={m} className="right th-open">{MONTHS[m - 1]}{focus && <span className="th-sub">projeção</span>}</th>)}
                   <th className="right">Fechamento</th>
                   <th className="right">Orçado {g.year}</th>
                   <th className="right">Desvio</th>
@@ -280,9 +327,9 @@ export default function ProjectionGrid() {
                               <strong>{r.code}</strong> · {r.name}
                               {r.package && <div className="muted small">{r.package}</div>}
                             </td>
-                            {MONTHS.map((_, i) => {
-                              const m = i + 1;
-                              if (m <= g.closed) return <td key={m} className="right cell-actual month-cell">{fmtMoneyInput(r.actual[i]) || "—"}</td>;
+                            {closedCellsOf(r.actual.map(num))}
+                            {open.map((m) => {
+                              const i = m - 1;
                               const k = key(r.account_id, m);
                               const origin = r.origin[i];
                               const text = k in edits ? edits[k] : (same(num(r.values[i]), 0) ? "" : fmtMoneyInput(r.values[i]));
@@ -290,7 +337,7 @@ export default function ProjectionGrid() {
                               const dirty = isDirty(r, m);
                               const showOrigin = !dirty && origin && !(k in edits);
                               return (
-                                <td key={m} className="month-cell">
+                                <td key={m} className="month-cell open-cell">
                                   <div className="cell-in" title={`${monthName(m)}: ${dirty ? `alterado (antes ${fmtMoney(r.values[i])})` : ORIGIN_LABEL[origin]} · orçado ${fmtMoney(r.budget[i])}`}>
                                     <input
                                       className={`money ${bad ? "invalid" : ""} ${dirty ? "dirty" : ""} ${showOrigin && origin === "O" ? "suggested" : ""}`}
@@ -304,6 +351,7 @@ export default function ProjectionGrid() {
                                     />
                                     {showOrigin ? <span className={`cell-origin origin-${origin}`}>{origin}</span> : <span className="cell-origin" />}
                                   </div>
+                                  {focus && !same(num(r.budget[i]), 0) && <div className="cell-ref">orç. {fmtMoneyInput(r.budget[i])}</div>}
                                 </td>
                               );
                             })}
@@ -315,7 +363,8 @@ export default function ProjectionGrid() {
                       })}
                       <tr className="sub-row">
                         <td className="sticky-col"><strong>Total {NATURE_LABELS[n] ?? n}</strong></td>
-                        {t.months.map((v, i) => <td key={i} className={`right ${i + 1 <= g.closed ? "cell-actual" : ""}`}>{fmtMoneyInput(String(v)) || "—"}</td>)}
+                        {closedCellsOf(t.months)}
+                        {open.map((m) => <td key={m} className="right open-cell">{fmtMoneyInput(String(t.months[m - 1])) || "—"}</td>)}
                         <td className="right"><strong>{fmtMoney(t.closing)}</strong></td>
                         <td className="right cell-budget">{fmtMoney(t.budget)}</td>
                         <td className="right">{fmtSignedMoney(t.closing - t.budget)}</td>
@@ -328,7 +377,8 @@ export default function ProjectionGrid() {
                   return (
                     <tr className="sub-row total-row">
                       <td className="sticky-col"><strong>Total{visible.length !== rows.length ? " (filtrado)" : ""}</strong></td>
-                      {t.months.map((v, i) => <td key={i} className={`right ${i + 1 <= g.closed ? "cell-actual" : ""}`}><strong>{fmtMoneyInput(String(v)) || "—"}</strong></td>)}
+                      {closedCellsOf(t.months, true)}
+                      {open.map((m) => <td key={m} className="right open-cell"><strong>{fmtMoneyInput(String(t.months[m - 1])) || "—"}</strong></td>)}
                       <td className="right"><strong>{fmtMoney(t.closing)}</strong></td>
                       <td className="right cell-budget"><strong>{fmtMoney(t.budget)}</strong></td>
                       <td className="right"><strong>{fmtSignedMoney(t.closing - t.budget)}</strong></td>
