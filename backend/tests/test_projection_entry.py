@@ -81,7 +81,8 @@ def test_grid_shows_closed_months_and_origin_of_each_value(client, admin, db):
     assert r["origin"][:9] == ["R"] * 9 and r["values"][8] == "1200.00"
     assert r["origin"][9:] == ["P", "P", "P"] and r["values"][9] == "1300.00"
     c = _row(grid, capex.id)
-    assert c["origin"][9:] == ["O", "O", "O"] and c["values"][9] == "5000.00" and c["suggested"]
+    # conta sem projeção: o orçado não preenche nada sozinho (fica só como referência em "budget")
+    assert c["origin"][9:] == ["", "", ""] and c["values"][9] == "0" and c["budget"][9] == "5000.00"
     assert all(row["nature"] != "FINANCEIRO" for row in grid["rows"])
     items = client.get(f"{P}/cost-centers", headers=admin).json()["items"]
     item = next(i for i in items if i["id"] == cc.id)
@@ -95,12 +96,12 @@ def test_compare_then_save_replaces_only_changed_cells(client, admin, db):
         "values": [
             {"account_id": opex.id, "month": 10, "amount": "1500.00"},  # alterado
             {"account_id": opex.id, "month": 11, "amount": "1300.00"},  # igual: não muda
-            {"account_id": capex.id, "month": 11, "amount": "5000.00"},  # sugestão do orçado aceita
+            {"account_id": capex.id, "month": 11, "amount": "5000.00"},  # conta sem projeção, digitada agora
         ],
     }
     before_versions = db.scalar(select(func.count()).select_from(DatasetVersion))
     cmp = client.post(f"{P}/{cc.id}/compare", headers=admin, json=body).json()
-    assert len(cmp["changes"]) == 2 and cmp["accepted_suggestions"] == 1
+    assert len(cmp["changes"]) == 2
     assert Decimal(cmp["totals"]["difference"]) == Decimal("5200")
     assert Decimal(cmp["totals"]["closing_after"]) == Decimal("2200") + Decimal("3900") + Decimal("5200")
     assert db.scalar(select(func.count()).select_from(DatasetVersion)) == before_versions  # comparar não grava

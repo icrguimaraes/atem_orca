@@ -95,9 +95,10 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   o orçado de referência nos números do projeto — o % gasto passa a ser o realizado acumulado sobre o orçado total do projeto.
 - Projeção do gestor (05/11/2026): `pages/Projection.tsx` (`/projecao`, lista de CCs) + `pages/ProjectionGrid.tsx` (`/projecao/:ccId`,
   grade conta × mês de OPEX, Pessoal e CAPEX) sobre `services/projection_entry.py` + `api/v1/projection.py`. Meses até o último
-  realizado da empresa ficam travados; os abertos vêm com a projeção vigente ou, conta sem projeção, o orçado sugerido (origem
-  P = importada, G = gravada na tela, `ActualEntry.source="GESTOR"`, O = orçado sugerido). "Revisar e gravar" chama `compare`
-  (antiga × nova por mês, natureza e célula) e pergunta se as contas sem projeção usam o orçado; gravar cria nova versão de
+  realizado da empresa ficam travados; os abertos vêm só com a projeção vigente (06/11/2026: o orçado nunca preenche sozinho,
+  aparece só como referência "orç." sob o campo; origem P = importada, G = gravada na tela, `ActualEntry.source="GESTOR"`).
+  Padrão "Foco nos meses abertos" (meses fechados numa coluna; "Ano completo" mostra mês a mês); a coluna do ano chama-se
+  "Projeção {ano}" (realizado + projeção). "Revisar e gravar" chama `compare` (antiga × nova por mês, natureza e célula); gravar cria nova versão de
   `PROJECTION:{ano}:{empresa}` trocando só as células alteradas do CC (versão lida ≠ vigente → 409), auditoria
   `entity_type="projection"` com antes × depois; perfil VIEWER não grava.
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`

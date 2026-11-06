@@ -11,11 +11,11 @@ import { monthName, type LastSaved } from "./Projection";
    editáveis, pré-preenchidos com a projeção vigente ou, se a conta não tem projeção, com o orçado (sugestão).
    Antes de gravar, a comparação mostra a projeção antiga × a nova, célula a célula. */
 
-type Origin = "R" | "P" | "G" | "O" | "";
+type Origin = "R" | "P" | "G" | "";
 
 interface GridRow {
   account_id: number; code: string; name: string; nature: string; package: string | null;
-  actual: string[]; projection: string[]; budget: string[]; values: string[]; origin: Origin[]; suggested: boolean;
+  actual: string[]; projection: string[]; budget: string[]; values: string[]; origin: Origin[];
 }
 
 interface Grid {
@@ -30,7 +30,7 @@ interface Change {
 }
 
 interface Comparison {
-  changes: Change[]; accepted_suggestions: number;
+  changes: Change[];
   by_month: { month: number; before: string; after: string }[];
   by_nature: { nature: string; before: string; after: string }[];
   totals: { actual: string; budget: string; projection_before: string; projection_after: string; closing_before: string; closing_after: string; difference: string };
@@ -42,13 +42,11 @@ interface HistoryItem {
   cells: { cell: string; before: string | null; after: string | null }[]; total_before: string | null; total_after: string | null;
 }
 
-interface Suggestion { account_id: number; code: string; name: string; nature: string; months: number[]; total: number }
-
 interface AccountOption { id: number; code: string; name: string; nature: string; package: string | null }
 
 const NATURES = ["OPEX", "PESSOAL", "CAPEX"];
 const ORIGIN_LABEL: Record<Origin, string> = {
-  R: "Realizado", P: "Projeção importada (planilha da área)", G: "Projeção gravada na tela", O: "Orçado sugerido — ainda não é projeção", "": "Sem valor",
+  R: "Realizado", P: "Projeção importada (planilha da área)", G: "Projeção gravada na tela", "": "Sem projeção",
 };
 const key = (acc: number, m: number) => `${acc}:${m}`;
 const num = (v: string | number) => Number(v) || 0;
@@ -80,7 +78,6 @@ export default function ProjectionGrid() {
   const [done, setDone] = useState<Comparison | null>(null);
   const [adding, setAdding] = useState(false);
   const [view, setView] = usePersistentState<"focus" | "year">("projecao.vista", "focus");
-  const [useBudget, setUseBudget] = useState<boolean | null>(null); // resposta a "usar o orçado como projeção?"
 
   const g = grid.data;
   const rows = useMemo(() => [...(g?.rows ?? []), ...added], [g, added]);
@@ -94,7 +91,6 @@ export default function ProjectionGrid() {
   const isDirty = (r: GridRow, m: number) => key(r.account_id, m) in edits && !same(valueOf(r, m), num(r.values[m - 1]));
   const invalid = Object.entries(edits).filter(([, t]) => parseCell(t) === null).length;
   const dirtyCount = rows.reduce((n, r) => n + open.filter((m) => isDirty(r, m)).length, 0);
-  const suggestedOpen = rows.reduce((n, r) => n + open.filter((m) => r.origin[m - 1] === "O" && !same(valueOf(r, m), 0)).length, 0);
   const pending = dirtyCount > 0 || added.length > 0;
 
   useEffect(() => {
@@ -115,7 +111,6 @@ export default function ProjectionGrid() {
     (!q || `${r.code} ${r.name}`.toUpperCase().includes(q)) &&
     (show === "all" ? true
       : show === "changed" ? open.some((m) => isDirty(r, m))
-      : show === "suggested" ? r.origin.includes("O")
       : show === "values" ? !same(closingOf(r), 0) || !same(budgetOf(r), 0)
       // padrão: contas que importam para a projeção (valor ou orçado nos meses abertos, alteradas ou acrescentadas)
       : added.includes(r) || open.some((m) => key(r.account_id, m) in edits || !same(valueOf(r, m), 0) || !same(num(r.budget[m - 1]), 0))),
@@ -123,34 +118,18 @@ export default function ProjectionGrid() {
   const hiddenCount = rows.length - visible.length;
 
   const setCell = (r: GridRow, m: number, text: string) => setEdits((e) => ({ ...e, [key(r.account_id, m)]: text }));
-  const clearSuggestions = () => setEdits((e) => {
-    const next = { ...e };
-    rows.forEach((r) => open.forEach((m) => { if (r.origin[m - 1] === "O") next[key(r.account_id, m)] = ""; }));
-    return next;
-  });
   const reset = () => { setEdits({}); setAdded([]); setError(null); };
 
-  // célula com o orçado sugerido que o gestor não tocou: só vira projeção se ele disser "sim" na revisão
-  const untouchedSuggestion = (r: GridRow, m: number) => r.origin[m - 1] === "O" && !(key(r.account_id, m) in edits) && !same(valueOf(r, m), 0);
-  const suggestions: Suggestion[] = rows
-    .map((r) => {
-      const months = open.filter((m) => untouchedSuggestion(r, m));
-      return { account_id: r.account_id, code: r.code, name: r.name, nature: r.nature, months, total: months.reduce((s, m) => s + valueOf(r, m), 0) };
-    })
-    .filter((s) => s.months.length > 0);
-
-  const payload = (withBudget: boolean) => ({
+  const payload = () => ({
     version_id: g.version_id,
-    values: rows.flatMap((r) => open.map((m) => ({
-      account_id: r.account_id, month: m, amount: (!withBudget && untouchedSuggestion(r, m) ? 0 : valueOf(r, m)).toFixed(2),
-    }))),
+    values: rows.flatMap((r) => open.map((m) => ({ account_id: r.account_id, month: m, amount: valueOf(r, m).toFixed(2) }))),
   });
 
-  async function compareWith(withBudget: boolean) {
+  async function review() {
     setError(null);
     setBusy(true);
     try {
-      setPreview(await api<Comparison>(`/projection/${ccId}/compare`, { method: "POST", body: JSON.stringify(payload(withBudget)) }));
+      setPreview(await api<Comparison>(`/projection/${ccId}/compare`, { method: "POST", body: JSON.stringify(payload()) }));
     } catch (err) {
       setError((err as Error).message);
       setPreview(null);
@@ -159,20 +138,10 @@ export default function ProjectionGrid() {
     }
   }
 
-  function review() {
-    setUseBudget(null);
-    compareWith(true);
-  }
-
-  function choose(withBudget: boolean) {
-    setUseBudget(withBudget);
-    compareWith(withBudget);
-  }
-
   async function save() {
     setBusy(true);
     try {
-      const body = { ...payload(useBudget !== false), comment: comment || null };
+      const body = { ...payload(), comment: comment || null };
       const result = await api<Comparison>(`/projection/${ccId}`, { method: "PUT", body: JSON.stringify(body) });
       setDone(result);
       setPreview(null);
@@ -199,10 +168,7 @@ export default function ProjectionGrid() {
   const actualYtd = all.months.slice(0, g.closed).reduce((s, v) => s + v, 0);
   const projected = all.closing - actualYtd;
   const vigente = rows.reduce((s, r) => s + open.reduce((t, m) => t + num(r.projection[m - 1]), 0), 0);
-  const suggestedValue = rows.reduce((s, r) => s + open.reduce((t, m) => t + (r.origin[m - 1] === "O" && !(key(r.account_id, m) in edits) ? valueOf(r, m) : 0), 0), 0);
-  const projHint = same(projected, vigente)
-    ? "vigente"
-    : `na tela · vigente ${fmtMoney(vigente)}${!same(suggestedValue, 0) ? ` · inclui ${fmtMoney(suggestedValue)} de orçado sugerido` : ""}`;
+  const projHint = same(projected, vigente) ? "vigente" : `na tela · vigente ${fmtMoney(vigente)}`;
   const groups = NATURES.map((n) => ({ nature: n, rows: visible.filter((r) => r.nature === n) })).filter((x) => x.rows.length);
   // foco (06/11/2026, "dar um foco nas contas que serão alteradas"): os meses fechados viram uma coluna só (realizado
   // acumulado + média mensal) e os meses abertos ficam logo ao lado da conta; "Ano completo" mostra mês a mês
@@ -242,14 +208,14 @@ export default function ProjectionGrid() {
       <div className="stats">
         <Stat label={`Realizado até ${monthName(g.closed)}`} value={fmtMoney(actualYtd)} tone="info" />
         <Stat label="Projeção dos meses abertos" value={fmtMoney(projected)} hint={lines(projHint, pending ? "alterações ainda não gravadas" : null)} />
-        <Stat label="Fechamento do ano" value={fmtMoney(all.closing)} hint={lines("realizado + projeção")} />
+        <Stat label={`Projeção ${g.year}`} value={fmtMoney(all.closing)} hint={lines("realizado + projeção dos meses abertos")} />
         <Stat label={`Orçado ${g.year}`} value={fmtMoney(all.budget)} tone="budget" hint={lines(`desvio ${fmtSignedMoney(all.closing - all.budget)}`)} />
       </div>
 
       <FilterBar
         fields={[
           { key: "nature", label: "Natureza", value: nature, onChange: setNature, options: [{ value: "", label: "OPEX, Pessoal e CAPEX" }, ...NATURES.map((n) => ({ value: n, label: NATURE_LABELS[n] ?? n }))] },
-          { key: "show", label: "Contas", value: show, onChange: setShow, options: [{ value: "", label: "Com valor ou orçado nos meses abertos" }, { value: "all", label: "Todas as contas" }, { value: "values", label: "Com valor no ano" }, { value: "suggested", label: "Com sugestão do orçado" }, { value: "changed", label: "Só alteradas agora" }] },
+          { key: "show", label: "Contas", value: show, onChange: setShow, options: [{ value: "", label: "Com valor ou orçado nos meses abertos" }, { value: "all", label: "Todas as contas" }, { value: "values", label: "Com valor no ano" }, { value: "changed", label: "Só alteradas agora" }] },
         ]}
         onReset={() => { setNature(""); setShow(""); setQuery(""); }}
         resetCount={(nature ? 1 : 0) + (show ? 1 : 0) + (query ? 1 : 0)}
@@ -261,7 +227,6 @@ export default function ProjectionGrid() {
         actions={g.can_edit && open.length > 0 ? (
           <div className="page-actions">
             <button className="btn btn-ghost btn-sm" onClick={() => setAdding(true)}>Acrescentar conta</button>
-            {suggestedOpen > 0 && <button className="btn btn-ghost btn-sm" onClick={clearSuggestions} title="Zera as células com o orçado sugerido">Zerar sugestões do orçado</button>}
             {pending && <button className="btn btn-ghost btn-sm" onClick={reset}>Desfazer</button>}
             <button className="btn btn-primary btn-sm" disabled={busy || invalid > 0 || rows.length === 0} onClick={review}>
               {busy ? "Comparando…" : "Revisar e gravar"}
@@ -273,7 +238,7 @@ export default function ProjectionGrid() {
           <span><span className="cell-actual">■</span> Realizado (travado)</span>
           <span><span className="cell-origin origin-P">P</span> projeção importada</span>
           <span><span className="cell-origin origin-G">G</span> gravada na tela</span>
-          <span><span className="cell-origin origin-O">O</span> orçado sugerido (conta sem projeção)</span>
+          <span><span className="cell-budget">orç.</span> orçado do mês (só referência)</span>
           <span><span className="cell-dirty-sample" /> alterado agora</span>
           {!g.can_edit && <strong>Perfil de consulta: só leitura.</strong>}
           {g.closed > 0 && (
@@ -307,7 +272,7 @@ export default function ProjectionGrid() {
                     )
                     : MONTHS.slice(0, g.closed).map((m) => <th key={m} className="right th-closed">{m}</th>)}
                   {open.map((m) => <th key={m} className="right th-open">{MONTHS[m - 1]}{focus && <span className="th-sub">projeção</span>}</th>)}
-                  <th className="right">Fechamento</th>
+                  <th className="right">Projeção {g.year}</th>
                   <th className="right">Orçado {g.year}</th>
                   <th className="right">Desvio</th>
                 </tr>
@@ -340,7 +305,7 @@ export default function ProjectionGrid() {
                                 <td key={m} className="month-cell open-cell">
                                   <div className="cell-in" title={`${monthName(m)}: ${dirty ? `alterado (antes ${fmtMoney(r.values[i])})` : ORIGIN_LABEL[origin]} · orçado ${fmtMoney(r.budget[i])}`}>
                                     <input
-                                      className={`money ${bad ? "invalid" : ""} ${dirty ? "dirty" : ""} ${showOrigin && origin === "O" ? "suggested" : ""}`}
+                                      className={`money ${bad ? "invalid" : ""} ${dirty ? "dirty" : ""}`}
                                       inputMode="decimal"
                                       aria-label={`${r.code} ${monthName(m)}`}
                                       value={text}
@@ -396,9 +361,6 @@ export default function ProjectionGrid() {
       {preview && (
         <CompareModal
           data={preview}
-          suggestions={suggestions}
-          useBudget={useBudget}
-          onChoose={choose}
           comment={comment}
           setComment={setComment}
           busy={busy}
@@ -414,7 +376,7 @@ export default function ProjectionGrid() {
             setAdded((list) => [...list, {
               account_id: a.id, code: a.code, name: a.name, nature: a.nature, package: a.package,
               actual: Array(12).fill("0"), projection: Array(12).fill("0"), budget: Array(12).fill("0"),
-              values: Array(12).fill("0"), origin: Array(12).fill(""), suggested: false,
+              values: Array(12).fill("0"), origin: Array(12).fill(""),
             }]);
             setAdding(false);
           }}
@@ -425,14 +387,11 @@ export default function ProjectionGrid() {
 }
 
 /** Projeção antiga × nova antes de gravar: resumo, por mês, por natureza e cada célula alterada. */
-function CompareModal({ data, suggestions, useBudget, onChoose, comment, setComment, busy, onClose, onConfirm }: {
-  data: Comparison; suggestions: Suggestion[]; useBudget: boolean | null; onChoose: (withBudget: boolean) => void;
-  comment: string; setComment: (v: string) => void; busy: boolean; onClose: () => void; onConfirm: () => void;
+function CompareModal({ data, comment, setComment, busy, onClose, onConfirm }: {
+  data: Comparison; comment: string; setComment: (v: string) => void; busy: boolean; onClose: () => void; onConfirm: () => void;
 }) {
   const t = data.totals;
   const nothing = data.changes.length === 0;
-  const mustChoose = suggestions.length > 0 && useBudget === null;
-  const suggestedTotal = suggestions.reduce((s, x) => s + x.total, 0);
   return (
     <Modal
       title="Projeção atual × nova projeção"
@@ -441,48 +400,12 @@ function CompareModal({ data, suggestions, useBudget, onChoose, comment, setComm
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>Voltar e ajustar</button>
-          <button className="btn btn-primary" disabled={busy || nothing || mustChoose} title={mustChoose ? "Responda se usa o orçado nas contas sem projeção" : undefined} onClick={onConfirm}>
+          <button className="btn btn-primary" disabled={busy || nothing} onClick={onConfirm}>
             {busy ? "Aguarde…" : "Confirmar e gravar"}
           </button>
         </>
       }
     >
-      {suggestions.length > 0 && (
-        <div className={`proj-ask ${useBudget === null ? "proj-ask-open" : ""}`}>
-          <p>
-            <strong>{suggestions.length} conta(s) não tiveram projeção</strong> nos meses abertos. A grade sugeriu o orçado
-            ({fmtMoney(suggestedTotal)}). <strong>Deseja usar o orçamento como projeção?</strong>
-          </p>
-          <div className="table-wrap proj-ask-list">
-            <table className="table">
-              <thead><tr><th>Conta</th><th>Natureza</th><th>Meses</th><th className="right">Orçado sugerido</th></tr></thead>
-              <tbody>
-                {suggestions.map((s) => (
-                  <tr key={s.account_id}>
-                    <td><strong>{s.code}</strong> · {s.name}</td>
-                    <td>{NATURE_LABELS[s.nature] ?? s.nature}</td>
-                    <td>{s.months.map(monthName).join(", ")}</td>
-                    <td className="right cell-budget">{fmtMoney(s.total)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="page-actions">
-            <button className={`btn btn-sm ${useBudget === true ? "btn-primary" : "btn-ghost"}`} disabled={busy} onClick={() => onChoose(true)}>
-              Sim, usar o orçado como projeção
-            </button>
-            <button className={`btn btn-sm ${useBudget === false ? "btn-primary" : "btn-ghost"}`} disabled={busy} onClick={() => onChoose(false)}>
-              Não, deixar essas contas sem projeção
-            </button>
-          </div>
-          {useBudget !== null && (
-            <p className="muted small">
-              {useBudget ? "O orçado dessas contas entra como projeção e aparece na lista abaixo." : "Essas contas ficam sem projeção; a comparação abaixo já está sem elas."}
-            </p>
-          )}
-        </div>
-      )}
       {nothing ? (
         <Alert tone="info">Nada mudou em relação à projeção vigente.</Alert>
       ) : (
@@ -491,7 +414,7 @@ function CompareModal({ data, suggestions, useBudget, onChoose, comment, setComm
             <Stat label="Projeção atual" value={fmtMoney(t.projection_before)} />
             <Stat label="Nova projeção" value={fmtMoney(t.projection_after)} />
             <Stat label="Diferença" value={fmtSignedMoney(t.difference)} tone={num(t.difference) > 0 ? "bad" : "good"} hint={lines(`${data.changes.length} célula(s) alterada(s)`)} />
-            <Stat label="Fechamento do ano" value={fmtMoney(t.closing_after)} tone="budget" hint={lines(`antes ${fmtMoney(t.closing_before)}`, `orçado ${fmtMoney(t.budget)}`)} />
+            <Stat label="Projeção do ano" value={fmtMoney(t.closing_after)} tone="budget" hint={lines(`antes ${fmtMoney(t.closing_before)}`, `orçado ${fmtMoney(t.budget)}`)} />
           </div>
           <h3 className="modal-sub">Por mês</h3>
           <div className="table-wrap">
@@ -541,7 +464,7 @@ function CompareModal({ data, suggestions, useBudget, onChoose, comment, setComm
                   <tr key={`${c.account_id}:${c.month}`}>
                     <td><strong>{c.code}</strong> · {c.name}</td>
                     <td>{monthName(c.month)}</td>
-                    <td className="small">{c.origin_before === "O" ? "orçado sugerido" : c.origin_before === "G" ? "gravada na tela" : c.origin_before === "P" ? "projeção importada" : "sem projeção"}</td>
+                    <td className="small">{c.origin_before === "G" ? "gravada na tela" : c.origin_before === "P" ? "projeção importada" : "sem projeção"}</td>
                     <td className="right">{fmtMoney(c.before)}</td>
                     <td className="right"><strong>{fmtMoney(c.after)}</strong></td>
                     <td className={`right ${num(c.difference) > 0 ? "error-text" : ""}`}>{fmtSignedMoney(c.difference)}</td>

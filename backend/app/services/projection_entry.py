@@ -1,9 +1,9 @@
 """Projeção digitada pelo gestor (05/11/2026): grade conta × mês por centro de custo, para OPEX, Pessoal e CAPEX.
 
 - Meses fechados (até o último mês do realizado da empresa) mostram o realizado e não se editam.
-- Meses abertos vêm preenchidos com a projeção vigente; conta sem projeção nos meses abertos recebe o orçado do ano
-  como sugestão (origem "O"). A origem de cada valor vai na grade: "P" = projeção importada (planilha da área),
-  "G" = projeção gravada na tela, "O" = orçado sugerido (ainda não é projeção).
+- Meses abertos vêm preenchidos só com a projeção vigente (06/11/2026: o orçado não preenche nada sozinho; aparece só
+  como referência). A origem de cada valor vai na grade: "P" = projeção importada (planilha da área),
+  "G" = projeção gravada na tela.
 - Gravar vale na hora: cria uma nova versão da projeção da empresa no ano (a anterior fica no histórico), trocando só
   as células alteradas deste CC. Antes de gravar, `compare` mostra a projeção antiga × a nova, célula a célula.
 - Toda gravação vai para a auditoria (`entity_type="projection"`, `entity_id` = CC), com o antes × depois das células.
@@ -281,17 +281,13 @@ def grid(db: Session, user: User, cc_id: int) -> dict:
     rows = []
     for acc in accounts:
         projected_open = {m for m in has_projection.get(acc.id, set()) if m > closed}
-        suggest = not projected_open  # conta sem projeção nos meses abertos: sugere o orçado
         values, origin = [], []
         for m in range(1, 13):
             i = m - 1
             if m <= closed:
                 values.append(str(actual[acc.id][i]))
                 origin.append("R")
-            elif suggest:
-                values.append(str(budget[acc.id][i]))
-                origin.append("O" if budget[acc.id][i] else "")
-            else:
+            else:  # só a projeção (06/11/2026: o orçado não preenche mais nada sozinho)
                 values.append(str(projection[acc.id][i]))
                 origin.append("G" if m in typed.get(acc.id, set()) else ("P" if m in projected_open else ""))
         rows.append(
@@ -306,7 +302,6 @@ def grid(db: Session, user: User, cc_id: int) -> dict:
                 "budget": [str(v) for v in budget[acc.id]],
                 "values": values,
                 "origin": origin,
-                "suggested": suggest and any(budget[acc.id][m - 1] for m in open_months),
             }
         )
     return {
@@ -404,7 +399,6 @@ def compare(db: Session, user: User, cc_id: int, values: list[dict], version_id:
         "closed": view["closed"],
         "version_id": view["version_id"],
         "changes": changes,
-        "accepted_suggestions": sum(1 for c in changes if c["origin_before"] == "O"),
         "by_month": [{"month": m, "before": str(b), "after": str(a)} for m, (b, a) in by_month.items()],
         "by_nature": [{"nature": n, "before": str(b), "after": str(a)} for n, (b, a) in by_nature.items() if b or a],
         "totals": {

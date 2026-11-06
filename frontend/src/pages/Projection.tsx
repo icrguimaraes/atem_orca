@@ -60,8 +60,8 @@ export default function Projection() {
       />
       <div className="stats">
         <Stat label="Realizado" value={fmtMoney(sum("actual"))} tone="info" hint="meses fechados" />
-        <Stat label="Projeção" value={fmtMoney(sum("projection"))} hint="meses abertos" />
-        <Stat label="Fechamento do ano" value={fmtMoney(sum("closing"))} hint="realizado + projeção" />
+        <Stat label="Projeção meses abertos" value={fmtMoney(sum("projection"))} />
+        <Stat label={`Projeção ${data.year}`} value={fmtMoney(sum("closing"))} hint="realizado + projeção dos meses abertos" />
         <Stat label={`Orçado ${data.year}`} value={fmtMoney(sum("budget"))} tone="budget" hint={lines(`desvio ${fmtMoney(sum("closing") - sum("budget"))}`)} />
       </div>
       <Card title={`Centros de custo (${items.length})`}>
@@ -74,8 +74,8 @@ export default function Projection() {
                 <tr>
                   <th>Centro de custo</th>
                   <th className="right">Realizado</th>
-                  <th className="right">Projeção</th>
-                  <th className="right">Fechamento</th>
+                  <th className="right">Projeção meses abertos</th>
+                  <th className="right">Projeção {data.year}</th>
                   <th className="right">Orçado</th>
                   <th className="right">Desvio</th>
                   <th>Última gravação</th>
