@@ -113,6 +113,13 @@ function mobileLayout(base: Partial<Layout>, data: Data[], horizontal: boolean, 
     autorange: swapped ? "reversed" : ((base.yaxis as { autorange?: unknown } | undefined)?.autorange ?? true),
     tickvals: categories, ticktext: categories.map((c) => shortLabel(c)),
   };
+  if (swapped) {
+    // colunas que viraram barras deitadas: os eixos do backend trocam de papel. O eixo de valor original vinha
+    // escondido (`visible: false`, linear, com `range` em R$) e o de categorias era o x; sem isto os meses (e o
+    // "TOTAL") sumiam do eixo da esquerda (06/11/2026)
+    out.yaxis = { ...(out.yaxis as object), visible: true, type: "category", range: undefined, showgrid: false, showticklabels: true };
+    out.xaxis = { ...(out.xaxis as object), visible: true, type: "linear" };
+  }
   const rows = categories.length;
   const perRow = traces.length > 1 ? 16 * traces.length + 10 : 26;
   out.height = Math.max(Number(base.height) || 0, perRow * rows + 90);
