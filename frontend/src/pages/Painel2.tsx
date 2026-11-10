@@ -12,7 +12,7 @@ import { DeviationHighlights } from "../components/DeviationHighlights";
 import { ExecutionKpis } from "../components/ExecutionKpis";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
-import { ccLabeler, MONTHS, fmtPct, fmtShare, byDepartment, fmtSignedMoneyPref, fmtMoneyPref, setMoneyMode, type MoneyMode } from "../labels";
+import { byCcName, ccLabeler, MONTHS, fmtPct, fmtShare, byDepartment, fmtSignedMoneyPref, fmtMoneyPref, setMoneyMode, type MoneyMode } from "../labels";
 
 /**
  * Painel (rota /): filtros, números, blocos e tabela, com os gráficos em Plotly montados no backend
@@ -356,7 +356,7 @@ export default function Painel2() {
             onChange: (v) => setFilters({ ...filters, cost_center_id: v }),
             options: withCcGroup([
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
-              ...ccs.filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!department || department.split(",").includes(String(c.department_id)))).map((c) => ({ value: String(c.id), label: ccLabeler(ccs, companies)(c) })),
+              ...ccs.filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!department || department.split(",").includes(String(c.department_id)))).sort(byCcName).map((c) => ({ value: String(c.id), label: ccLabeler(ccs, companies)(c) })),
             ]),
           },
         ]}

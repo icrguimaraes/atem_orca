@@ -6,7 +6,7 @@ import { EvolutionCard } from "../components/EvolutionCard";
 import { ActiveFilters, FilterBar, type ActiveChip } from "../components/FilterBar";
 import { PlotlyChart, type Figure } from "../components/PlotlyChart";
 import { Alert, Badge, Card, Empty, Loading, PageHeader, Stat, lines, useLoad } from "../components/ui";
-import { ccLabeler, fmtInt, fmtMoney, fmtPct, fmtSignedMoney, byDepartment } from "../labels";
+import { byCcName, ccLabeler, fmtInt, fmtMoney, fmtPct, fmtSignedMoney, byDepartment } from "../labels";
 
 interface Kpi { label: string; value: string | null; compact: string; pct?: string | null; pct_label?: string; share?: string; hint?: string }
 interface Dashboard {
@@ -192,7 +192,7 @@ export default function Analytics() {
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
               ...(opts.data?.cost_centers ?? [])
                 .filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!filters.department_id || filters.department_id.split(",").includes(String(c.department_id))))
-                .map((c) => ({ value: String(c.id), label: ccLabeler(opts.data?.cost_centers ?? [], companies.data ?? [])(c) })),
+                .sort(byCcName).map((c) => ({ value: String(c.id), label: ccLabeler(opts.data?.cost_centers ?? [], companies.data ?? [])(c) })),
             ],
           },
           {

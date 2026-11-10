@@ -79,6 +79,7 @@ export const PARAM_LABELS: Record<string, string> = {
   "alert.reduction_pct": "Alerta de redução (vs. realizado anualizado)",
   "alert.history_band_pct": "Banda em torno da média histórica",
   "alert.min_relevant_amount": "Valor mínimo para alertar conta sem orçamento (R$)",
+  "defense.mandatory_terms": "Defesa do orçamento: termos de obrigação legal/contratual no nome da conta",
   "travel.one_way_factor": "Fator da passagem só de ida",
   "capex.min_unit_value": "Valor unitário mínimo para CAPEX (R$)",
   "capex.min_useful_life_months": "Vida útil mínima para CAPEX (meses)",
@@ -362,15 +363,16 @@ export function maskCnpj(text: string): string {
 export const deptRank = (name?: string | null) => (/presid/i.test(name ?? "") ? 0 : 1);
 export const byDepartment = (a: string, b: string) => deptRank(a) - deptRank(b) || a.localeCompare(b, "pt-BR");
 
-/** Rótulo do CC nos filtros (10/11/2026): mesmo código em duas empresas (ex.: 1050101002 na ATEM e na REAM) leva a
- * empresa no fim — "1050101002 · CONTABILIDADE · REAM" —, para não parecer repetido. */
+/** Rótulo do CC nos filtros (10/11/2026): nome primeiro, depois o código e a empresa — "CONTABILIDADE · 1050101002 ·
+ * REAM" —, e a lista em ordem de nome, para os CCs de mesmo nome (Contabilidade da ATEM, NAVE, REAM…) ficarem juntos. */
 export function ccLabeler(
-  ccs: { code: string; company_id: number }[],
+  _ccs: { code: string; company_id: number }[],
   companies: { id: number; code: string; short_name: string | null; name: string }[],
 ) {
-  const count = new Map<string, number>();
-  ccs.forEach((c) => count.set(c.code, (count.get(c.code) ?? 0) + 1));
   const co = new Map(companies.map((c) => [c.id, c.short_name ?? c.code]));
-  return (c: { code: string; name: string; company_id: number }) =>
-    `${c.code} · ${c.name}${(count.get(c.code) ?? 0) > 1 ? ` · ${co.get(c.company_id) ?? ""}` : ""}`;
+  return (c: { code: string; name: string; company_id: number }) => `${c.name} · ${c.code} · ${co.get(c.company_id) ?? ""}`;
 }
+
+/** Ordem dos CCs nos filtros: nome, depois código. */
+export const byCcName = (a: { name: string; code: string }, b: { name: string; code: string }) =>
+  a.name.localeCompare(b.name, "pt-BR") || a.code.localeCompare(b.code);
