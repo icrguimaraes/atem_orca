@@ -5,6 +5,7 @@ import { api, download, type AttentionPoint, type Company, type ConsolidationOve
 import { useAuth } from "../auth";
 import { DivergingBars, Legend, MonthlyBars, PairedBars, SERIES, StatusBar, Waterfall } from "../components/charts";
 import { FilterBar } from "../components/FilterBar";
+import { PlanningRevisionCard } from "../components/PlanningRevision";
 import { Alert, Badge, Card, Empty, Loading, Modal, PageHeader, SearchBox, Stat, useLoad } from "../components/ui";
 import { FLAG_LABELS, SUBMISSION_STATUS, fmtCompact, fmtDateTime, fmtInt, fmtMoney, fmtPct, fmtSignedMoney } from "../labels";
 
@@ -423,6 +424,7 @@ export default function Consolidation() {
         </p>
       </Card>
 
+      {isController && viewingCurrent && <PlanningRevisionCard frozen={frozen} versionLabel={data.version.label} onApplied={() => { reload(); }} />}
       {isController && viewingCurrent && <TravelEstimatesCard frozen={frozen} onApplied={() => { reload(); }} />}
 
       {data.versions.length > 1 && <VersionCompareCard versions={data.versions} companyId={companyId} />}

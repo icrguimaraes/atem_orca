@@ -22,6 +22,8 @@ const KIND_HINTS: Record<string, string> = {
   OPEX_JUSTIFICATION: "Toda conta orçada (ou zerada com histórico relevante) precisa de justificativa: escreva aqui ou na tela Justificativas.",
   TRAVEL_NO_FARE: "A planilha não trouxe a passagem: informe o valor (vai para o mês de ida) ou mantenha, se não houver.",
   TRAVEL_RATE: "Diária ou hospedagem sem tarifa no ciclo: confira no orçamento do CC.",
+  PLANNING_ZEROED: "A conta não veio no arquivo do Planejamento e foi zerada na revisão: confira se foi para outra conta ou se o corte é intencional; mantenha com o motivo.",
+  PLANNING_PJ_ABSENT: "Os contratos PJ não vieram no arquivo do Planejamento e continuam no orçamento (calculados dos contratos): confira com o Planejamento.",
   CAPEX_SCHEDULE_MISMATCH: "A soma dos meses não fecha com o valor do item: distribua o valor nos meses.",
   CAPEX_ACCOUNT_MISMATCH: "A conta do item difere da indicada no catálogo de ativos: use a do catálogo ou mantenha com o motivo.",
   CAPEX_NO_PROJECT_TYPE: "Projeto sem tipo: escolha o tipo.",

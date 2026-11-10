@@ -3,19 +3,21 @@
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.core.deps import client_ip, get_current_user, require_roles, visible_cost_center_ids
 from app.db import get_db
 from app.domain.rules.common import money
 from app.models import Account, BudgetPackage, BudgetSubmission, BudgetVersion, CostCenter, User
 from app.models.base import Role
-from app.services import audit, exports, travel_estimates
+from app.services import audit, exports, planning_revision, travel_estimates
 from app.services import capex as capex_svc
 from app.services import consolidation as svc
 from app.services import opex as opex_svc
@@ -421,6 +423,58 @@ def export_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
+
+
+async def _file_bytes(file: UploadFile) -> bytes:
+    content = await file.read()
+    limit = get_settings().max_upload_mb * 1024 * 1024
+    if len(content) > limit:
+        raise HTTPException(413, f"Arquivo excede {get_settings().max_upload_mb} MB")
+    if not content:
+        raise HTTPException(422, "Arquivo vazio")
+    return content
+
+
+@router.post("/planning-revision/preview", summary="Revisão do Planejamento: antes × depois na versão em elaboração")
+async def planning_preview(
+    file: Annotated[UploadFile, File(description="Prévia Orçamento OPEX do Planejamento (.xlsx)")],
+    absent: Annotated[str, Form(description="zero = igual ao arquivo; keep = mantém o que não veio")] = "zero",
+    db: Session = Depends(get_db),
+    _: User = Depends(controller),
+):
+    content = await _file_bytes(file)
+    try:
+        return planning_revision.preview(db, _ctx(db), content, absent)
+    except planning_revision.PlanningError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/planning-revision/apply", summary="Revisão do Planejamento: grava a prévia confirmada (auditoria)")
+async def planning_apply(
+    request: Request,
+    file: Annotated[UploadFile, File()],
+    digest: Annotated[str, Form()],
+    reason: Annotated[str, Form()],
+    absent: Annotated[str, Form()] = "zero",
+    db: Session = Depends(get_db),
+    user: User = Depends(controller),
+):
+    content = await _file_bytes(file)
+    try:
+        return planning_revision.apply(
+            db,
+            _ctx(db),
+            content,
+            absent=absent,
+            digest=digest,
+            reason=reason,
+            file_name=file.filename,
+            user_id=user.id,
+            ip=client_ip(request),
+        )
+    except planning_revision.PlanningError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/compare", summary="O que mudou entre duas versões (módulo, CC e conta)")

@@ -174,7 +174,9 @@ def test_children_access_and_audit(client, admin, db):
     assert client.delete(f"{P}/{pid}/updates/{upd['updates'][0]['id']}", headers=other).status_code == 403
     assert client.delete(f"{P}/{pid}", headers=admin).status_code == 204
     actions = db.scalars(
-        select(AuditLog.action).where(AuditLog.entity_type == "project", AuditLog.entity_id == str(pid))
+        select(AuditLog.action)
+        .where(AuditLog.entity_type == "project", AuditLog.entity_id == str(pid))
+        .order_by(AuditLog.id)
     ).all()
     assert actions.count("CREATE") == 4 and actions[-1] == "DELETE"
 

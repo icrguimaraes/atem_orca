@@ -101,6 +101,14 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   "Projeção {ano}" (realizado + projeção). "Revisar e gravar" chama `compare` (antiga × nova por mês, natureza e célula); gravar cria nova versão de
   `PROJECTION:{ano}:{empresa}` trocando só as células alteradas do CC (versão lida ≠ vigente → 409), auditoria
   `entity_type="projection"` com antes × depois; perfil VIEWER não grava.
+- Revisão do Planejamento (10/11/2026): cartão na Consolidação (`components/PlanningRevision.tsx`) sobre
+  `services/planning_revision.py` + `POST /consolidation/planning-revision/{preview,apply}` (Controladoria). Lê o
+  "Prévia Orçamento OPEX" do Planejamento (aba com Empresa, Denominação do CC, Denominação da Conta e os meses do ano do
+  ciclo; sem códigos — CC e conta casam pelo nome, com prefixo: "PLANEJ." = "PLANEJAMENTO"), compara com a versão em
+  elaboração célula a célula e só grava com o `digest` da prévia. Linhas existentes são preservadas e ajustadas na
+  proporção (OPEX não aceita negativo); mês sem linha ganha "Ajuste da revisão do Planejamento". O que não veio no arquivo
+  é zerado (`absent=zero`) ou mantido (`keep`) e vira apontamento `PLANNING_ZEROED`; PJ (calculado dos contratos) fica
+  e vira `PLANNING_PJ_ABSENT` (resumo na auditoria `PLANNING_REVISION` da versão). Subs alterados voltam a IN_PROGRESS.
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

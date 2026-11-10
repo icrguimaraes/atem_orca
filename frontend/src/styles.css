@@ -1699,3 +1699,9 @@ label { font-weight: 600; }
 .proj-grid .cell-ref { font-size: 10.5px; color: var(--series-3-ink); text-align: right; padding-right: 20px; margin-top: 2px; font-variant-numeric: tabular-nums; }
 .proj-grid td.muted-col { opacity: 0.75; }
 .proj-hidden { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; }
+
+/* revisão do Planejamento (10/11/2026) */
+.planning-form { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; margin: 8px 0 12px; }
+.planning-form label, .planning-reason { display: grid; gap: 4px; font-size: 13px; }
+.planning-reason textarea { width: 100%; }
+.planning-preview ul { margin: 6px 0 0; padding-left: 18px; }

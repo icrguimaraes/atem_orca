@@ -50,6 +50,8 @@ ROUTES = {"OPEX": "/orcamento", "CAPEX": "/capex", "PERSONNEL": "/pessoal"}
 MODULE_LABELS = {"OPEX": "OPEX", "CAPEX": "CAPEX", "PERSONNEL": "Pessoal"}
 KIND_LABELS = {
     "OPEX_JUSTIFICATION": "Conta sem justificativa",
+    "PLANNING_ZEROED": "Zerada na revisão do Planejamento",
+    "PLANNING_PJ_ABSENT": "PJ fora do arquivo do Planejamento",
     "TRAVEL_NO_FARE": "Passagem zerada",
     "TRAVEL_RATE": "Viagem sem tarifa",
     "CAPEX_SCHEDULE_MISMATCH": "Cronograma diferente do total",
@@ -468,6 +470,44 @@ def _opex(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, add) -> Non
                 fix={"type": "ticket", "route": route} if fare and lines[0].group_ref else None,
                 suffix=f":{n}" if n else "",
             )
+    _planning(db, ctx, sub, add)
+
+
+def _planning(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, add) -> None:
+    """Revisão do Planejamento (10/11/2026): o que não veio no arquivo deles fica apontado para a Controladoria
+    analisar ("pode ser que eles considerem em outra conta")."""
+    from app.services import planning_revision
+
+    zeroed: dict[int, Decimal] = defaultdict(lambda: ZERO)
+    for line in db.scalars(select(BudgetLine).where(BudgetLine.submission_id == sub.id)):
+        info = (line.attributes or {}).get("planning_revision") or {}
+        if info.get("zeroed") and info.get("version") == ctx.version.label:
+            zeroed[line.account_id] += Decimal(str(info.get("before_total") or 0))
+    for account_id, before in zeroed.items():
+        acc = db.get(Account, account_id)
+        add(
+            "WARNING",
+            "PLANNING_ZEROED",
+            ("OPEX_ACCOUNT", account_id),
+            f"{acc.code} {acc.name}",
+            f"Zerada na revisão do Planejamento: a conta não veio no arquivo deles (antes {brl(before)}). Confira se "
+            "foi para outra conta ou se o corte é intencional",
+            before,
+        )
+    revision = planning_revision.last_revision(db, ctx.version.id) or {}
+    for item in revision.get("pj_absent") or []:
+        if item.get("cost_center_id") != sub.cost_center_id:
+            continue
+        add(
+            "WARNING",
+            "PLANNING_PJ_ABSENT",
+            ("OPEX_PJ", sub.cost_center_id),
+            "Contratos PJ (Provisão de Serviços)",
+            f"O arquivo do Planejamento não trouxe os contratos PJ deste CC ({brl(Decimal(item['total']))}). Eles "
+            "continuam no orçamento, calculados dos contratos. Confira se o Planejamento os considera em outra conta "
+            "(ex.: Pessoal)",
+            Decimal(item["total"]),
+        )
 
 
 def _capex(db: Session, ctx: opex_svc.Context, sub: BudgetSubmission, add) -> None:
