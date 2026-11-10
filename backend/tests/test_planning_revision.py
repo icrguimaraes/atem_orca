@@ -133,6 +133,22 @@ def test_absent_keep_and_unmatched_names_block(client, admin, db):
     assert data["zeroed"] == [] and [k["account"] for k in data["kept_absent"]] == [interest.code]
     assert data["changed_keys"] == 0  # passagens iguais; juros mantidos
 
+    # dois CCs parecidos: vale o que casa mais palavras; nome repetido: vale o que já tem orçamento
+    atem = db.scalar(select(Company).where(Company.code == "1001"))
+    db.add_all(
+        [
+            CostCenter(company_id=atem.id, code="PR9", name="PLANEJ. TRIBUTÁRIO TESTE"),
+            CostCenter(company_id=atem.id, code="PRX1", name="CONTROLADORIA TESTX"),
+            CostCenter(company_id=atem.id, code="PRX2", name="VP DE CONTROLADORIA TESTX"),
+        ]
+    )
+    db.commit()
+    vp = _file(year, [("ATEM", "VP CONTROLADORIA E TRIBUTOS TESTX", "Alimentação Teste", [5] + [0] * 11)])
+    res = _post(client, admin, f"{P}/preview", vp).json()
+    assert res["errors"] == [] and any(m["code"] == "PRX2" for m in res["matched_cost_centers"])
+    again = _post(client, admin, f"{P}/preview", content).json()
+    assert again["errors"] == [] and [m["code"] for m in again["matched_cost_centers"]] == ["PR1"]
+
     wrong = _file(year, [("ATEM", "CC QUE NAO EXISTE", "Despesas com Passagens Teste", [1] + [0] * 11)])
     res = _post(client, admin, f"{P}/preview", wrong).json()
     assert res["errors"] and "nenhum CC" in res["errors"][0]["message"]

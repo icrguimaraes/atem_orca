@@ -211,18 +211,27 @@ def _companies(db: Session) -> dict[str, Company]:
     return out
 
 
-def _match_cc(name: str, candidates: list[CostCenter], in_scope: set[int]) -> tuple[CostCenter | None, str | None]:
-    exact = [c for c in candidates if norm(c.name) == norm(name)]
-    if len(exact) > 1:
-        exact = [c for c in exact if c.id in in_scope] or exact
+def _narrow(found: list[CostCenter], tiers: list[set[int]]) -> list[CostCenter]:
+    """Nomes repetidos (ex.: três "FISCAL" na REAM): fica o CC que já tem orçamento na versão, depois o que tem
+    orçamento aberto."""
+    for tier in tiers:
+        if len(found) > 1:
+            found = [c for c in found if c.id in tier] or found
+    return found
+
+
+def _match_cc(name: str, candidates: list[CostCenter], tiers: list[set[int]]) -> tuple[CostCenter | None, str | None]:
+    exact = _narrow([c for c in candidates if norm(c.name) == norm(name)], tiers)
     if len(exact) == 1:
         return exact[0], None
     if len(exact) > 1:
         return None, f"mais de um CC com o nome {name!r}: {', '.join(c.code for c in exact)}"
     t = _tokens(name)
     fuzzy = [c for c in candidates if _prefix_cover(_tokens(c.name), t) or _prefix_cover(t, _tokens(c.name))]
-    if len(fuzzy) > 1:
-        fuzzy = [c for c in fuzzy if c.id in in_scope] or fuzzy
+    fuzzy = _narrow(fuzzy, tiers)
+    if len(fuzzy) > 1:  # o que casa mais palavras ("VP CONTROLADORIA E TRIBUTOS" → VP DE CONTROLADORIA)
+        best = max(len(_tokens(c.name)) for c in fuzzy)
+        fuzzy = [c for c in fuzzy if len(_tokens(c.name)) == best]
     if len(fuzzy) == 1:
         return fuzzy[0], None
     if fuzzy:
@@ -255,6 +264,11 @@ def build(db: Session, ctx: Context, parsed: Parsed) -> Plan:
     errors: list[dict] = []
     matched: dict[tuple[str, str], dict] = {}
     cc_cache: dict[tuple[str, str], tuple] = {}
+    budgeted = {cc for (cc, _acc), lines in current.items() if any(_month_values(lines))}
+    pj_account = _pj_account_id(db, ctx)
+    if pj_account:
+        budgeted |= {cc for cc in subs if any(opex_svc.pj_monthly_by_account(db, ctx, cc).get(pj_account) or [])}
+    tiers = [budgeted, set(subs)]
     for r in parsed.rows:
         company = companies.get(norm(r.company))
         if company is None:
@@ -262,7 +276,7 @@ def build(db: Session, ctx: Context, parsed: Parsed) -> Plan:
             continue
         ck = (company.code, norm(r.cost_center))
         if ck not in cc_cache:
-            cc_cache[ck] = _match_cc(r.cost_center, ccs_by_company[company.id], set(subs))
+            cc_cache[ck] = _match_cc(r.cost_center, ccs_by_company[company.id], tiers)
         cc, problem = cc_cache[ck]
         if cc is None:
             errors.append({"row": r.row, "message": f"{company.short_name or company.code}: {problem}"})
