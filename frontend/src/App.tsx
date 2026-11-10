@@ -17,6 +17,7 @@ import Audit from "./pages/Audit";
 import ControlCenter from "./pages/ControlCenter";
 import ContratosPj from "./pages/ContratosPj";
 import BaseStatus from "./pages/BaseStatus";
+import BudgetDefense from "./pages/BudgetDefense";
 import CapexCostCenter from "./pages/CapexCostCenter";
 import Consolidation from "./pages/Consolidation";
 import CyclePage from "./pages/CyclePage";
@@ -76,6 +77,7 @@ export default function App() {
             <Route path="apontamentos" element={<Findings />} />
             <Route path="justificativas" element={<Justifications />} />
             <Route path="perguntas" element={<Questions />} />
+            <Route path="defesa" element={<Protected roles={["CONTROLLER"]}><BudgetDefense /></Protected>} />
             <Route path="projetos" element={<Suspense fallback={<Loading />}><Projects /></Suspense>} />
             <Route path="projetos/:id" element={<Suspense fallback={<Loading />}><ProjectDetail /></Suspense>} />
             <Route path="projecao" element={<Suspense fallback={<Loading />}><Projection /></Suspense>} />

@@ -5,6 +5,7 @@ from app.models.budget import (
     AccountJustification,
     AssetClass,
     AssetItem,
+    BudgetDefenseItem,
     BudgetLine,
     BudgetLineValue,
     BudgetQuestion,

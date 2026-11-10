@@ -348,6 +348,12 @@ CYCLE_PARAMETERS = {
     "pj.budget_account": (6010201016, "Conta dos contratos PJ no orçamento (Provisão de Serviços)"),
     "pj.adjustment_pct": (0.035, "Reajuste dos contratos PJ no ano do orçamento (IPCA projetado; confirmar)"),
     "pj.adjustment_month": (1, "Mês a partir do qual vale o reajuste dos contratos PJ"),
+    # defesa do orçamento (10/11/2026): termo no nome da conta = obrigação legal/contratual (prioridade alta)
+    "defense.mandatory_terms": (
+        ["juros", "auditoria", "parcelamento", "multa", "imposto", "tribut", "taxa"],
+        "Defesa do orçamento: termos no nome da conta que indicam obrigação legal ou contratual (pedir de volta "
+        "com prioridade alta)",
+    ),
     # resumo de critérios da versão (09/10/2026, pedido da gestora): só informativo, no Painel
     "budget.criteria": (
         [

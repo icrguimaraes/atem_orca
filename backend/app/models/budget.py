@@ -148,6 +148,27 @@ class BudgetQuestion(Base):
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class BudgetDefenseItem(Base):
+    """Defesa do orçamento (10/11/2026): ajuste da Controladoria sobre um corte entre duas versões (base × proposta),
+    na chave CC × módulo × conta. O sistema sugere a prioridade e o argumento; aqui fica só o que foi mudado à mão
+    (prioridade, argumento e valor a pedir de volta). Não altera o orçamento."""
+
+    __tablename__ = "budget_defense_items"
+    __table_args__ = (UniqueConstraint("version_id", "base_version_id", "cost_center_id", "module", "account_code"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    version_id: Mapped[int] = mapped_column(ForeignKey("budget_versions.id", ondelete="CASCADE"), index=True)
+    base_version_id: Mapped[int] = mapped_column(ForeignKey("budget_versions.id", ondelete="CASCADE"))
+    cost_center_id: Mapped[int] = mapped_column(ForeignKey("cost_centers.id"))
+    module: Mapped[str] = mapped_column(String(20))
+    account_code: Mapped[str] = mapped_column(String(20))
+    priority: Mapped[str] = mapped_column(String(10))  # HIGH | MEDIUM | LOW | ACCEPT
+    argument: Mapped[str | None] = mapped_column(Text)
+    request_amount: Mapped[Decimal | None] = mapped_column(Money)  # vazio = o corte inteiro
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+
+
 class WorkflowEvent(Base):
     __tablename__ = "workflow_events"
 

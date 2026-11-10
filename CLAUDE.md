@@ -109,6 +109,14 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   proporção (OPEX não aceita negativo); mês sem linha ganha "Ajuste da revisão do Planejamento". O que não veio no arquivo
   é zerado (`absent=zero`) ou mantido (`keep`) e vira apontamento `PLANNING_ZEROED`; PJ (calculado dos contratos) fica
   e vira `PLANNING_PJ_ABSENT` (resumo na auditoria `PLANNING_REVISION` da versão). Subs alterados voltam a IN_PROGRESS.
+- Defesa do orçamento para o VP (10/11/2026): `pages/BudgetDefense.tsx` (`/defesa`, só Controladoria) sobre
+  `services/budget_defense.py` + `api/v1/budget_defense.py` (`/defense`, `/defense/items`, `/defense/export.xlsx`).
+  Base = versão `is_base` × proposta = versão em elaboração (`rows_for`), chave CC × módulo × conta; realizado do ano
+  anterior e do de referência (com projeção; anualizado se faltar mês), justificativas, perguntas em aberto e
+  apontamentos `PLANNING_*`. Prioridade sugerida (Alta: termos de `defense.mandatory_terms` ou PJ, ou zerada com
+  realizado; Média: abaixo do realizado ou justificada; Baixa: resto); o ajuste da Controladoria fica em
+  `BudgetDefenseItem` (migração 0018, auditoria `budget_defense`, proposta congelada = só consulta) e não altera o
+  orçamento. PDF = impressão do navegador (`@media print` em `styles.css`).
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.
