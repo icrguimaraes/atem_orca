@@ -239,7 +239,11 @@ def test_painel_compares_with_frozen_version(client, admin, run_worker):
     o = client.get(f"/api/v1/dashboard/overview?{q}&figures=true", headers=admin).json()
     p = o["period"]
     assert p["base_kind"] == "version" and p["base_label"] == "Revisão 0 (congelada)" and p["version_compare_available"]
-    assert p["versions"] == [{"id": v10, "label": "Revisão 0"}] and p["base_version_id"] == v10 and not p["compare"]
+    assert (
+        p["versions"] == [{"id": v10, "label": "Revisão 0", "is_base": False}]
+        and p["base_version_id"] == v10
+        and not p["compare"]
+    )
     # o total inclui Pessoal/CAPEX da base de teste: o que importa é a diferença exata de R$ 1.000 entre as fotos
     ref, base = Decimal(o["kpis"]["ref_ytd"]), Decimal(o["kpis"]["prev_ytd"])
     assert ref - base == Decimal("1000.00") and o["has_prev"] and o["kpis"]["prev_total"] == o["kpis"]["prev_ytd"]

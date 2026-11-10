@@ -673,13 +673,13 @@ def compare_versions(
     return {
         "from": {
             "id": from_version.id,
-            "label": from_version.label,
+            "label": from_version.display_label,
             "status": from_version.status,
             "total": str(money(total_a)),
         },
         "to": {
             "id": to_version.id,
-            "label": to_version.label,
+            "label": to_version.display_label,
             "status": to_version.status,
             "total": str(money(total_b)),
         },

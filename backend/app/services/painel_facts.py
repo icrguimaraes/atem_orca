@@ -107,6 +107,8 @@ class Period:
     # comparação entre revisões (13/10/2026): base = foto de uma versão congelada do ciclo ("Revisão 0")
     base_version: BudgetVersion | None = None
     frozen_versions: list[dict] = field(default_factory=list)
+    # versão em elaboração (10/11/2026): rótulo "Revisão 2 · Planejamento" ao comparar com uma revisão congelada
+    working_version: BudgetVersion | None = None
 
     @property
     def actual_selected(self) -> list[int]:
@@ -210,6 +212,8 @@ class Period:
             ys = [y for y in ys if y not in self.actual_years]
         if not ys:
             return None
+        if self.base_kind == "version" and ys == [self.target_year] and self.working_version is not None:
+            return f"{self.working_version.display_label} (em elaboração)"
         return f"{'Orçamento' if ys == [self.target_year] else 'Orçado'} {_years_label(ys)}"
 
     @property
@@ -220,7 +224,7 @@ class Period:
     @property
     def base_label(self) -> str | None:
         if self.base_kind == "version":
-            return f"{self.base_version.label} (congelada)"
+            return f"{self.base_version.display_label} (congelada)"
         if self.base_kind == "prev":
             label = f"Realizado {_years_label(self.prev_years)}"
             if self.annualize_base:
@@ -297,7 +301,9 @@ def _period(
         if cycle
         else []
     )
-    base_version = next((v for v in frozen if v.id == base_version_id), None) if target_year in selected else None
+    # base_version_id = 0: a versão base do ciclo (10/11/2026: Revisão 1 · VP), padrão do Painel
+    wanted = (lambda v: v.is_base) if base_version_id == 0 else (lambda v: v.id == base_version_id)
+    base_version = next((v for v in frozen if wanted(v)), None) if target_year in selected else None
     prev = selected[0] - 1
     prev_years = [prev] if (compare and base_version is None and len(selected) == 1 and prev in actual_years) else []
     prev_closed = _last_closed(db, prev) if prev_years else None
@@ -314,7 +320,17 @@ def _period(
         target_year,
         available,
         base_version,
-        [{"id": v.id, "label": v.label} for v in frozen],
+        [
+            {"id": v.id, "label": v.display_label + (" (base)" if v.is_base else ""), "is_base": v.is_base}
+            for v in frozen
+        ],
+        db.scalar(
+            select(BudgetVersion)
+            .where(BudgetVersion.cycle_id == cycle.id, BudgetVersion.status == "WORKING")
+            .order_by(BudgetVersion.major.desc(), BudgetVersion.minor.desc())
+        )
+        if cycle
+        else None,
     )
 
 

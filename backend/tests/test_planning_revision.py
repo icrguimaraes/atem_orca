@@ -123,6 +123,18 @@ def test_preview_and_apply_keep_lines_and_point_out_what_did_not_come(client, ad
     assert again["changed_keys"] == 0
 
 
+def test_version_name_goes_to_labels(client, admin, db):
+    ctx = context(db)
+    res = client.patch(f"/api/v1/consolidation/versions/{ctx.version.id}", headers=admin, json={"name": "Planejamento"})
+    assert res.status_code == 200, res.text
+    mine = next(v for v in res.json()["versions"] if v["id"] == ctx.version.id)
+    assert mine["display_label"] == f"{ctx.version.label} · Planejamento"
+    assert db.scalar(select(AuditLog).where(AuditLog.entity_type == "budget_version", AuditLog.reason.like("Nome%")))
+    based = client.patch(f"/api/v1/consolidation/versions/{ctx.version.id}", headers=admin, json={"is_base": True})
+    assert [v["is_base"] for v in based.json()["versions"]].count(True) == 1
+    assert next(v for v in based.json()["versions"] if v["id"] == ctx.version.id)["name"] == "Planejamento"
+
+
 def test_absent_keep_and_unmatched_names_block(client, admin, db):
     ctx, cc, sub, travel, food, interest, a, b, j = _setup(db)
     year = ctx.target_year

@@ -27,8 +27,11 @@ const diffTxt = (a: number, b: number) => `${fmtSignedMoney(a - b)} (${pct(a, b)
 
 /** O que mudou entre duas versões: total, por módulo, por CC e por conta. */
 function VersionCompareCard({ versions, companyId }: { versions: VersionInfo[]; companyId: string }) {
-  const [from, setFrom] = useState(String(versions[versions.length - 2].id));
-  const [to, setTo] = useState(String(versions[versions.length - 1].id));
+  // padrão (10/11/2026): versão base (Revisão 1 · VP) → versão atual
+  const base = versions.find((v) => v.is_base && !v.current);
+  const current = versions.find((v) => v.current) ?? versions[versions.length - 1];
+  const [from, setFrom] = useState(String((base ?? versions[versions.length - 2]).id));
+  const [to, setTo] = useState(String(current.id));
   const qs = `from_version_id=${from}&to_version_id=${to}${companyId ? `&company_id=${companyId}` : ""}`;
   const { data, error } = useLoad(() => api<VersionCompare>(`/consolidation/compare?${qs}`), [qs]);
   const label = (id: string) => versions.find((v) => String(v.id) === id)?.label ?? id;
@@ -38,11 +41,11 @@ function VersionCompareCard({ versions, companyId }: { versions: VersionInfo[]; 
       actions={
         <div className="inline-controls">
           <select value={from} onChange={(e) => setFrom(e.target.value)} aria-label="Versão de origem">
-            {versions.map((v) => <option key={v.id} value={v.id}>Versão {v.label}</option>)}
+            {versions.map((v) => <option key={v.id} value={v.id}>{v.display_label ?? v.label}</option>)}
           </select>
           <span className="muted">→</span>
           <select value={to} onChange={(e) => setTo(e.target.value)} aria-label="Versão de destino">
-            {versions.map((v) => <option key={v.id} value={v.id}>Versão {v.label}</option>)}
+            {versions.map((v) => <option key={v.id} value={v.id}>{v.display_label ?? v.label}</option>)}
           </select>
         </div>
       }
@@ -432,11 +435,43 @@ export default function Consolidation() {
       <Card title="Versões do orçamento">
         <div className="table-wrap">
         <table className="table">
-          <thead><tr><th>Versão</th><th>Situação</th><th>Motivo</th><th>Criada</th><th>Congelada</th></tr></thead>
+          <thead><tr><th>Versão</th><th>Nome (legendas)</th><th>Base</th><th>Situação</th><th>Motivo</th><th>Criada</th><th>Congelada</th></tr></thead>
           <tbody>
             {data.versions.map((v) => (
               <tr key={v.id}>
                 <td><strong>{v.label}</strong>{v.current && <span className="muted small"> · atual</span>}</td>
+                <td>
+                  {isController ? (
+                    <input
+                      className="version-name"
+                      defaultValue={v.name ?? ""}
+                      maxLength={60}
+                      placeholder="Ex.: VP, Planejamento"
+                      aria-label={`Nome da ${v.label}`}
+                      onBlur={async (e) => {
+                        const name = e.target.value.trim();
+                        if (name === (v.name ?? "")) return;
+                        await api(`/consolidation/versions/${v.id}`, { method: "PATCH", body: JSON.stringify({ name }) });
+                        reload();
+                      }}
+                    />
+                  ) : (v.name ?? "—")}
+                </td>
+                <td>
+                  <label className="check" title="Versão contra a qual as outras são comparadas (Painel e Consolidação)">
+                    <input
+                      type="radio"
+                      name="version-base"
+                      checked={!!v.is_base}
+                      disabled={!isController}
+                      onChange={async () => {
+                        await api(`/consolidation/versions/${v.id}`, { method: "PATCH", body: JSON.stringify({ is_base: true }) });
+                        reload();
+                      }}
+                    />
+                    {v.is_base ? "base" : ""}
+                  </label>
+                </td>
                 <td>{v.status === "FROZEN" ? <Badge tone="info">Congelada</Badge> : <Badge tone="warn">Em elaboração</Badge>}</td>
                 <td className="small">{v.reason ?? "—"}</td>
                 <td className="small">{fmtDateTime(v.created_at)}</td>

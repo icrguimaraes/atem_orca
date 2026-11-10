@@ -1705,3 +1705,4 @@ label { font-weight: 600; }
 .planning-form label, .planning-reason { display: grid; gap: 4px; font-size: 13px; }
 .planning-reason textarea { width: 100%; }
 .planning-preview ul { margin: 6px 0 0; padding-left: 18px; }
+.version-name { width: 160px; padding: 5px 8px; font-size: 13px; }

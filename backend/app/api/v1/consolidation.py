@@ -69,6 +69,9 @@ def _versions(db: Session, ctx: opex_svc.Context) -> list[dict]:
         {
             "id": v.id,
             "label": v.label,
+            "name": v.name,
+            "display_label": v.display_label,
+            "is_base": v.is_base,
             "status": v.status,
             "reason": v.reason,
             "frozen_at": v.frozen_at.isoformat() if v.frozen_at else None,
@@ -423,6 +426,45 @@ def export_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
+
+
+class VersionNameIn(BaseModel):
+    name: str | None = None
+    is_base: bool | None = None
+
+
+@router.patch("/versions/{version_id}", summary="Nome curto da revisão e versão base das comparações")
+def rename_version(
+    version_id: int,
+    payload: VersionNameIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(controller),
+):
+    ctx = _ctx(db)
+    version = _version(db, ctx, version_id)
+    data = payload.model_dump(exclude_unset=True)
+    before = {"name": version.name, "is_base": version.is_base}
+    if "name" in data:
+        version.name = (data["name"] or "").strip()[:60] or None
+    if data.get("is_base") is not None:
+        if data["is_base"]:  # uma base por ciclo
+            for v in db.scalars(select(BudgetVersion).where(BudgetVersion.cycle_id == version.cycle_id)):
+                v.is_base = False
+        version.is_base = bool(data["is_base"])
+    audit.record(
+        db,
+        user_id=user.id,
+        action="UPDATE",
+        entity_type="budget_version",
+        entity_id=version.id,
+        before=before,
+        after={"name": version.name, "is_base": version.is_base},
+        reason=f"Nome/base da {version.label}",
+        ip=client_ip(request),
+    )
+    db.commit()
+    return {"versions": _versions(db, _ctx(db))}
 
 
 async def _file_bytes(file: UploadFile) -> bytes:

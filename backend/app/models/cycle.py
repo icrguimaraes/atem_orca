@@ -90,6 +90,15 @@ class BudgetVersion(Base):
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     frozen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # nome curto da revisão (10/11/2026): de onde ela veio, ex.: "VP", "Planejamento"
+    name: Mapped[str | None] = mapped_column(String(60))
+    # versão base das comparações (10/11/2026: a Revisão 1, do VP): padrão no Painel e na Consolidação
+    is_base: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
+    @property
+    def display_label(self) -> str:
+        """Rótulo com o nome curto: "Revisão 2 · Planejamento" (sem nome, só "Revisão 2")."""
+        return f"{self.label} · {self.name}" if self.name else self.label
 
     @property
     def label(self) -> str:

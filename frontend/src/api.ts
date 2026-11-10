@@ -269,7 +269,7 @@ export interface PeriodInfo {
   compare: boolean; compare_available: boolean; same_period: boolean; same_period_available: boolean; prev_years: number[];
   base_kind: "prev" | "budget" | "actual" | "version" | null; base_label: string | null; annualized_base: boolean; target_year: number | null;
   // comparação entre revisões (13/10/2026): base = foto de uma versão congelada do ciclo
-  base_version_id: number | null; version_compare_available: boolean; versions: { id: number; label: string }[];
+  base_version_id: number | null; version_compare_available: boolean; versions: { id: number; label: string; is_base?: boolean }[];
 }
 export interface BreakdownRow {
   id: number | null; code: string | null; name: string; ref: string; base: string; share_ref: string | null;
@@ -526,7 +526,7 @@ export interface WhatIfResult {
 // ---------------------------------------------------------------- Consolidação
 
 export interface ModuleTotals { label: string; proposed: string; prev_actual: string; ref_annualized: string; ref_budget: string; monthly: string[]; unscheduled: string }
-export interface VersionInfo { id: number; label: string; status: string; reason: string | null; frozen_at: string | null; created_at: string | null; current: boolean }
+export interface VersionInfo { id: number; label: string; name?: string | null; display_label?: string; is_base?: boolean; status: string; reason: string | null; frozen_at: string | null; created_at: string | null; current: boolean }
 export interface VariationRow {
   account: string; name: string | null; module: string; package: string | null; prev_actual: string; ref_actual_ytd: string;
   ref_annualized: string; ref_budget: string; proposed: string; variation: string; variation_pct: string | null; flags: string[];
