@@ -361,3 +361,16 @@ export function maskCnpj(text: string): string {
 /** Áreas pela ordem de importância (09/10/2026): Vice-Presidência sempre primeiro, depois alfabética. */
 export const deptRank = (name?: string | null) => (/presid/i.test(name ?? "") ? 0 : 1);
 export const byDepartment = (a: string, b: string) => deptRank(a) - deptRank(b) || a.localeCompare(b, "pt-BR");
+
+/** Rótulo do CC nos filtros (10/11/2026): mesmo código em duas empresas (ex.: 1050101002 na ATEM e na REAM) leva a
+ * empresa no fim — "1050101002 · CONTABILIDADE · REAM" —, para não parecer repetido. */
+export function ccLabeler(
+  ccs: { code: string; company_id: number }[],
+  companies: { id: number; code: string; short_name: string | null; name: string }[],
+) {
+  const count = new Map<string, number>();
+  ccs.forEach((c) => count.set(c.code, (count.get(c.code) ?? 0) + 1));
+  const co = new Map(companies.map((c) => [c.id, c.short_name ?? c.code]));
+  return (c: { code: string; name: string; company_id: number }) =>
+    `${c.code} · ${c.name}${(count.get(c.code) ?? 0) > 1 ? ` · ${co.get(c.company_id) ?? ""}` : ""}`;
+}

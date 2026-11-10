@@ -4,7 +4,7 @@ import { api, download, type Company, type CostCenter, type Department, type Pac
 import { useAuth } from "../auth";
 import { ActiveFilters, FilterBar, type ActiveChip } from "../components/FilterBar";
 import { Alert, Card, Empty, Loading, PageHeader, useLoad } from "../components/ui";
-import { MONTHS, byDepartment, deptRank, fmtDateTime, fmtMoney, fmtShare } from "../labels";
+import { ccLabeler, MONTHS, byDepartment, deptRank, fmtDateTime, fmtMoney, fmtShare } from "../labels";
 import { usePersistentState } from "../persist";
 
 /**
@@ -259,7 +259,7 @@ export default function Trace() {
             onChange: (v) => setFilters({ ...filters, cost_center_id: v }),
             options: [
               { value: "", label: isController ? "Todos os centros de custo" : "Meus centros de custo" },
-              ...ccs.filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!department || department.split(",").includes(String(c.department_id)))).map((c) => ({ value: String(c.id), label: `${c.code} · ${c.name}` })),
+              ...ccs.filter((c) => (!filters.company_id || filters.company_id.split(",").includes(String(c.company_id))) && (!department || department.split(",").includes(String(c.department_id)))).map((c) => ({ value: String(c.id), label: ccLabeler(ccs, companies)(c) })),
             ],
           },
         ]}
