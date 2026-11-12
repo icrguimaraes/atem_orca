@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import type { Tone } from "../labels";
+import { BotaoTutorial, useAjuda } from "./Tutorial";
 
 export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;
@@ -10,8 +11,11 @@ export function Badge({ tone, children }: { tone: Tone; children: ReactNode }) {
 /** Grupo do menu da página aberta (fornecido pelo Layout); vira o sobretítulo do cabeçalho da página. */
 export const SectionContext = createContext<string | undefined>(undefined);
 
-export function PageHeader({ title, subtitle, actions }: { title: string; subtitle?: ReactNode; actions?: ReactNode }) {
+/** `help`: caminho do tutorial quando não é a rota atual (modais, abas). O "Como funciona" aparece à esquerda das
+ * ações sempre que a tela tem tutorial em `ajuda.ts`. */
+export function PageHeader({ title, subtitle, actions, help }: { title: string; subtitle?: ReactNode; actions?: ReactNode; help?: string }) {
   const section = useContext(SectionContext);
+  const hasHelp = !!useAjuda(help);
   return (
     <header className="page-header">
       <div>
@@ -19,7 +23,12 @@ export function PageHeader({ title, subtitle, actions }: { title: string; subtit
         <h1>{title}</h1>
         {subtitle && (typeof subtitle === "string" ? <p className="muted">{subtitle}</p> : subtitle)}
       </div>
-      {actions && <div className="page-actions">{actions}</div>}
+      {(actions || hasHelp) && (
+        <div className="page-actions">
+          <BotaoTutorial caminho={help} />
+          {actions}
+        </div>
+      )}
     </header>
   );
 }
