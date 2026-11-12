@@ -69,6 +69,63 @@ def list_datasets(db: Session = Depends(get_db), _: User = Depends(require_roles
     return out
 
 
+# bases em que cada versão guarda todas as linhas: voltar a uma versão anterior é só trocar a vigente
+RESTORABLE = {"ACTUAL", "REFERENCE_BUDGET", "PROJECTION"}
+
+
+class RestoreIn(BaseModel):
+    dataset_type: str
+    scope_key: str
+    version_number: int
+    reason: str
+
+
+@router.post("/restore", summary="Voltar uma base para uma versão anterior (a atual fica no histórico)")
+def restore_version(
+    payload: RestoreIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_roles(Role.CONTROLLER)),
+):
+    """12/11/2026: "volta o que estava antes" — a versão escolhida volta a ser a vigente; a que estava vigente fica no
+    histórico (nada é apagado) e a troca vai para a auditoria com o motivo."""
+    if payload.dataset_type not in RESTORABLE:
+        raise HTTPException(409, f"Tipo {payload.dataset_type} não pode ser restaurado por versão")
+    if len((payload.reason or "").strip()) < 5:
+        raise HTTPException(422, "Informe o motivo (vai para a auditoria)")
+    versions = db.scalars(
+        select(DatasetVersion)
+        .where(DatasetVersion.dataset_type == payload.dataset_type, DatasetVersion.scope_key == payload.scope_key)
+        .with_for_update()
+    ).all()
+    target = next((v for v in versions if v.version_number == payload.version_number), None)
+    if target is None:
+        raise HTTPException(404, "Versão não encontrada")
+    current = next((v for v in versions if v.is_current), None)
+    if current is not None and current.id == target.id:
+        raise HTTPException(409, f"A versão {target.version_number} já é a vigente")
+    now = datetime.utcnow()
+    for v in versions:
+        if v.is_current:
+            v.is_current = False
+            v.superseded_at = now
+    target.is_current = True
+    target.superseded_at = None
+    audit.record(
+        db,
+        user_id=actor.id,
+        action="RESTORE_VERSION",
+        entity_type="dataset_version",
+        entity_id=target.id,
+        before={"scope": payload.scope_key, "version": current.version_number if current else None},
+        after={"scope": payload.scope_key, "version": target.version_number},
+        reason=payload.reason.strip(),
+        ip=client_ip(request),
+    )
+    db.commit()
+    return {"scope": payload.scope_key, "current_version": target.version_number, "rows": target.row_count}
+
+
 @router.delete("", summary="Excluir uma base (todas as versões do escopo) para reimportar do zero")
 def delete_dataset(
     request: Request,
