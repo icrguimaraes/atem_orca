@@ -1,7 +1,7 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { usePersistentState } from "../persist";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, type Breakdown, type BreakdownRow, type Company, type CostCenter, type Cycle, type Department, type Overview, type Package } from "../api";
+import { api, download, type Breakdown, type BreakdownRow, type Company, type CostCenter, type Cycle, type Department, type Overview, type Package } from "../api";
 import { useAuth } from "../auth";
 import { ProgressStrip } from "../components/ProgressStrip";
 import { CriteriaCard } from "../components/CriteriaCard";
@@ -469,6 +469,20 @@ export default function Painel2() {
                 <button type="button" className={numFmt === "full" ? "active" : ""} onClick={() => setNumFmt("full")} title="R$ 22.542.691,90">Numérico</button>
                 <button type="button" className={numFmt === "compact" ? "active" : ""} onClick={() => setNumFmt("compact")} title="R$ 22,54 mi">R$ mil</button>
               </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                title="Orçamento do recorte (anos, empresa, área, CC, tipo, pacote e meses) por centro de custo × conta × mês"
+                onClick={() => {
+                  const qs = new URLSearchParams(Object.entries({
+                    ...filters, account_id: account ? String(account.id) : "", department_id: department,
+                    years: years.join(","), months: months.join(","), modules: modules.join(","),
+                  }).filter(([, v]) => v)).toString();
+                  download(`/dashboard/budget-export.xlsx${qs ? `?${qs}` : ""}`, `Orcamento_${years.join("_") || "painel"}.xlsx`);
+                }}
+              >
+                Exportar orçamento (Excel)
+              </button>
               <button type="button" className="btn btn-ghost btn-sm" aria-pressed={organizing} onClick={() => setOrganizing(!organizing)}>
                 {organizing ? "Concluir" : "Organizar painel"}
               </button>

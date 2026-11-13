@@ -66,6 +66,41 @@ router = APIRouter(prefix="/dashboard", tags=["painel"])
 ZERO = Decimal("0")
 
 
+@router.get("/budget-export.xlsx", summary="Orçamento do recorte do Painel em Excel (CC × conta × mês, por ano)")
+def budget_export_xlsx(
+    company_id: str | None = None,
+    cost_center_id: str | None = None,
+    package_id: int | None = None,
+    account_id: int | None = None,
+    department_id: str | None = None,
+    years: str | None = None,
+    months: str | None = None,
+    modules: str | None = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """13/11/2026: exportar o orçamento para validar com a área (ex.: orçado 2026 × relatório do SAP)."""
+    from fastapi.responses import StreamingResponse
+
+    from app.services import budget_export
+
+    P = _period(db, years, months, modules, False, True)
+
+    def facts_for_year(year: int) -> Facts:
+        py = _period(db, str(year), months, modules, False, True)
+        return Facts(
+            db, user, company_id, cost_center_id, package_id, py, account_id=account_id, department_id=department_id
+        )
+
+    content = budget_export.workbook(db, user, P, facts_for_year)
+    name = f"Orcamento_{'_'.join(str(y) for y in P.years)}.xlsx"
+    return StreamingResponse(
+        iter([content]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
 @router.get("/overview", summary="KPIs, evolução mensal e rankings do período (anos somados × meses × tipos)")
 def overview(
     company_id: str | None = None,
