@@ -239,6 +239,12 @@ def _match_cc(name: str, candidates: list[CostCenter], tiers: list[set[int]]) ->
     return None, f"nenhum CC com o nome {name!r}"
 
 
+def is_personnel(row: FileRow) -> bool:
+    """Linha do pacote de Pessoal do Planejamento (18/11/2026, "sobe igual no excel"): entra como o Pessoal da versão,
+    no lugar do cálculo pelo quadro e dos contratos PJ (que vêm no arquivo como "Serviços Terceirizados")."""
+    return "PESSOAL" in norm(row.package)
+
+
 @dataclass
 class Plan:
     targets: dict[tuple[int, int], list[Decimal]]
@@ -246,6 +252,8 @@ class Plan:
     errors: list[dict]
     matched: dict[tuple[str, str], dict]
     parsed: Parsed
+    # pacote de Pessoal do arquivo: (CC, conta) → 12 meses
+    personnel: dict[tuple[int, int], list[Decimal]] = field(default_factory=dict)
 
 
 def build(db: Session, ctx: Context, parsed: Parsed) -> Plan:
@@ -269,6 +277,7 @@ def build(db: Session, ctx: Context, parsed: Parsed) -> Plan:
     if pj_account:
         budgeted |= {cc for cc in subs if any(opex_svc.pj_monthly_by_account(db, ctx, cc).get(pj_account) or [])}
     tiers = [budgeted, set(subs)]
+    personnel: dict[tuple[int, int], list[Decimal]] = defaultdict(lambda: [ZERO] * 12)
     for r in parsed.rows:
         company = companies.get(norm(r.company))
         if company is None:
@@ -294,21 +303,90 @@ def build(db: Session, ctx: Context, parsed: Parsed) -> Plan:
             errors.append({"row": r.row, "message": f"Conta {r.account!r}: {text} com esse nome"})
             continue
         key = (cc.id, options[0].id)
+        bucket = personnel if is_personnel(r) else targets
         for m in range(12):
-            targets[key][m] += r.values[m]
-        sources[key].append(r.row)
-    return Plan(dict(targets), dict(sources), errors, matched, parsed)
+            bucket[key][m] += r.values[m]
+        if not is_personnel(r):
+            sources[key].append(r.row)
+    return Plan(dict(targets), dict(sources), errors, matched, parsed, dict(personnel))
+
+
+def _personnel_lines(db: Session, ctx: Context) -> list[BudgetLine]:
+    """Pessoal do Planejamento já gravado na versão (linhas nos orçamentos de Pessoal)."""
+    return list(
+        db.scalars(
+            select(BudgetLine)
+            .join(BudgetSubmission, BudgetSubmission.id == BudgetLine.submission_id)
+            .where(BudgetSubmission.version_id == ctx.version.id, BudgetSubmission.module == "PERSONNEL")
+            .order_by(BudgetLine.id)
+        )
+    )
+
+
+def _personnel_compare(db: Session, ctx: Context, plan: Plan, ccs: dict[int, CostCenter], accounts: dict) -> dict:
+    """Pessoal da versão hoje (quadro + contratos PJ, ou o Pessoal do Planejamento já gravado) × o pacote de Pessoal do
+    arquivo, por CC e por conta. Com a carga, passa a valer o do arquivo."""
+    if not plan.personnel:
+        return {}
+    from app.services import consolidation as cons
+
+    before: dict[tuple[int, str], Decimal] = defaultdict(lambda: ZERO)
+    for r in cons.rows_for(db, cons.version_context(ctx, ctx.version), ctx.version):
+        if r.cost_center_id and r.module == "PERSONNEL":
+            label = r.account_name or r.account_code
+            before[(r.cost_center_id, label)] += sum(r.values, ZERO) + (r.unscheduled or ZERO)
+    pj_account = _pj_account_id(db, ctx)
+    if pj_account:  # contratos PJ (calculados dos contratos, no OPEX): no arquivo vêm em "Serviços Terceirizados"
+        for cc_id in set(_submissions(db, ctx)) | {k[0] for k in plan.personnel}:
+            total = sum(opex_svc.pj_monthly_by_account(db, ctx, cc_id).get(pj_account) or [], ZERO)
+            if total:
+                before[(cc_id, "Contratos PJ (Provisão de Serviços)")] += total
+    after: dict[tuple[int, str], Decimal] = defaultdict(lambda: ZERO)
+    for (cc_id, acc_id), months in plan.personnel.items():
+        after[(cc_id, accounts[acc_id].name)] += sum(months, ZERO)
+    by_cc: dict[int, list[Decimal]] = defaultdict(lambda: [ZERO, ZERO])
+    by_acc: dict[str, list[Decimal]] = defaultdict(lambda: [ZERO, ZERO])
+    for (cc_id, acc), v in before.items():
+        by_cc[cc_id][0] += v
+        by_acc[acc][0] += v
+    for (cc_id, acc), v in after.items():
+        by_cc[cc_id][1] += v
+        by_acc[acc][1] += v
+
+    def rows(groups, label):
+        return sorted(
+            (
+                label(k) | {"before": str(money(b)), "after": str(money(a)), "difference": str(money(a - b))}
+                for k, (b, a) in groups.items()
+                if b or a
+            ),
+            key=lambda r: -abs(Decimal(r["difference"])),
+        )
+
+    b_total = sum((v[0] for v in by_cc.values()), ZERO)
+    a_total = sum((v[1] for v in by_cc.values()), ZERO)
+    return {
+        "before": str(money(b_total)),
+        "after": str(money(a_total)),
+        "difference": str(money(a_total - b_total)),
+        "by_cc": rows(by_cc, lambda k: {"cost_center": f"{ccs[k].code} · {ccs[k].name}" if k in ccs else str(k)}),
+        "by_account": rows(by_acc, lambda k: {"account": k}),
+        "lines": len(plan.personnel),
+        "note": "O pacote de Pessoal do arquivo passa a ser o Pessoal desta versão, no lugar do cálculo pelo quadro "
+        "(salário × reajuste × multiplicador, abono, bônus e rescisões) e dos contratos PJ, que no arquivo vêm em "
+        "“Serviços Terceirizados”.",
+    }
 
 
 # ------------------------------------------------------------------ prévia
 
 
-def _digest(content: bytes, absent: str, version_id: int, current: dict) -> str:
+def _digest(content: bytes, absent: str, version_id: int, current: dict, extra: list[BudgetLine] = ()) -> str:
     h = hashlib.sha256(content)
     h.update(f"|{absent}|{version_id}|".encode())
-    for key in sorted(current):
-        for line in current[key]:
-            h.update(f"{line.id}:{','.join(str(v.amount) for v in line.values)};".encode())
+    lines = [line for key in sorted(current) for line in current[key]] + list(extra)
+    for line in lines:
+        h.update(f"{line.id}:{','.join(str(v.amount) for v in line.values)};".encode())
     return h.hexdigest()
 
 
@@ -359,7 +437,7 @@ def preview(db: Session, ctx: Context, content: bytes, absent: str = "zero") -> 
 
     # contratos PJ: calculados dos contratos (não são linhas); o arquivo não muda isso
     pj_absent = []
-    if pj_account:
+    if pj_account and not plan.personnel:  # com o pacote de Pessoal, os PJ vêm no arquivo
         for cc_id in sorted(subs):
             pj = opex_svc.pj_monthly_by_account(db, ctx, cc_id).get(pj_account)
             total = sum(pj or [], ZERO)
@@ -434,7 +512,8 @@ def preview(db: Session, ctx: Context, content: bytes, absent: str = "zero") -> 
         "kept_absent": kept_absent,
         "pj_absent": pj_absent,
         "pj_note": "Contratos PJ entram calculados dos contratos (conta Provisão de Serviços): a carga não os altera",
-        "digest": _digest(content, absent, ctx.version.id, current),
+        "personnel": _personnel_compare(db, ctx, plan, ccs, accounts),
+        "digest": _digest(content, absent, ctx.version.id, current, _personnel_lines(db, ctx)),
     }
 
 
@@ -506,6 +585,27 @@ def apply(
         snapshots = {line.id: opex_svc.line_out(line) for line in lines}
         changed: dict[int, BudgetLine] = {}
         adjust: BudgetLine | None = None
+        if lines and not any(before) and any(target):
+            # conta zerada numa carga anterior e que voltou no arquivo: o valor volta na linha original (a maior antes)
+            def _was(line):
+                info = (line.attributes or {}).get("planning_revision") or {}
+                return Decimal(str(info.get("before_total") or 0))
+
+            base = max(lines, key=_was)
+            existing = {v.month: v for v in base.values}
+            for m in range(12):
+                if m + 1 in existing:
+                    existing[m + 1].amount = target[m]
+                elif target[m]:
+                    base.values.append(BudgetLineValue(month=m + 1, amount=target[m]))
+            changed[base.id] = base
+            before = target  # nada mais a ajustar mês a mês
+        for line in lines:  # o que voltou no arquivo deixa de ser "zerado na revisão"
+            info = (line.attributes or {}).get("planning_revision") or {}
+            if info.get("zeroed") and any(target):
+                attrs = dict(line.attributes or {})
+                attrs["planning_revision"] = {k: v for k, v in info.items() if k not in ("zeroed", "absent")}
+                line.attributes = attrs
         for m in range(12):
             if target[m] == before[m]:
                 continue
@@ -568,6 +668,54 @@ def apply(
             )
             stats["lines_created"] += 1
         touched.add(cc_id)
+    if plan.personnel:  # pacote de Pessoal: substitui o Pessoal da versão (quadro e PJ deixam de entrar nela)
+        for line in _personnel_lines(db, ctx):
+            audit.record(
+                db,
+                user_id=user_id,
+                action="DELETE",
+                entity_type="budget_line",
+                entity_id=line.id,
+                before=opex_svc.line_out(line),
+                reason=f"Revisão do Planejamento ({label}): Pessoal substituído pelo arquivo",
+                ip=ip,
+            )
+            db.delete(line)
+        db.flush()
+        for (cc_id, acc_id), months in sorted(plan.personnel.items()):
+            if not any(months):
+                continue
+            cc = db.get(CostCenter, cc_id)
+            acc = db.get(Account, acc_id)
+            sub = opex_svc.get_submission(db, ctx, cc_id, module="PERSONNEL")
+            line = BudgetLine(
+                submission_id=sub.id,
+                company_id=cc.company_id,
+                cost_center_id=cc_id,
+                account_id=acc_id,
+                package_id=acc.package_id,
+                line_type="GENERIC",
+                description="Pessoal do Planejamento",
+                justification=f"Pacote de Pessoal do arquivo do Planejamento ({label})",
+                attributes={"source": SOURCE, "version": label, "personnel": True},
+                created_by=user_id,
+                updated_by=user_id,
+            )
+            line.values = [BudgetLineValue(month=m + 1, amount=v) for m, v in enumerate(months) if v]
+            line.total_amount = money(sum(months, ZERO))
+            db.add(line)
+            db.flush()
+            audit.record(
+                db,
+                user_id=user_id,
+                action="CREATE",
+                entity_type="budget_line",
+                entity_id=line.id,
+                after=opex_svc.line_out(line),
+                reason=f"Revisão do Planejamento ({label}): Pessoal do arquivo",
+                ip=ip,
+            )
+            stats["personnel_lines"] += 1
     for cc_id in touched | {p["cost_center_id"] for p in result["pj_absent"]}:
         sub = subs[cc_id]
         if sub.status not in ("IN_PROGRESS", "ADJUSTMENT_REQUESTED"):  # reabre para os apontamentos aparecerem
@@ -590,6 +738,9 @@ def apply(
         "zeroed": result["zeroed"],
         "kept_absent": result["kept_absent"],
         "pj_absent": result["pj_absent"],
+        "personnel": {
+            k: v for k, v in (result.get("personnel") or {}).items() if k in ("before", "after", "difference")
+        },
     } | dict(stats)
     audit.record(
         db,

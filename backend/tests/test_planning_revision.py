@@ -64,8 +64,9 @@ def _file(year: int, rows: list[tuple]) -> bytes:
             "Vice-presidente",
         ]
     )
-    for company, cc, account, values in rows:
-        ws.append([company, cc, "Gestor", account, "Viagens", *([0] * 12), *values, "VP CONTROLADORIA E TRIBUTOS"])
+    for company, cc, account, values, *pkg in rows:
+        package = pkg[0] if pkg else "Viagens"
+        ws.append([company, cc, "Gestor", account, package, *([0] * 12), *values, "VP CONTROLADORIA E TRIBUTOS"])
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -166,3 +167,52 @@ def test_absent_keep_and_unmatched_names_block(client, admin, db):
     assert res["errors"] and "nenhum CC" in res["errors"][0]["message"]
     blocked = _post(client, admin, f"{P}/apply", wrong, digest=res["digest"], reason="x")
     assert blocked.status_code == 422
+
+
+def test_personnel_package_replaces_headcount_and_zeroed_account_comes_back(client, admin, db):
+    """18/11/2026: "sobe igual no excel" — o pacote de Pessoal vira o Pessoal da versão (no lugar do quadro e dos PJ)
+    e a conta zerada numa carga anterior volta na própria linha quando reaparece no arquivo."""
+    from app.services import consolidation as cons
+
+    ctx, cc, sub, travel, food, interest, a, b, j = _setup(db)
+    year = ctx.target_year
+    salary = Account(code="9910101001", name="Salários Teste", nature="PESSOAL")
+    db.add(salary)
+    db.commit()
+    first = _file(
+        year, [("ATEM", "PLANEJAMENTO TRIBUTÁRIO TESTE", "Despesas com Passagens Teste", [150, 100] + [0] * 10)]
+    )
+    p1 = _post(client, admin, f"{P}/preview", first).json()
+    assert _post(client, admin, f"{P}/apply", first, digest=p1["digest"], reason="Carga 1").status_code == 200
+    db.expire_all()
+    assert sum(v.amount for v in db.get(BudgetLine, j.id).values) == 0  # juros zerados (não vieram)
+
+    second = _file(
+        year,
+        [
+            ("ATEM", "PLANEJAMENTO TRIBUTÁRIO TESTE", "Despesas com Passagens Teste", [150, 100] + [0] * 10),
+            ("ATEM", "PLANEJAMENTO TRIBUTÁRIO TESTE", "Juros Impost Teste", [10] * 12),
+            ("ATEM", "PLANEJAMENTO TRIBUTÁRIO TESTE", "Salários Teste", [1000] * 12, "Pessoal e Recursos Humanos"),
+        ],
+    )
+    p2 = _post(client, admin, f"{P}/preview", second).json()
+    assert p2["errors"] == [] and Decimal(p2["personnel"]["after"]) == Decimal("12000.00")
+    res = _post(client, admin, f"{P}/apply", second, digest=p2["digest"], reason="Carga 2 com Pessoal")
+    assert res.status_code == 200, res.text
+    db.expire_all()
+    restored = db.get(BudgetLine, j.id)
+    assert sum(v.amount for v in restored.values) == Decimal("120.00")  # voltou na linha original
+    assert not (restored.attributes["planning_revision"].get("zeroed"))
+    adjust = db.scalars(
+        select(BudgetLine).where(BudgetLine.submission_id == sub.id, BudgetLine.account_id == interest.id)
+    ).all()
+    assert len(adjust) == 1  # nenhuma linha de ajuste nova para os juros
+    assert cons.personnel_from_planning(db, ctx.version.id)
+    rows = [r for r in cons.live_rows(db, ctx) if r.cost_center_id == cc.id and r.module == "PERSONNEL"]
+    assert [(r.account_code, sum(r.values)) for r in rows] == [(salary.code, Decimal("12000.00"))]
+    # carregar de novo substitui (não soma) o Pessoal do Planejamento
+    p3 = _post(client, admin, f"{P}/preview", second).json()
+    assert _post(client, admin, f"{P}/apply", second, digest=p3["digest"], reason="Carga 3").status_code == 200
+    db.expire_all()
+    rows = [r for r in cons.live_rows(db, ctx) if r.cost_center_id == cc.id and r.module == "PERSONNEL"]
+    assert sum(sum(r.values) for r in rows) == Decimal("12000.00")

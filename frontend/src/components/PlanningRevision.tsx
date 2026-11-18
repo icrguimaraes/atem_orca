@@ -19,6 +19,9 @@ interface PlanningPreview {
   cells: (Row & { cost_center: string; account: string; account_name: string; month: number })[];
   changed_keys: number; zeroed: Absent[]; kept_absent: Absent[];
   pj_absent: { cost_center: string; total: string }[]; pj_note: string; digest: string;
+  // 18/11/2026: pacote de Pessoal do arquivo (substitui o cálculo pelo quadro e os PJ nesta versão)
+  personnel?: { before: string; after: string; difference: string; lines: number; note: string;
+    by_cc: (Row & { cost_center: string })[]; by_account: (Row & { account: string })[] };
 }
 
 const monthName = (m: number) => MONTHS[m - 1].charAt(0) + MONTHS[m - 1].slice(1).toLowerCase();
@@ -154,6 +157,20 @@ export function PlanningRevisionCard({ frozen, versionLabel, onApplied }: { froz
               <ul className="small">{data.pj_absent.map((z, i) => <li key={i}>{z.cost_center}: {fmtMoney(z.total)}</li>)}</ul>
             </Alert>
           )}
+          {data.personnel && data.personnel.lines > 0 && (
+            <div className="stack">
+              <h3 className="modal-sub">Pessoal (pacote do arquivo)</h3>
+              <p className="muted small">{data.personnel.note}</p>
+              <div className="stats stats-compact">
+                <Stat label="Pessoal hoje (quadro + PJ)" value={fmtMoney(data.personnel.before)} />
+                <Stat label="Pessoal do arquivo" value={fmtMoney(data.personnel.after)} tone="budget" hint={lines(`${fmtInt(data.personnel.lines)} CC × conta`)} />
+                <Stat label="Diferença" value={fmtSignedMoney(data.personnel.difference)} />
+              </div>
+              <DiffTable rows={data.personnel.by_cc} label={(r) => String(r.cost_center)} />
+              <DiffTable rows={data.personnel.by_account} label={(r) => String(r.account)} />
+            </div>
+          )}
+          <h3 className="modal-sub">OPEX</h3>
           <div className="table-wrap">
             <table className="table">
               <thead><tr><th>Mês</th>{data.monthly.map((m) => <th key={m.month} className="right">{monthName(m.month)}</th>)}</tr></thead>
@@ -181,7 +198,7 @@ export function PlanningRevisionCard({ frozen, versionLabel, onApplied }: { froz
             <textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Ex.: retorno do Planejamento de 10/11/2026" />
           </label>
           <div className="inline-controls">
-            <button type="button" className="btn btn-primary" disabled={busy || data.errors.length > 0 || !reason.trim() || data.changed_keys === 0} onClick={confirm}>
+            <button type="button" className="btn btn-primary" disabled={busy || data.errors.length > 0 || !reason.trim() || (data.changed_keys === 0 && !(data.personnel && Number(data.personnel.difference)))} onClick={confirm}>
               {busy ? "Gravando…" : `Confirmar e gravar na ${data.version.label}`}
             </button>
             <span className="muted small">Depois, os apontamentos ficam em <Link className="link" to="/apontamentos">Apontamentos</Link>.</span>

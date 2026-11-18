@@ -138,6 +138,20 @@ def pj_budget_amounts(db: Session, ctx: Context, cc_ids, accounts, packages):
             yield cc_id, code, name, package, month, amount
 
 
+def personnel_from_planning(db: Session, version_id: int) -> bool:
+    """A versão tem o Pessoal do Planejamento gravado (linhas nos orçamentos de Pessoal, carga "Revisão do
+    Planejamento" com o pacote de Pessoal): ele substitui o cálculo pelo quadro e os contratos PJ nesta versão."""
+    return (
+        db.scalar(
+            select(BudgetLine.id)
+            .join(BudgetSubmission, BudgetSubmission.id == BudgetLine.submission_id)
+            .where(BudgetSubmission.version_id == version_id, BudgetSubmission.module == "PERSONNEL")
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def pj_budget_params(ctx: Context) -> tuple[str, Decimal, int]:
     """(conta do orçamento PJ, reajuste, mês do reajuste) dos parâmetros do ciclo."""
     raw = ctx.params.get("pj.budget_account", 6010201016)
@@ -155,6 +169,8 @@ def pj_contract_amounts(db: Session, ctx: Context, cc_ids):
     `pj_budget_amounts` (soma por CC) e do Rastro (um registro por contrato, só para quem tem acesso)."""
     from app.models.pj import PjContract
 
+    if personnel_from_planning(db, ctx.version.id):
+        return  # 18/11/2026: o Pessoal do Planejamento (com os PJ em "Serviços Terceirizados") vale nesta versão
     year = ctx.target_year
     _code, adj, adj_month = pj_budget_params(ctx)
     stmt = select(PjContract).where(PjContract.archived_at.is_(None), PjContract.cost_center_id.is_not(None))
@@ -300,8 +316,35 @@ def live_rows(db: Session, ctx: Context, cc_ids: set[int] | None = None) -> list
     for cc_id, code, name, package, month, amount in pj_budget_amounts(db, ctx, cc_ids, accounts.values(), packages):
         add("OPEX", None, None, cc_id, code, name, package, month, amount)
 
-    for cc_id, _kind, code, name, m, amount in personnel_amounts(db, ctx, cc_ids):
-        add("PERSONNEL", None, None, cc_id, code, name, "Pessoas", m, amount)
+    if personnel_from_planning(db, ctx.version.id):
+        # Pessoal do Planejamento gravado na versão (18/11/2026): vale ele, no lugar do cálculo pelo quadro
+        planned = db.execute(
+            select(
+                BudgetLine.company_id,
+                BudgetLine.cost_center_id,
+                BudgetLine.account_id,
+                BudgetLine.package_id,
+                BudgetLineValue.month,
+                func.sum(BudgetLineValue.amount),
+            )
+            .join(BudgetLineValue, BudgetLineValue.line_id == BudgetLine.id)
+            .join(BudgetSubmission, BudgetSubmission.id == BudgetLine.submission_id)
+            .where(BudgetSubmission.module == "PERSONNEL", *sub_filter)
+            .group_by(
+                BudgetLine.company_id,
+                BudgetLine.cost_center_id,
+                BudgetLine.account_id,
+                BudgetLine.package_id,
+                BudgetLineValue.month,
+            )
+        )
+        for company_id, cc_id, acc_id, pkg_id, month, amount in planned:
+            acc = accounts.get(acc_id)
+            package = packages.get(pkg_id) or packages.get(acc.package_id) or "Pessoas"
+            add("PERSONNEL", company_id, None, cc_id, acc.code, acc.name, package, month, amount)
+    else:
+        for cc_id, _kind, code, name, m, amount in personnel_amounts(db, ctx, cc_ids):
+            add("PERSONNEL", None, None, cc_id, code, name, "Pessoas", m, amount)
     rows = [r for r in grouped.values() if any(r.values) or r.unscheduled]
     for r in rows:
         r.values = [money(v) for v in r.values]
