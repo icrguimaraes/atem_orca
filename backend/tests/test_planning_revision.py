@@ -216,3 +216,26 @@ def test_personnel_package_replaces_headcount_and_zeroed_account_comes_back(clie
     db.expire_all()
     rows = [r for r in cons.live_rows(db, ctx) if r.cost_center_id == cc.id and r.module == "PERSONNEL"]
     assert sum(sum(r.values) for r in rows) == Decimal("12000.00")
+
+
+def test_account_map_matches_file_name_to_code(client, admin, db):
+    from app.models import CycleParameter
+
+    ctx, cc, sub, travel, food, interest, a, b, j = _setup(db)
+    year = ctx.target_year
+    db.merge(
+        CycleParameter(
+            cycle_id=ctx.cycle.id,
+            key="planning.account_map",
+            value={"Passagens Aéreas por extenso": travel.code, "Conta sem cadastro": "9999999999"},
+        )
+    )
+    db.commit()
+    content = _file(
+        year, [("ATEM", "PLANEJAMENTO TRIBUTÁRIO TESTE", "PASSAGENS AEREAS POR EXTENSO", [150, 100] + [0] * 10)]
+    )
+    data = _post(client, admin, f"{P}/preview", content, absent="keep").json()
+    assert data["errors"] == [] and data["changed_keys"] == 0  # casou com a conta de passagens
+    wrong = _file(year, [("ATEM", "PLANEJAMENTO TRIBUTÁRIO TESTE", "Conta sem cadastro", [1] + [0] * 11)])
+    res = _post(client, admin, f"{P}/preview", wrong).json()
+    assert res["errors"] and "9999999999" in res["errors"][0]["message"]

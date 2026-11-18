@@ -135,7 +135,7 @@ def test_numbers_come_from_the_system_and_budget_is_untouched(client, admin, db)
         f"{P}/{d['id']}", headers=admin, json={"capex_links": [{"cost_center_id": cc27.id, "capex_code": "CPX-999"}]}
     ).json()
     assert not upd["capex_links"][0]["found"] and any("CPX-999" in w for w in upd["summary"]["warnings"])
-    actions = db.scalars(select(AuditLog.action).where(AuditLog.entity_type == "project")).all()
+    actions = db.scalars(select(AuditLog.action).where(AuditLog.entity_type == "project").order_by(AuditLog.id)).all()
     assert actions == ["CREATE", "UPDATE"]
 
 

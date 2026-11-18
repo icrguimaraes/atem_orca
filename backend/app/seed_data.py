@@ -348,6 +348,20 @@ CYCLE_PARAMETERS = {
     "pj.budget_account": (6010201016, "Conta dos contratos PJ no orçamento (Provisão de Serviços)"),
     "pj.adjustment_pct": (0.035, "Reajuste dos contratos PJ no ano do orçamento (IPCA projetado; confirmar)"),
     "pj.adjustment_month": (1, "Mês a partir do qual vale o reajuste dos contratos PJ"),
+    # revisão do Planejamento (18/11/2026): o arquivo traz o nome "por extenso" da conta; o cadastro usa a abreviação do
+    # SAP. De/para confirmado pela Controladoria (nome no arquivo → código da conta)
+    "planning.account_map": (
+        {
+            "Serviços Terceirizados": "6010201013",
+            "Vale Refeição/Alimentação": "6010103002",
+            "Horas Extras/Quebra de Caixa": "6010101003",
+            "Gratificações/Premiações": "6010101009",
+            "Vale Combustíveis": "6010103006",
+            "Despesas com Estacionamento": "6010301014",
+            "Bolsa de Estudo": "6010103010",
+        },
+        "Revisão do Planejamento: de/para do nome da conta no arquivo para o código da conta no cadastro",
+    ),
     # defesa do orçamento (10/11/2026): termo no nome da conta = obrigação legal/contratual (prioridade alta)
     "defense.mandatory_terms": (
         ["juros", "auditoria", "parcelamento", "multa", "imposto", "tribut", "taxa"],

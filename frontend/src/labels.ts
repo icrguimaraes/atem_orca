@@ -80,6 +80,7 @@ export const PARAM_LABELS: Record<string, string> = {
   "alert.history_band_pct": "Banda em torno da média histórica",
   "alert.min_relevant_amount": "Valor mínimo para alertar conta sem orçamento (R$)",
   "defense.mandatory_terms": "Defesa do orçamento: termos de obrigação legal/contratual no nome da conta",
+  "planning.account_map": "Revisão do Planejamento: de/para de nome de conta do arquivo → código da conta",
   "travel.one_way_factor": "Fator da passagem só de ida",
   "capex.min_unit_value": "Valor unitário mínimo para CAPEX (R$)",
   "capex.min_useful_life_months": "Vida útil mínima para CAPEX (meses)",

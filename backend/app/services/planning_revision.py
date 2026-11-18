@@ -194,6 +194,14 @@ def _month_values(lines: list[BudgetLine]) -> list[Decimal]:
     return out
 
 
+def _account_map(ctx: Context) -> dict:
+    """De/para de nome de conta do arquivo → código (parâmetro do ciclo; o padrão do seed vale até ser gravado)."""
+    from app.seed_data import CYCLE_PARAMETERS
+
+    value = ctx.params.get("planning.account_map")
+    return value if isinstance(value, dict) else CYCLE_PARAMETERS["planning.account_map"][0]
+
+
 def _pj_account_id(db: Session, ctx: Context) -> int | None:
     raw = ctx.params.get("pj.budget_account", 6010201016)
     return db.scalar(select(Account.id).where(Account.code == str(raw).strip()))
@@ -264,8 +272,11 @@ def build(db: Session, ctx: Context, parsed: Parsed) -> Plan:
     for cc in db.scalars(select(CostCenter)):
         ccs_by_company[cc.company_id].append(cc)
     accounts_by_name: dict[str, list[Account]] = defaultdict(list)
+    accounts_by_code: dict[str, Account] = {}
     for acc in db.scalars(select(Account)):
         accounts_by_name[norm(acc.name)].append(acc)
+        accounts_by_code[acc.code] = acc
+    account_map = {norm(k): str(v).strip() for k, v in (_account_map(ctx) or {}).items()}
     used_accounts = {acc for _cc, acc in current}
     targets: dict[tuple[int, int], list[Decimal]] = defaultdict(lambda: [ZERO] * 12)
     sources: dict[tuple[int, int], list[int]] = defaultdict(list)
@@ -291,7 +302,15 @@ def build(db: Session, ctx: Context, parsed: Parsed) -> Plan:
             errors.append({"row": r.row, "message": f"{company.short_name or company.code}: {problem}"})
             continue
         matched[ck] = {"file": r.cost_center, "code": cc.code, "name": cc.name, "company": company.code}
-        options = accounts_by_name.get(norm(r.account), [])
+        mapped = account_map.get(norm(r.account))
+        if mapped:
+            if mapped not in accounts_by_code:
+                text = f"Conta {r.account!r}: o de/para aponta para {mapped}, que não está no cadastro"
+                errors.append({"row": r.row, "message": text})
+                continue
+            options = [accounts_by_code[mapped]]
+        else:
+            options = accounts_by_name.get(norm(r.account), [])
         if len(options) > 1:
             options = (
                 [a for a in options if (cc.id, a.id) in current]
