@@ -60,7 +60,7 @@ class Access:
         self.cc = db.get(CostCenter, sub.cost_center_id)
         visible = visible_cost_center_ids(db, user)
         self.global_ = is_global(user)
-        in_scope = self.cc.manager_user_id == user.id or (visible is not None and self.cc.id in visible)
+        in_scope = self.cc.is_managed_by(user.id) or (visible is not None and self.cc.id in visible)
         # Só o papel Gestor de CC edita/envia; Consulta e Gestor de pacote com escopo apenas leem
         self.editor_role = self.global_ or "MANAGER" in user.role_codes
         self.owner = in_scope and self.editor_role
@@ -77,7 +77,7 @@ class Access:
         self.roles = set(user.role_codes)
         # questionar o gestor sobre um lançamento (09/10/2026): quem revisa — Controladoria ou quem tem o CC no
         # escopo sem ser o gestor dele (a pergunta exige o CC visível, ver services.questions.ask_item)
-        reviewer_scope = visible is not None and self.cc.id in visible and self.cc.manager_user_id != user.id
+        reviewer_scope = visible is not None and self.cc.id in visible and not self.cc.is_managed_by(user.id)
         self.ask = self.global_ or reviewer_scope
 
 

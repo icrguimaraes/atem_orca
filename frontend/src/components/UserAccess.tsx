@@ -142,7 +142,7 @@ export function UserAccessModal({ user, onClose, onChanged }: { user: UserListIt
                     {access.managed.map((cc) => (
                       <tr key={cc.id}>
                         <td>
-                          <strong>{cc.code}</strong> · {cc.name} {!cc.is_active && <Badge tone="neutral">Inativo</Badge>}
+                          <strong>{cc.code}</strong> · {cc.name} {cc.principal === false && <Badge tone="neutral">Co-gestor</Badge>} {!cc.is_active && <Badge tone="neutral">Inativo</Badge>}
                           <span className="muted small access-sub">{cc.company}</span>
                         </td>
                       </tr>
@@ -154,7 +154,7 @@ export function UserAccessModal({ user, onClose, onChanged }: { user: UserListIt
               <div className="muted">Não é gestor de nenhum centro de custo.</div>
             )}
             <div className="muted small">
-              Vem do cadastro do CC (Cadastros → Centros de custo, campo Usuário gestor, editável pelo Administrador).
+              Vem do cadastro do CC (Cadastros → Centros de custo, campos Usuário gestor e Co-gestores, editáveis pelo Administrador).
             </div>
           </section>
 

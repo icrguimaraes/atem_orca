@@ -10,8 +10,8 @@ from collections import defaultdict
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.deps import is_global
-from app.models import Area, Company, CostCenter, Department, User, UserScope
+from app.core.deps import is_global, managed_cost_center_ids
+from app.models import Area, Company, CostCenter, CostCenterManager, Department, User, UserScope
 
 
 class AccessError(Exception):
@@ -32,6 +32,11 @@ def summaries(db: Session, users: list[User]) -> dict[int, dict]:
     managed: dict[int, set[int]] = defaultdict(set)
     rows = db.execute(select(CostCenter.manager_user_id, CostCenter.id).where(CostCenter.manager_user_id.in_(ids)))
     for user_id, cc_id in rows:
+        managed[user_id].add(cc_id)
+    rows = db.execute(
+        select(CostCenterManager.user_id, CostCenterManager.cost_center_id).where(CostCenterManager.user_id.in_(ids))
+    )
+    for user_id, cc_id in rows:  # co-gestores (19/11/2026)
         managed[user_id].add(cc_id)
     scopes = list(db.scalars(select(UserScope).where(UserScope.user_id.in_(ids))))
     companies = {s.company_id for s in scopes if s.company_id and not s.cost_center_id}
@@ -148,7 +153,8 @@ def _scope_out(db: Session, scope: UserScope) -> dict:
 
 
 def detail(db: Session, user: User) -> dict:
-    managed = db.scalars(select(CostCenter).where(CostCenter.manager_user_id == user.id).order_by(CostCenter.code))
+    mine = managed_cost_center_ids(db, user.id)
+    managed = db.scalars(select(CostCenter).where(CostCenter.id.in_(mine or {-1})).order_by(CostCenter.code))
     scopes = sorted((_scope_out(db, s) for s in user.scopes), key=lambda s: (s["kind"] != "COMPANY", s["code"] or ""))
     return {
         "user_id": user.id,
@@ -161,6 +167,7 @@ def detail(db: Session, user: User) -> dict:
                 "name": cc.name,
                 "company": _company_label(cc.company),
                 "is_active": cc.is_active,
+                "principal": cc.manager_user_id == user.id,
             }
             for cc in managed
         ],
@@ -206,7 +213,7 @@ def add_scope(
         cc = db.get(CostCenter, cost_center_id)
         if cc is None:
             raise AccessError("Centro de custo não encontrado.", 404)
-        if cc.manager_user_id == user.id:
+        if cc.is_managed_by(user.id):
             raise AccessError(f"{user.name} já acessa o CC {cc.code} como gestor (cadastro do CC).")
         if any(s.cost_center_id == cc.id for s in user.scopes):
             raise AccessError(f"O CC {cc.code} já está atribuído a {user.name}.")
@@ -246,15 +253,26 @@ def set_cost_centers(
         + [UserScope(user_id=user.id, cost_center_id=cc_id) for cc_id in sorted(wanted)]
     )
     changed = []
-    for cc in db.scalars(
-        select(CostCenter).where((CostCenter.manager_user_id == user.id) | CostCenter.id.in_(wanted_mgr or {-1}))
-    ):
-        if cc.id in wanted_mgr and cc.manager_user_id != user.id:
-            changed.append({"cost_center": cc.code, "from": cc.manager_user_id, "to": user.id})
-            cc.manager_user_id, cc.manager_name = user.id, user.name
-        elif cc.id not in wanted_mgr and cc.manager_user_id == user.id:
-            changed.append({"cost_center": cc.code, "from": user.id, "to": None})
-            cc.manager_user_id = None
+    current = managed_cost_center_ids(db, user.id)
+    # 19/11/2026: o CC aceita mais de um gestor. Marcar "gestor" num CC que já tem gestor acrescenta a pessoa como
+    # co-gestora (não tira ninguém); desmarcar tira só ela (se era a principal, o primeiro co-gestor assume).
+    for cc in db.scalars(select(CostCenter).where(CostCenter.id.in_((current | wanted_mgr) or {-1}))):
+        if cc.id in wanted_mgr and not cc.is_managed_by(user.id):
+            if cc.manager_user_id is None:
+                cc.manager_user_id, cc.manager_name = user.id, user.name
+                changed.append({"cost_center": cc.code, "from": None, "to": user.id})
+            else:
+                cc.co_manager_user_ids = [*cc.co_manager_user_ids, user.id]
+                changed.append({"cost_center": cc.code, "co_manager_added": user.id})
+        elif cc.id not in wanted_mgr and cc.is_managed_by(user.id):
+            if cc.manager_user_id == user.id:
+                rest = cc.co_manager_user_ids
+                cc.manager_user_id = rest[0] if rest else None
+                cc.co_manager_user_ids = rest[1:]
+                changed.append({"cost_center": cc.code, "from": user.id, "to": cc.manager_user_id})
+            else:
+                cc.co_manager_user_ids = [i for i in cc.co_manager_user_ids if i != user.id]
+                changed.append({"cost_center": cc.code, "co_manager_removed": user.id})
     db.flush()
     return {"managers": changed}
 

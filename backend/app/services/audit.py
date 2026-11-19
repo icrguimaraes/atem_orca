@@ -23,7 +23,10 @@ def _jsonable(value: Any) -> Any:
 def snapshot(obj: Any, exclude: set[str] | None = None) -> dict[str, Any]:
     exclude = (exclude or set()) | {"password_hash"}
     mapper = inspect(obj).mapper
-    return {c.key: _jsonable(getattr(obj, c.key)) for c in mapper.column_attrs if c.key not in exclude}
+    out = {c.key: _jsonable(getattr(obj, c.key)) for c in mapper.column_attrs if c.key not in exclude}
+    for key in getattr(obj, "__audit_extra__", ()):  # ex.: co-gestores do CC (tabela própria)
+        out[key] = _jsonable(getattr(obj, key))
+    return out
 
 
 def diff(before: dict | None, after: dict | None) -> tuple[dict | None, dict | None]:

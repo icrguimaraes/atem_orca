@@ -75,7 +75,7 @@ export default function MasterData() {
       title: r ? `Centro de custo ${r.code}` : "Novo centro de custo",
       endpoint: "/cost-centers",
       id: r?.id,
-      initial: r ?? { company_id: data.companies[0]?.id, code: "", name: "", manager_user_id: null, manager_name: "", is_csc: false, is_backoffice: false, is_active: true },
+      initial: r ?? { company_id: data.companies[0]?.id, code: "", name: "", manager_user_id: null, co_manager_user_ids: [], manager_name: "", is_csc: false, is_backoffice: false, is_active: true },
       fields: [
         { key: "company_id", label: "Empresa", type: "select", options: companyOpts, required: true, readOnlyOnEdit: true },
         // código editável (13/10/2026): CC criado com código provisório (ex.: NAVAUDEXT) recebe o SAP real sem
@@ -83,6 +83,7 @@ export default function MasterData() {
         { key: "code", label: "Código SAP", type: "text", required: true, hint: "Troque só para corrigir um código provisório: lançamentos e histórico continuam no mesmo CC; a mudança fica registrada na auditoria." },
         { key: "name", label: "Denominação", type: "text", required: true },
         { key: "manager_user_id", label: "Usuário gestor (quem enxerga e preenche o orçamento do CC)", type: "select", options: userOpts, allowEmpty: true },
+        { key: "co_manager_user_ids", label: "Co-gestores (mesmo acesso do usuário gestor)", type: "multiselect", options: userOpts, hint: "Mais de uma pessoa pode gerir o CC: todas enxergam e preenchem o orçamento dele." },
         { key: "manager_name", label: "Nome do gestor (como vem do SAP)", type: "text" },
         { key: "is_csc", label: "CSC — atende várias empresas (orçado na ATEM)", type: "checkbox" },
         { key: "is_backoffice", label: "Centro de custo de BackOffice (recebe rateio)", type: "checkbox" },
@@ -198,15 +199,19 @@ export default function MasterData() {
         <div className="table-wrap">
           {tab === "cc" && (
             <Table
-              head={["Empresa", "Código", "Centro de custo", "Gestor (SAP)", "Usuário gestor", "Situação", ""]}
-              rows={data.ccs
-                .filter((c) => matches(q, c.code, c.name, c.manager_name))
+              head={["Empresa", "Código", "Centro de custo", "Gestor (SAP)", "Usuário(s) gestor(es)", "Situação", ""]}
+              rows={[...data.ccs]
+                // 19/11/2026: empresa → código (antes só código, misturando ATEM e REAM com o mesmo número)
+                .sort((a, b) => (maps.company.get(a.company_id)?.code ?? "").localeCompare(maps.company.get(b.company_id)?.code ?? "") || a.code.localeCompare(b.code))
+                .filter((c) => matches(q, c.code, c.name, c.manager_name, ...(c.co_manager_user_ids ?? []).map((i) => maps.user.get(i)?.name)))
                 .map((c) => [
                   maps.company.get(c.company_id)?.short_name ?? c.company_id,
                   <span className="mono">{c.code}</span>,
                   c.name,
                   c.manager_name ?? <span className="muted">—</span>,
-                  c.manager_user_id ? (maps.user.get(c.manager_user_id)?.name ?? `#${c.manager_user_id}`) : <Badge tone="warn">sem usuário</Badge>,
+                  c.manager_user_id || (c.co_manager_user_ids ?? []).length
+                    ? [c.manager_user_id, ...(c.co_manager_user_ids ?? [])].filter(Boolean).map((i) => maps.user.get(i!)?.name ?? `#${i}`).join(" · ")
+                    : <Badge tone="warn">sem usuário</Badge>,
                   active(c.is_active),
                   editCell(c),
                 ])}

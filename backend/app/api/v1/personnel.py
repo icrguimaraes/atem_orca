@@ -62,7 +62,7 @@ class Access:
         self.cc = db.get(CostCenter, sub.cost_center_id)
         visible = _visible(db, user)
         self.global_ = _is_global(user)
-        in_scope = self.cc.manager_user_id == user.id or (visible is not None and self.cc.id in visible)
+        in_scope = self.cc.is_managed_by(user.id) or (visible is not None and self.cc.id in visible)
         # Só Gestor de CC e RH editam/enviam; Consulta e Gestor de pacote com escopo apenas leem
         self.editor_role = self.global_ or bool(user.role_codes & {"MANAGER", "HR"})
         self.owner = in_scope and self.editor_role

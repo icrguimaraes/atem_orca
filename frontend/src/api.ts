@@ -122,7 +122,7 @@ export interface PjBody {
 export interface AccessItem { id: number; code: string; name: string; department: string | null; sector: string | null; manager: boolean }
 export interface AccessSummary { is_global: boolean; cost_centers: number; managed: number; scopes: number; items: AccessItem[]; departments: string[] }
 export interface UserListItem extends User { access: AccessSummary }
-export interface AccessCostCenter { id: number; code: string; name: string; company: string; is_active: boolean }
+export interface AccessCostCenter { id: number; code: string; name: string; company: string; is_active: boolean; principal?: boolean }
 /** Escopo atribuído: um CC ou a empresa inteira (`cost_centers` = quantos CCs a linha libera). */
 export interface UserScope {
   id: number; kind: "COST_CENTER" | "COMPANY" | "DEPARTMENT" | "EMPTY"; cost_center_id: number | null; company_id: number | null; department_id?: number | null;
@@ -138,6 +138,7 @@ export interface CostCenter {
   id: number; company_id: number; code: string; name: string; manager_user_id: number | null;
   manager_name: string | null; is_csc: boolean; is_backoffice: boolean; is_active: boolean;
   department_id?: number | null; area_id?: number | null;  // área e setor (página Áreas e setores)
+  co_manager_user_ids?: number[];  // co-gestores (19/11/2026): mesmo acesso do gestor principal
 }
 /** Área (Controladoria, Tributos…) — tabela `departments`. */
 export interface Department { id: number; name: string }

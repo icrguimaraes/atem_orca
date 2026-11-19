@@ -14,7 +14,7 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.deps import is_global, visible_cost_center_ids
+from app.core.deps import is_global, managed_cost_center_ids, visible_cost_center_ids
 from app.domain.rules.common import money
 from app.models import (
     Account,
@@ -165,9 +165,7 @@ def can_answer(db: Session, user: User, q: BudgetQuestion) -> bool:
     ccs = scope_ccs(q, db)
     if not ccs:
         return False
-    managed = set(
-        db.scalars(select(CostCenter.id).where(CostCenter.id.in_(ccs), CostCenter.manager_user_id == user.id))
-    )
+    managed = ccs & managed_cost_center_ids(db, user.id)
     if managed:
         return True
     if Role.MANAGER in user.role_codes:

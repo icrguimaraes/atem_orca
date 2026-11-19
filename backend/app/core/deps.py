@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import decode_token
 from app.db import get_db
-from app.models import CostCenter, User, UserScope
+from app.models import CostCenter, CostCenterManager, User, UserScope
 from app.models.base import Role
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
@@ -64,9 +64,16 @@ def visible_cost_center_ids(db: Session, user: User) -> set[int] | None:
     return own_cost_center_ids(db, user)
 
 
+def managed_cost_center_ids(db: Session, user_id: int) -> set[int]:
+    """CCs em que a pessoa é gestora: principal (cadastro do CC) ou co-gestora (19/11/2026)."""
+    ids = set(db.scalars(select(CostCenter.id).where(CostCenter.manager_user_id == user_id)))
+    ids |= set(db.scalars(select(CostCenterManager.cost_center_id).where(CostCenterManager.user_id == user_id)))
+    return ids
+
+
 def own_cost_center_ids(db: Session, user: User) -> set[int]:
     """CCs da própria pessoa (gestor + escopos atribuídos), sem o "vê tudo" dos perfis globais."""
-    ids = set(db.scalars(select(CostCenter.id).where(CostCenter.manager_user_id == user.id)))
+    ids = managed_cost_center_ids(db, user.id)
     for scope in db.scalars(select(UserScope).where(UserScope.user_id == user.id)):
         if scope.cost_center_id:
             ids.add(scope.cost_center_id)

@@ -611,6 +611,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--text); outl
 input[type=checkbox], input[type=radio] { min-height: 0; width: 18px; height: 18px; accent-color: var(--text); }
 label { display: grid; gap: 6px; font-size: 12px; font-weight: 600; color: var(--text); }
 .check { display: flex; align-items: center; gap: 8px; font-weight: 500; color: var(--text); font-size: 14px; }
+.multiselect { border: 0; padding: 0; margin: 0; gap: 6px; }
+.multiselect legend { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.multiselect-list { max-height: 180px; overflow-y: auto; display: grid; gap: 4px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; }
 .checks { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 .stack, .upload { display: grid; gap: 12px; }

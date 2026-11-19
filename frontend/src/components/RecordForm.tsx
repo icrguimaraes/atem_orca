@@ -5,7 +5,8 @@ import { Alert, Modal } from "./ui";
 export type Field =
   | { key: string; label: string; type: "text" | "number"; required?: boolean; readOnlyOnEdit?: boolean; hint?: string }
   | { key: string; label: string; type: "select"; options: { value: string | number; label: string }[]; required?: boolean; readOnlyOnEdit?: boolean; allowEmpty?: boolean }
-  | { key: string; label: string; type: "checkbox" };
+  | { key: string; label: string; type: "checkbox" }
+  | { key: string; label: string; type: "multiselect"; options: { value: number; label: string }[]; hint?: string };
 
 /** Formulário genérico de cadastro: cria (POST) ou altera (PATCH só dos campos mudados). */
 export function RecordForm({
@@ -43,7 +44,8 @@ export function RecordForm({
     for (const f of fields) {
       const v = values[f.key];
       const normalized = v === "" ? null : f.type === "number" && v !== null && v !== undefined ? Number(v) : v;
-      if (!editing || normalized !== initial[f.key]) payload[f.key] = normalized;
+      const same = Array.isArray(normalized) ? JSON.stringify(normalized) === JSON.stringify(initial[f.key] ?? []) : normalized === initial[f.key];
+      if (!editing || !same) payload[f.key] = normalized;
     }
     try {
       if (editing && Object.keys(payload).length === 0) return onClose();
@@ -81,6 +83,27 @@ export function RecordForm({
                 {f.label}
               </label>
             );
+          if (f.type === "multiselect") {
+            const picked = (values[f.key] as number[] | undefined) ?? [];
+            return (
+              <fieldset key={f.key} className="stack multiselect">
+                <legend>{f.label}</legend>
+                <div className="multiselect-list">
+                  {f.options.map((o) => (
+                    <label key={o.value} className="check">
+                      <input
+                        type="checkbox"
+                        checked={picked.includes(o.value)}
+                        onChange={(e) => set(f.key, e.target.checked ? [...picked, o.value] : picked.filter((x) => x !== o.value))}
+                      />
+                      {o.label}
+                    </label>
+                  ))}
+                </div>
+                {f.hint && <span className="muted small">{f.hint}</span>}
+              </fieldset>
+            );
+          }
           if (f.type === "select")
             return (
               <label key={f.key}>

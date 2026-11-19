@@ -99,7 +99,7 @@ def can_view(db: Session, user: User, p: Project) -> bool:
     if is_global(user) or p.owner_user_id == user.id:
         return True
     cc = db.get(CostCenter, p.cost_center_id) if p.cost_center_id else None
-    return bool(cc and cc.manager_user_id == user.id)
+    return bool(cc and cc.is_managed_by(user.id))
 
 
 def _get(db: Session, user: User, project_id: int) -> Project:

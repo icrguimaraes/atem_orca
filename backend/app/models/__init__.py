@@ -29,6 +29,7 @@ from app.models.org import (
     BudgetPackage,
     Company,
     CostCenter,
+    CostCenterManager,
     Department,
     PackageManager,
 )

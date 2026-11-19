@@ -117,6 +117,10 @@ cd frontend && E2E_BASE_URL=http://localhost:8077 E2E_EMAIL=... E2E_PASSWORD=...
   realizado; Média: abaixo do realizado ou justificada; Baixa: resto); o ajuste da Controladoria fica em
   `BudgetDefenseItem` (migração 0018, auditoria `budget_defense`, proposta congelada = só consulta) e não altera o
   orçamento. PDF = impressão do navegador (`@media print` em `styles.css`).
+- Co-gestores do CC (19/11/2026, migração 0019): além de `cost_centers.manager_user_id` (principal), `cost_center_managers`
+  guarda outras pessoas com o mesmo acesso de gestor (`CostCenter.co_manager_user_ids`, `is_managed_by`;
+  `core.deps.managed_cost_center_ids`). Nunca testar só `manager_user_id == user.id`. No editor de usuário, marcar "Gestor"
+  num CC que já tem gestor acrescenta como co-gestor; desmarcar o principal promove o primeiro co-gestor.
 - Exportação de template (`services/template_export.py`) deve continuar legível pelos parsers (`tests/test_template_export.py`
   faz a ida e volta); A1 de `Instruções` leva `EXPORT_MARKER`, que faz a reimportação substituir todos os lançamentos do CC.
 - Modais usam portal (`ui.Modal`); toda tabela dentro de `.table-wrap` — o smoke E2E falha com rolagem horizontal a 390px.

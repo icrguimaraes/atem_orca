@@ -117,6 +117,7 @@ class AccessCostCenterOut(BaseModel):
     name: str
     company: str
     is_active: bool
+    principal: bool = True  # False = co-gestor (19/11/2026)
 
 
 class UserScopeOut(BaseModel):
@@ -177,6 +178,7 @@ class CostCenterIn(BaseModel):
     is_csc: bool = False
     is_backoffice: bool = False
     is_active: bool = True
+    co_manager_user_ids: list[int] = []  # co-gestores (19/11/2026)
 
 
 class CostCenterOut(CostCenterIn, ORM):

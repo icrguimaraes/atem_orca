@@ -135,7 +135,8 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
     const cost_center_ids = [...selected].filter((id) => !manager.has(id) && !coveredByDept.has(id));
     const manager_of = [...manager];
     // o CC está ligado a OUTRA conta de usuário (o nome no CC pode ser igual: ex. a mesma pessoa com dois logins)
-    const stealing = (ccs ?? []).filter((c) => manager.has(c.id) && c.manager_user_id && c.manager_user_id !== user?.id);
+    // 19/11/2026: o CC aceita mais de um gestor — quem já é gestor continua; esta pessoa entra como co-gestora
+    const stealing = (ccs ?? []).filter((c) => manager.has(c.id) && c.manager_user_id && c.manager_user_id !== user?.id && !(c.co_manager_user_ids ?? []).includes(user?.id ?? -1));
     const owner = (c: CostCenter) => {
       const u = people.get(c.manager_user_id!);
       return u ? `${u.name} <${u.email}>` : `usuário #${c.manager_user_id}`;
@@ -144,11 +145,11 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
       stealing.length &&
       !window.confirm(
         [
-          "Estes CCs estão ligados a outra conta de usuário, que deixará de ser a gestora:",
+          "Estes CCs já têm gestor. Ninguém sai: a pessoa entra como co-gestora (mesmo acesso de gestor):",
           "",
           ...stealing.map((c) => `${c.code} · ${c.name}: hoje ${owner(c)}`),
           "",
-          `Passar para ${form.name.trim()} <${form.email.trim().toLowerCase()}>?`,
+          `Incluir ${form.name.trim()} <${form.email.trim().toLowerCase()}> como co-gestor(a)?`,
         ].join("\n"),
       )
     )
@@ -302,6 +303,7 @@ export function UserEditor({ user, onClose, onSaved }: { user: UserListItem | nu
                               {cc.manager_user_id
                                 ? ` · gestor: ${people.get(cc.manager_user_id)?.email ?? cc.manager_name ?? "outro usuário"}${cc.manager_user_id === user?.id ? " (este usuário)" : ""}`
                                 : cc.manager_name ? ` · gestor (sem login): ${cc.manager_name}` : " · sem gestor"}
+                              {(cc.co_manager_user_ids ?? []).length > 0 && ` · co-gestor(es): ${(cc.co_manager_user_ids ?? []).map((i) => people.get(i)?.email ?? `#${i}`).join(", ")}`}
                             </span>
                           </span>
                         </label>

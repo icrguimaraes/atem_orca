@@ -10,7 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.deps import client_ip, get_current_user, require_roles, visible_cost_center_ids
+from app.core.deps import client_ip, get_current_user, managed_cost_center_ids, require_roles, visible_cost_center_ids
 from app.db import get_db
 from app.models import (
     Account,
@@ -294,7 +294,7 @@ def list_cost_centers(
     if visible is not None:
         stmt = stmt.where(CostCenter.id.in_(visible))
     if mine:
-        stmt = stmt.where(CostCenter.manager_user_id == user.id)
+        stmt = stmt.where(CostCenter.id.in_(managed_cost_center_ids(db, user.id) or {-1}))
     if company_id:
         stmt = stmt.where(CostCenter.company_id == company_id)
     if q:

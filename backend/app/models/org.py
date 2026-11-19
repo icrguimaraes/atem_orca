@@ -75,6 +75,35 @@ class CostCenter(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     company: Mapped[Company] = relationship(lazy="joined")
+    # co-gestores (19/11/2026): além do gestor principal (`manager_user_id`), outras pessoas com o acesso de gestor
+    co_manager_links: Mapped[list["CostCenterManager"]] = relationship(
+        cascade="all, delete-orphan", lazy="selectin", order_by="CostCenterManager.user_id"
+    )
+    __audit_extra__ = ("co_manager_user_ids",)
+
+    @property
+    def co_manager_user_ids(self) -> list[int]:
+        return [link.user_id for link in self.co_manager_links]
+
+    @co_manager_user_ids.setter
+    def co_manager_user_ids(self, ids: list[int] | None) -> None:
+        wanted = [i for i in dict.fromkeys(ids or []) if i != self.manager_user_id]
+        keep = [link for link in self.co_manager_links if link.user_id in wanted]
+        have = {link.user_id for link in keep}
+        self.co_manager_links = keep + [CostCenterManager(user_id=i) for i in wanted if i not in have]
+
+    def is_managed_by(self, user_id: int) -> bool:
+        """Gestor principal ou co-gestor."""
+        return self.manager_user_id == user_id or user_id in self.co_manager_user_ids
+
+
+class CostCenterManager(Base):
+    """Co-gestor de um centro de custo (mesmo acesso do gestor principal)."""
+
+    __tablename__ = "cost_center_managers"
+
+    cost_center_id: Mapped[int] = mapped_column(ForeignKey("cost_centers.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True)
 
 
 class BudgetPackage(TimestampMixin, Base):

@@ -182,3 +182,36 @@ def test_whole_department_scope(client, admin):
     assert "3001009" in _visible(client, hdr)
     summary = _summary(client, admin, uid)
     assert summary["departments"] == ["Tributos T"] and summary["cost_centers"] == 3
+
+
+def test_cost_center_with_more_than_one_manager(client, admin):
+    """19/11/2026: o CC aceita co-gestores (mesmo acesso do gestor principal), pelo cadastro do CC ou pelo usuário."""
+    mgr_id, mgr, _comp_b, ccs = _setup(client, admin)
+    co_id, co = _user(client, admin, "cogestor@t.com", ["MANAGER"])
+    cc_url = f"/api/v1/cost-centers/{ccs['3001001']}"
+    # pelo cadastro do CC: entra como co-gestor, o principal continua
+    upd = client.patch(cc_url, headers=admin, json={"co_manager_user_ids": [co_id, mgr_id]})
+    assert upd.status_code == 200, upd.text
+    assert upd.json()["manager_user_id"] == mgr_id and upd.json()["co_manager_user_ids"] == [co_id]
+    assert _visible(client, co) == ["3001001"] and _visible(client, mgr) == ["3001001"]
+    access = client.get(f"{USERS}/{co_id}/access", headers=admin).json()
+    assert [(c["code"], c["principal"]) for c in access["managed"]] == [("3001001", False)]
+    assert [c["code"] for c in client.get("/api/v1/cost-centers?mine=true", headers=co).json()] == ["3001001"]
+    logs = client.get("/api/v1/audit-logs", headers=admin, params={"entity_type": "cost_center"}).json()["items"]
+    log = next(x for x in logs if x["action"] == "UPDATE" and x["entity_id"] == str(ccs["3001001"]))
+    assert log["before"]["co_manager_user_ids"] == [] and log["after"]["co_manager_user_ids"] == [co_id]
+
+    # pelo usuário: marcar "gestor" num CC que já tem gestor acrescenta, não tira ninguém
+    out = client.put(
+        f"{USERS}/{co_id}/cost-centers",
+        headers=admin,
+        json={"cost_center_ids": [], "manager_of": [ccs["3001001"], ccs["3001002"]]},
+    )
+    assert out.status_code == 200, out.text
+    cc2 = client.get(f"/api/v1/cost-centers/{ccs['3001002']}", headers=admin).json()
+    assert cc2["manager_user_id"] == co_id  # CC sem gestor: vira o principal
+    # o principal sai: o co-gestor assume
+    client.put(f"{USERS}/{mgr_id}/cost-centers", headers=admin, json={"cost_center_ids": [], "manager_of": []})
+    cc1 = client.get(cc_url, headers=admin).json()
+    assert cc1["manager_user_id"] == co_id and cc1["co_manager_user_ids"] == []
+    assert _visible(client, mgr) == []
