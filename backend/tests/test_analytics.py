@@ -61,6 +61,10 @@ def test_dashboard_matches_process_numbers_and_filters(client, admin, run_worker
     # filtro por módulo: só CAPEX
     dm = client.get("/api/v1/analytics/dashboard?module=CAPEX", headers=admin).json()
     assert dm["kpis"]["target"]["value"] == "50000.00" and dm["kpis"]["ref_budget"]["value"] == "0.00"
+    # mais de um tipo ao mesmo tempo (19/11/2026): OPEX + CAPEX
+    dmm = client.get("/api/v1/analytics/dashboard?module=OPEX,CAPEX", headers=admin).json()
+    assert dmm["kpis"]["target"]["value"] == "55400.00"
+    assert client.get("/api/v1/analytics/dashboard?module=OPEX,XYZ", headers=admin).status_code == 422
     # filtro por CC sem lançamentos: zera o alvo mas mantém o orçado 2026 dele
     other = next(c for c in client.get("/api/v1/cost-centers", headers=admin).json() if c["code"] == "1050101012")
     dc = client.get(f"/api/v1/analytics/dashboard?cost_center_id={other['id']}", headers=admin).json()

@@ -115,7 +115,7 @@ export default function Analytics() {
   const chip = (label: string, onRemove: () => void) => chips.push({ label, onRemove: () => { onRemove(); setTrail([]); } });
   if (filters.company_id) chip(`Empresa: ${nameOf(companies.data ?? [], filters.company_id, (c) => c.short_name ?? c.name)}`, () => set({ company_id: "", cost_center_id: "" }));
   if (filters.department_id) chip(`Área: ${nameOf(opts.data?.departments, filters.department_id, (x) => x.name)}`, () => set({ department_id: "", cost_center_id: "" }));
-  if (filters.module) chip(`Tipo: ${MODULE_LABEL[filters.module] ?? filters.module}`, () => set({ module: "", package_id: "" }));
+  if (filters.module) chip(`Tipo: ${filters.module.split(",").map((m) => MODULE_LABEL[m] ?? m).join(" + ")}`, () => set({ module: "", package_id: "" }));
   if (filters.cost_center_id) chip(`Centro de custo: ${nameOf(opts.data?.cost_centers, filters.cost_center_id, (c) => c.name)}`, () => set({ cost_center_id: "" }));
   if (filters.account) chip(`Conta: ${opts.data?.accounts.find((a) => a.code === filters.account)?.name ?? filters.account}`, () => set({ account: "" }));
   if (filters.year) chip(`Ano: ${filters.year}`, () => set({ year: "" }));
@@ -178,9 +178,16 @@ export default function Analytics() {
             <span className="chip-label">Tipo</span>
             <div className="month-chips" role="group" aria-label="Tipos de orçamento">
               <button type="button" className={!filters.module ? "active" : ""} aria-pressed={!filters.module} onClick={() => set({ module: "", package_id: "" })}>Todos</button>
-              {Object.entries(MODULE_LABEL).map(([v, l]) => (
-                <button key={v} type="button" className={filters.module === v ? "active" : ""} aria-pressed={filters.module === v} onClick={() => set({ module: filters.module === v ? "" : v, package_id: "" })}>{l}</button>
-              ))}
+              {Object.entries(MODULE_LABEL).map(([v, l]) => {
+                // vários tipos ao mesmo tempo (19/11/2026, igual ao Painel); todos marcados = "Todos"
+                const picked = filters.module ? filters.module.split(",") : [];
+                const on = picked.includes(v);
+                const next = on ? picked.filter((x) => x !== v) : [...picked, v];
+                const ordered = Object.keys(MODULE_LABEL).filter((m) => next.includes(m));
+                return (
+                  <button key={v} type="button" className={on ? "active" : ""} aria-pressed={on} onClick={() => set({ module: ordered.length === Object.keys(MODULE_LABEL).length ? "" : ordered.join(","), package_id: "" })}>{l}</button>
+                );
+              })}
             </div>
           </div>
         }
@@ -200,7 +207,7 @@ export default function Analytics() {
             onChange: (v) => { set({ account: v }); setTrail([]); },
             options: (d) => [
               { value: "", label: "Todas as contas" },
-              ...(opts.data?.accounts ?? []).filter((a) => !d.module || MODULE_OF[a.nature] === d.module).map((a) => ({ value: a.code, label: `${a.code} · ${a.name}` })),
+              ...(opts.data?.accounts ?? []).filter((a) => !d.module || d.module.split(",").includes(MODULE_OF[a.nature])).map((a) => ({ value: a.code, label: `${a.code} · ${a.name}` })),
             ],
           },
           ...((opts.data?.versions.length ?? 0) > 1
@@ -239,7 +246,7 @@ export default function Analytics() {
               <span className="chip-label">Pacote</span>
               <select value={filters.package_id} aria-label="Pacote GMD" onChange={(e) => set({ package_id: e.target.value })}>
                 <option value="">Todos os pacotes</option>
-                {(filters.module && filters.module !== "OPEX" ? [] : (packages.data ?? []).filter((p) => p.nature !== "CAPEX")).map((p) => (
+                {(filters.module && !filters.module.split(",").includes("OPEX") ? [] : (packages.data ?? []).filter((p) => p.nature !== "CAPEX")).map((p) => (
                   <option key={p.id} value={String(p.id)}>{`${p.roman ? `${p.roman} · ` : ""}${p.name}`}</option>
                 ))}
               </select>

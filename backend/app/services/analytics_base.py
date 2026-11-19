@@ -306,7 +306,7 @@ def build(db: Session, ctx: Context, version: BudgetVersion, visible: set[int] |
     def account_ok(code: str, module: str | None) -> bool:
         if module is None:
             return False
-        if f.module and module != f.module:
+        if f.module and module not in f.module.split(","):
             return False
         if f.account and code != f.account:
             return False

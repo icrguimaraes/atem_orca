@@ -30,7 +30,11 @@ def dashboard(
     department_id: str | None = Query(None, description="Uma ou mais áreas: 1 ou 1,2"),
     cost_center_id: int | None = None,
     account: str | None = Query(None, description="Código da conta contábil"),
-    module: Literal["OPEX", "CAPEX", "PERSONNEL"] | None = None,
+    module: str | None = Query(
+        None,
+        pattern=r"^(OPEX|CAPEX|PERSONNEL)(,(OPEX|CAPEX|PERSONNEL))*$",
+        description="Um ou mais tipos: OPEX ou OPEX,PERSONNEL",
+    ),
     package_id: int | None = None,
     prev: str | None = Query(None, description="Série Realizado: actual:ANO | actual_ann:ANO | none"),
     ref: str | None = Query(None, description="Série Referência: budget:ANO | actual:ANO | actual_ann:ANO | none"),
